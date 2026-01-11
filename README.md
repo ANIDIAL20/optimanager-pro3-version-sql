@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # OptiManager Pro 3 🚀
 
 Application de gestion professionnelle construite avec Next.js et Firebase.
@@ -156,3 +157,6 @@ Propriétaire - Tous droits réservés
 **Version** : 0.1.0 (Updated: 2025-12-31)
 **Firebase Project** : optimanager-pro-3-34449
 
+=======
+# optimanager-pro3-version-sql
+>>>>>>> 4e872fddc92746a9e57936f6d63f478ff76a129c
