@@ -1,0 +1,460 @@
+
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user within the OptiManager Pro system.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the User entity."
+        },
+        "fullName": {
+          "type": "string",
+          "description": "The user's full name."
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "role": {
+          "type": "string",
+          "description": "The user's role.",
+          "enum": ["Admin", "Vendeur", "Technicien Atelier"]
+        },
+        "photoUrl": {
+          "type": "string",
+          "description": "URL of the user's profile picture."
+        }
+      },
+      "required": [
+        "id",
+        "fullName",
+        "email",
+        "role"
+      ]
+    },
+    "Client": {
+      "title": "Client",
+      "type": "object",
+      "description": "Represents a client of the optician shop.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Client entity."
+        },
+        "nom": {
+          "type": "string",
+          "description": "Client's last name."
+        },
+        "prenom": {
+          "type": "string",
+          "description": "Client's first name."
+        },
+        "sexe": {
+          "type": "string",
+          "enum": ["Homme", "Femme"]
+        },
+        "cni": {
+          "type": "string",
+          "description": "Client's National Identification Number."
+        },
+        "dateNaissance": {
+          "type": "string",
+          "format": "date"
+        },
+        "telephone1": {
+          "type": "string"
+        },
+        "telephone2": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "adresse": {
+          "type": "string"
+        },
+        "ville": {
+          "type": "string"
+        },
+        "assuranceId": {
+          "type": "string",
+          "description": "Reference to Assurance entity."
+        },
+        "lastVisit": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "photoUrl": {
+            "type": "string"
+        },
+        "creditBalance": {
+            "type": "number"
+        }
+      },
+      "required": [
+        "nom",
+        "prenom",
+        "telephone1"
+      ]
+    },
+    "Prescription": {
+      "title": "Prescription",
+      "type": "object",
+      "description": "Represents a client's prescription for eyewear.",
+      "properties": {
+        "clientId": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "format": "date"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["Vision de loin", "Vision de pres", "Progressif"]
+        },
+        "prescripteur": {
+          "type": "string"
+        },
+        "odSphere": { "type": "string" },
+        "odCylindre": { "type": "string" },
+        "odAxe": { "type": "string" },
+        "odAddition": { "type": "string" },
+        "odBc": { "type": "string" },
+        "odDia": { "type": "string" },
+        "ogSphere": { "type": "string" },
+        "ogCylindre": { "type": "string" },
+        "ogAxe": { "type": "string" },
+        "ogAddition": { "type": "string" },
+        "ogBc": { "type": "string" },
+        "ogDia": { "type": "string" },
+        "ecartPupillaire": {
+          "type": "string"
+        },
+        "notes": { "type": "string" },
+        "hauteurMontage": { "type": "string" },
+        "pontage": { "type": "string" },
+        "branches": { "type": "string" },
+        "diametre": { "type": "string" }
+      },
+      "required": ["clientId", "date", "type", "prescripteur"]
+    },
+    "ContactLensPrescription": {
+        "title": "ContactLensPrescription",
+        "type": "object",
+        "description": "Represents a client's prescription for contact lenses.",
+        "properties": {
+            "clientId": { "type": "string" },
+            "date": { "type": "string", "format": "date" },
+            "lensType": { "type": "string", "enum": ["Souple journalière", "Souple mensuelle", "Rigide", "Torique", "Multifocale"] },
+            "prescripteur": { "type": "string" },
+            "lensBrand": { "type": "string" },
+            "odSphere": { "type": "string" },
+            "odCylindre": { "type": "string" },
+            "odAxe": { "type": "string" },
+            "odAddition": { "type": "string" },
+            "odBc": { "type": "string" },
+            "odDia": { "type": "string" },
+            "ogSphere": { "type": "string" },
+            "ogCylindre": { "type": "string" },
+            "ogAxe": { "type": "string" },
+            "ogAddition": { "type": "string" },
+            "ogBc": { "type": "string" },
+            "ogDia": { "type": "string" },
+            "portDuree": { "type": "string", "enum": ["Journalière", "Hebdomadaire", "Mensuelle"] },
+            "dateExpiration": { "type": "string", "format": "date" },
+            "notes": { "type": "string" }
+        },
+        "required": ["clientId", "date", "lensType", "prescripteur"]
+    },
+    "ClientLensOrder": {
+      "title": "ClientLensOrder",
+      "type": "object",
+      "description": "Represents an order for lenses for a specific client.",
+      "properties": {
+        "clientId": { "type": "string", "description": "ID of the client." },
+        "prescriptionId": { "type": "string", "description": "ID of the associated prescription." },
+        "orderDate": { "type": "string", "format": "date-time" },
+        "supplierId": { "type": "string", "description": "ID of the lens supplier." },
+        "lensType": { "type": "string", "description": "Type of lenses ordered." },
+        "treatments": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["Draft", "Ordered", "Received", "Delivered"], "default": "Draft" },
+        "notes": { "type": "string" },
+        "correction": {
+          "type": "object",
+          "properties": {
+            "odSphere": { "type": "string" }, "odCylindre": { "type": "string" }, "odAxe": { "type": "string" }, "odAddition": { "type": "string" },
+            "ogSphere": { "type": "string" }, "ogCylindre": { "type": "string" }, "ogAxe": { "type": "string" }, "ogAddition": { "type": "string" },
+            "ecartPupillaire": { "type": "string" }, "hauteurMontage": { "type": "string" }
+          }
+        }
+      },
+      "required": ["clientId", "prescriptionId", "orderDate", "supplierId", "lensType", "status"]
+    },
+    "OrderDetail": {
+        "title": "OrderDetail",
+        "type": "object",
+        "description": "Represents a line item in an order.",
+        "properties": {
+            "orderId": { "type": "string" },
+            "produitId": { "type": "string" },
+            "traitementId": { "type": "string" },
+            "nom": { "type": "string" },
+            "prix": { "type": "number" },
+            "quantite": { "type": "number" }
+        },
+        "required": ["orderId", "nom", "prix", "quantite"]
+    },
+    "Sale": {
+      "title": "Sale",
+      "type": "object",
+      "description": "Represents a sale transaction.",
+      "properties": {
+        "clientId": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "totalAmount": { "type": "number" },
+        "totalPaye": { "type": "number" },
+        "resteAPayer": { "type": "number" },
+        "notes": { "type": "string" },
+        "paymentMethod": { "type": "string", "enum": ["cash", "bank", "credit"] },
+        "items": { 
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "productId": { "type": "string" },
+                    "quantity": { "type": "number" },
+                    "price": { "type": "number" }
+                }
+            }
+        }
+      },
+      "required": ["clientId", "date", "totalAmount", "totalPaye", "resteAPayer"]
+    },
+    "Purchase": {
+      "title": "Purchase",
+      "type": "object",
+      "description": "Represents a purchase order.",
+      "properties": {
+        "date": { "type": "string", "format": "date-time" },
+        "supplierId": { "type": "string" },
+        "items": { 
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "productId": { "type": "string" },
+                    "quantity": { "type": "number" },
+                    "cost": { "type": "number" }
+                }
+            }
+        },
+        "status": { "type": "string", "enum": ["pending", "completed"] },
+        "totalAmount": { "type": "number" }
+      },
+      "required": ["supplierId", "items", "status", "totalAmount"]
+    },
+    "Payment": {
+        "title": "Payment",
+        "type": "object",
+        "description": "Represents a payment for a sale.",
+        "properties": {
+            "saleId": { "type": "string" },
+            "montant": { "type": "number" },
+            "methode": { "type": "string", "enum": ["Especes", "Carte", "Cheque", "Virement"] },
+            "date": { "type": "string", "format": "date-time" }
+        },
+        "required": ["saleId", "montant", "methode", "date"]
+    },
+    "StockMovement": {
+        "title": "StockMovement",
+        "type": "object",
+        "properties": {
+            "produitId": { "type": "string" },
+            "quantite": { "type": "number" },
+            "type": { "type": "string", "enum": ["Vente", "Achat", "Ajustement"] },
+            "ref": {"type": "string" }
+        },
+        "required": ["produitId", "quantite", "type", "ref"]
+    },
+    "Category": {
+        "title": "Category",
+        "type": "object",
+        "properties": { "name": { "type": "string" } },
+        "required": ["name"]
+    },
+    "Marque": {
+        "title": "Marque",
+        "type": "object",
+        "properties": { 
+            "name": { "type": "string" },
+            "category": { "type": "string" }
+        },
+        "required": ["name", "category"]
+    },
+    "Couleur": {
+        "title": "Couleur",
+        "type": "object",
+        "properties": {
+            "name": { "type": "string" },
+            "codeHex": { "type": "string" }
+        },
+        "required": ["name"]
+    },
+    "Matiere": {
+        "title": "Matiere",
+        "type": "object",
+        "properties": { "name": { "type": "string" } },
+        "required": ["name"]
+    },
+    "Traitement": {
+        "title": "Traitement",
+        "type": "object",
+        "properties": { "name": { "type": "string" } },
+        "required": ["name"]
+    },
+    "Assurance": {
+      "title": "Assurance",
+      "type": "object",
+      "description": "Represents an insurance provider.",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the insurance company." },
+        "telephone": { "type": "string", "description": "Contact phone number for the insurance provider." },
+        "eligibiliteRemboursement": { "type": "string", "description": "The eligibility period for reimbursement." }
+      },
+      "required": ["name"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "type": "object",
+      "description": "Represents a product or service supplier.",
+      "properties": {
+        "nomCommercial": { "type": "string", "description": "The commercial name of the supplier." },
+        "raisonSociale": { "type": "string", "description": "The legal name of the supplier company." },
+        "typeProduits": { "type": "array", "items": { "type": "string", "enum": ["Montures", "Verres", "Lentilles", "Accessoires", "Mixte"] } },
+        "telephone": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "adresse": { "type": "string" },
+        "ville": { "type": "string" },
+        "pays": { "type": "string" },
+        "rib": { "type": "string" },
+        "banque": { "type": "string" },
+        "delaiPaiement": { "type": "string", "enum": ["Comptant", "30 jours", "60 jours", "90 jours"] },
+        "modePaiement": { "type": "string", "enum": ["Espèces", "Chèque", "Virement", "Carte"] },
+        "remise": { "type": "number" },
+        "contactNom": { "type": "string" },
+        "contactTelephone": { "type": "string" },
+        "contactEmail": { "type": "string", "format": "email" },
+        "notes": { "type": "string" },
+        "statut": { "type": "string", "enum": ["Actif", "Inactif"] }
+      },
+      "required": ["nomCommercial", "telephone"]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "github.com"
+    ]
+  },
+  "firestore": {
+    "users": {
+        "schema": { "$ref": "#/entities/User" },
+        "description": "Stores user profiles."
+    },
+    "clients": {
+        "schema": { "$ref": "#/entities/Client" },
+        "description": "Stores client profiles."
+    },
+    "/clients/{clientId}/prescriptions": {
+        "schema": { "$ref": "#/entities/Prescription" },
+        "description": "Subcollection for client eyeglass prescriptions."
+    },
+     "/clients/{clientId}/contactLensPrescriptions": {
+        "schema": { "$ref": "#/entities/ContactLensPrescription" },
+        "description": "Subcollection for client contact lens prescriptions."
+    },
+    "/clients/{clientId}/clientLensOrders": {
+        "schema": { "$ref": "#/entities/ClientLensOrder" },
+        "description": "Subcollection for client lens orders."
+    },
+    "products": {
+      "schema": {
+        "title": "Product",
+        "type": "object",
+        "description": "Represents a product available for sale.",
+        "properties": {
+          "reference": { "type": "string" },
+          "nomProduit": { "type": "string" },
+          "prixAchat": { "type": "number" },
+          "prixVente": { "type": "number" },
+          "quantiteStock": { "type": "number" },
+          "stockMin": { "type": "number"},
+          "imageUrl": { "type": "string" },
+          "imageHint": { "type": "string" },
+          "description": { "type": "string"},
+          "categorieId": { "type": "string" },
+          "marqueId": { "type": "string" },
+          "couleurId": { "type": "string" },
+          "matiereId": { "type": "string" }
+        },
+        "required": [ "reference", "nomProduit", "prixVente", "quantiteStock", "categorieId", "marqueId" ]
+      },
+      "description": "Stores all products."
+    },
+    "sales": {
+        "schema": { "$ref": "#/entities/Sale" },
+        "description": "Stores all sales transactions."
+    },
+    "purchases": {
+        "schema": { "$ref": "#/entities/Purchase" },
+        "description": "Stores all purchase orders."
+    },
+    "/sales/{saleId}/orderDetails": {
+      "schema": { "$ref": "#/entities/OrderDetail" },
+      "description": "Stores the line items for a specific sale."
+    },
+    "/sales/{saleId}/payments": {
+        "schema": { "$ref": "#/entities/Payment" },
+        "description": "Subcollection for sale payments."
+    },
+    "stockMovements": {
+        "schema": { "$ref": "#/entities/StockMovement" },
+        "description": "Log of all stock movements."
+    },
+    "categories": {
+        "schema": { "$ref": "#/entities/Category" },
+        "description": "Product categories."
+    },
+    "marques": {
+        "schema": { "$ref": "#/entities/Marque" },
+        "description": "Product brands."
+    },
+    "couleurs": {
+        "schema": { "$ref": "#/entities/Couleur" },
+        "description": "Product colors."
+    },
+    "matieres": {
+        "schema": { "$ref": "#/entities/Matiere" },
+        "description": "Product materials."
+    },
+    "traitements": {
+        "schema": { "$ref": "#/entities/Traitement" },
+        "description": "Lens treatments."
+    },
+    "assurances": {
+        "schema": { "$ref": "#/entities/Assurance" },
+        "description": "Insurance providers."
+    },
+    "suppliers": {
+        "schema": { "$ref": "#/entities/Supplier" },
+        "description": "Product suppliers."
+    }
+  }
+}
+
+    

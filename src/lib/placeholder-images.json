@@ -1,0 +1,28 @@
+{
+  "placeholderImages": [
+    {
+      "id": "product1",
+      "description": "Ray-Ban Wayfarer sunglasses",
+      "imageUrl": "https://images.unsplash.com/flagged/photo-1568911117718-3554ef91cb3b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHxzdW5nbGFzc2VzJTIwYmxhY2t8ZW58MHx8fHwxNzYzMzg0MjQ4fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "sunglasses black"
+    },
+    {
+      "id": "product2",
+      "description": "Oakley Holbrook sunglasses",
+      "imageUrl": "https://images.unsplash.com/photo-1620138996653-b99dadd84aba?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw0fHxzdW5nbGFzc2VzJTIwc3BvcnR8ZW58MHx8fHwxNzYzMzg0MjQ4fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "sunglasses sport"
+    },
+    {
+      "id": "product3",
+      "description": "Prada PR 01V eyeglasses",
+      "imageUrl": "https://images.unsplash.com/photo-1551910021-c59ed3bf006b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxleWVnbGFzc2VzJTIwZmFzaGlvbnxlbnwwfHx8fDE3NjMzODQyNDl8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "eyeglasses fashion"
+    },
+    {
+      "id": "product4",
+      "description": "Acuvue Oasys contact lenses",
+      "imageUrl": "https://images.unsplash.com/photo-1599243315159-faa0eac09ec1?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxjb250YWN0JTIwbGVuc2VzfGVufDB8fHx8MTc2MzM4NDI0OHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "contact lenses"
+    }
+  ]
+}
