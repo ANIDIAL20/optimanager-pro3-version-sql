@@ -33,8 +33,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { CalendarIcon, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
-import { useFirestore, addDocumentNonBlocking, useFirebase } from '@/firebase';
-import { collection } from 'firebase/firestore';
+import { createPrescription } from '@/app/actions/prescriptions-actions';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -98,34 +97,58 @@ export function PrescriptionForm({ clientId }: PrescriptionFormProps) {
     },
   });
 
-  const firestore = useFirestore();
-  const { user } = useFirebase();
   const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   const onSubmit = async (data: PrescriptionFormValues) => {
-    if (!firestore) return;
+    setIsSubmitting(true);
 
     try {
       const prescriptionData = {
-        ...data,
-        date: format(data.date, 'yyyy-MM-dd'),
-        clientId: clientId,
-      }
-      if (!user) return;
-      const prescriptionsRef = collection(firestore, `stores/${user.uid}/clients/${clientId}/prescriptions`);
-      await addDocumentNonBlocking(prescriptionsRef, prescriptionData);
+        od: {
+          sphere: data.odSphere || '',
+          cylinder: data.odCylindre || '',
+          axis: data.odAxe || '',
+          addition: data.odAddition || ''
+        },
+        og: {
+          sphere: data.ogSphere || '',
+          cylinder: data.ogCylindre || '',
+          axis: data.ogAxe || '',
+          addition: data.ogAddition || ''
+        },
+        pd: data.ecartPupillaire || '',
+        doctorName: data.prescripteur
+      };
 
-      toast({
-        title: 'Prescription ajoutée',
-        description: 'Les nouvelles mesures optiques ont été enregistrées avec succès.',
+      const result = await createPrescription({
+        clientId: clientId,
+        date: data.date,
+        data: prescriptionData,
+        notes: data.notes || ''
       });
-      form.reset();
+
+      if (result.success) {
+        toast({
+          title: 'Prescription ajoutée',
+          description: 'Les nouvelles mesures optiques ont été enregistrées avec succès.',
+        });
+        form.reset();
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Erreur',
+          description: result.error || "Une erreur s'est produite lors de l'enregistrement.",
+        });
+      }
     } catch (error) {
       toast({
         variant: 'destructive',
         title: 'Erreur',
         description: "Une erreur s'est produite lors de l'enregistrement de la prescription.",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -307,8 +330,8 @@ export function PrescriptionForm({ clientId }: PrescriptionFormProps) {
               )}
             />
 
-            <Button type="submit" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Enregistrer la Prescription
             </Button>
           </form>

@@ -33,8 +33,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { CalendarIcon, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
-import { useFirestore, addDocumentNonBlocking, useFirebase } from '@/firebase';
-import { collection } from 'firebase/firestore';
+import { createContactLensPrescription } from '@/app/actions/contact-lens-prescriptions-actions';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -91,36 +90,64 @@ export function ContactLensPrescriptionForm({ clientId }: ContactLensPrescriptio
     }
   });
 
-  const firestore = useFirestore();
-  const { user } = useFirebase();
   const { toast } = useToast();
   const watchLensType = form.watch('lensType');
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   const onSubmit = async (data: FormValues) => {
-    if (!firestore) return;
+    setIsSubmitting(true);
 
     try {
       const prescriptionData = {
-        ...data,
-        date: format(data.date, 'yyyy-MM-dd'),
-        clientId: clientId,
-        ...(data.dateExpiration && { dateExpiration: format(data.dateExpiration, 'yyyy-MM-dd') }),
-      }
-      if (!user) return;
-      const prescriptionsRef = collection(firestore, `stores/${user.uid}/clients/${clientId}/contact_lens_prescriptions`);
-      await addDocumentNonBlocking(prescriptionsRef, prescriptionData);
+        rightEye: {
+          baseCurve: data.odBc || '',
+          diameter: data.odDia || '',
+          power: data.odSphere || '',
+          cylinder: data.odCylindre || '',
+          axis: data.odAxe || '',
+          addition: data.odAddition || ''
+        },
+        leftEye: {
+          baseCurve: data.ogBc || '',
+          diameter: data.ogDia || '',
+          power: data.ogSphere || '',
+          cylinder: data.ogCylindre || '',
+          axis: data.ogAxe || '',
+          addition: data.ogAddition || ''
+        },
+        brand: data.lensBrand || '',
+        lensType: data.lensType,
+        doctorName: data.prescripteur
+      };
 
-      toast({
-        title: 'Prescription lentilles ajoutée',
-        description: 'Les nouvelles mesures de lentilles de contact ont été enregistrées.',
+      const result = await createContactLensPrescription({
+        clientId: clientId,
+        date: data.date,
+        data: prescriptionData,
+        notes: data.notes || ''
       });
-      form.reset();
+
+      if (result.success) {
+        toast({
+          title: 'Prescription lentilles ajoutée',
+          description: 'Les nouvelles mesures de lentilles de contact ont été enregistrées.',
+        });
+        form.reset();
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Erreur',
+          description: result.error || "Une erreur s'est produite lors de l'enregistrement.",
+        });
+      }
     } catch (error) {
       toast({
         variant: 'destructive',
         title: 'Erreur',
         description: "Une erreur s'est produite lors de l'enregistrement.",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -220,8 +247,8 @@ export function ContactLensPrescriptionForm({ clientId }: ContactLensPrescriptio
               <FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea placeholder="Ajouter des notes ou commentaires supplémentaires..." {...field} /></FormControl><FormMessage /></FormItem>
             )} />
 
-            <Button type="submit" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Enregistrer la Prescription Lentilles
             </Button>
           </form>

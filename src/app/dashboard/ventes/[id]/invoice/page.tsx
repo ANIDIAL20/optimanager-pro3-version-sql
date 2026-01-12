@@ -28,7 +28,8 @@ export default function InvoicePage({ params }: InvoicePageProps) {
         const fetchData = async () => {
             if (!user || !id) return;
 
-            const result = await getPrintData(user.uid, id, 'facture');
+            // ✅ FIX: secureAction injects userId automatically
+            const result = await getPrintData(id, 'facture');
 
             if (result.success) {
                 setData(result.data);

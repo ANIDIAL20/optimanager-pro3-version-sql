@@ -6,9 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ExternalLink, TrendingDown, Calendar, Eye } from 'lucide-react';
-import { useFirestore, useFirebase } from '@/firebase';
-import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
-import type { Client, Sale, Prescription } from '@/lib/types';
+import { getClientSnapshot } from '@/app/actions/clients-actions';
+import type { Client } from '@/lib/types';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import Link from 'next/link';
@@ -20,52 +19,22 @@ interface ClientSnapshotProps {
 export function ClientSnapshot({ client }: ClientSnapshotProps) {
     const [totalDebt, setTotalDebt] = React.useState(0);
     const [lastVisit, setLastVisit] = React.useState<string | null>(null);
-    const [lastPrescription, setLastPrescription] = React.useState<Prescription | null>(null);
+    const [lastPrescription, setLastPrescription] = React.useState<any | null>(null);
     const [isLoading, setIsLoading] = React.useState(true);
-    const firestore = useFirestore();
-    const { user } = useFirebase();
 
     React.useEffect(() => {
         const fetchClientData = async () => {
-            if (!firestore || !user) return;
-
+            setIsLoading(true);
+            
             try {
-                // Fetch last order/sale for last visit date and debt
-                const salesRef = collection(firestore, `stores/${user.uid}/sales`);
-                const salesQuery = query(
-                    salesRef,
-                    where('clientId', '==', client.id),
-                    orderBy('date', 'desc'),
-                    limit(10)
-                );
-                const salesSnap = await getDocs(salesQuery);
+                const result = await getClientSnapshot(client.id);
 
-                let debt = 0;
-                let latestVisit: string | null = null;
-
-                salesSnap.docs.forEach(doc => {
-                    const sale = doc.data() as Sale;
-                    debt += (sale.resteAPayer || 0);
-                    if (!latestVisit && sale.date) {
-                        latestVisit = sale.date;
-                    }
-                });
-
-                setTotalDebt(debt);
-                setLastVisit(latestVisit);
-
-                // Fetch last prescription
-                const prescriptionsRef = collection(firestore, `stores/${user.uid}/prescriptions`);
-                const prescriptionsQuery = query(
-                    prescriptionsRef,
-                    where('clientId', '==', client.id),
-                    orderBy('date', 'desc'),
-                    limit(1)
-                );
-                const prescriptionsSnap = await getDocs(prescriptionsQuery);
-
-                if (!prescriptionsSnap.empty) {
-                    setLastPrescription({ id: prescriptionsSnap.docs[0].id, ...prescriptionsSnap.docs[0].data() } as Prescription);
+                if (result.success && result.data) {
+                    setTotalDebt(result.data.totalDebt || 0);
+                    setLastVisit(result.data.lastVisit ? result.data.lastVisit.toISOString() : null);
+                    setLastPrescription(result.data.lastPrescription || null);
+                } else {
+                    console.error('Error fetching client snapshot:', result.error);
                 }
             } catch (error) {
                 console.error('Error fetching client data:', error);
@@ -75,11 +44,14 @@ export function ClientSnapshot({ client }: ClientSnapshotProps) {
         };
 
         fetchClientData();
-    }, [firestore, user, client.id]);
+    }, [client.id]);
 
-    const formatPrescriptionSummary = (prescription: Prescription) => {
-        const od = prescription.odSphere ? `OD: ${prescription.odSphere}` : '';
-        const og = prescription.ogSphere ? `OG: ${prescription.ogSphere}` : '';
+    const formatPrescriptionSummary = (prescription: any) => {
+        if (!prescription || !prescription.prescriptionData) return 'Non spécifiée';
+        
+        const data = prescription.prescriptionData;
+        const od = data.od?.sphere ? `OD: ${data.od.sphere}` : '';
+        const og = data.og?.sphere ? `OG: ${data.og.sphere}` : '';
         return [od, og].filter(Boolean).join(' | ') || 'Non spécifiée';
     };
 
@@ -106,7 +78,7 @@ export function ClientSnapshot({ client }: ClientSnapshotProps) {
                             Actif
                         </Badge>
                     </div>
-                    <Link href={`/clients/${client.id}`}>
+                    <Link href={`/dashboard/clients/${client.id}`}>
                         <Button variant="ghost" size="sm" className="gap-2">
                             Voir Profil
                             <ExternalLink className="h-4 w-4" />

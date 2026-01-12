@@ -207,7 +207,8 @@ export default function ClientsPage() {
     const handleDelete = async (clientId: string) => {
         if (!user || !confirm('Êtes-vous sûr de vouloir supprimer ce client ? Cette action est irréversible.')) return;
 
-        const result = await deleteClient(user.uid, clientId);
+        // ✅ FIX: secureAction injects userId automatically, only pass clientId
+        const result = await deleteClient(clientId);
         if (result.success) {
             toast({ title: '✅ Succès', description: result.message });
             loadData();

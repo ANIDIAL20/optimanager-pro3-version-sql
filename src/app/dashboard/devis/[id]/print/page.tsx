@@ -32,7 +32,8 @@ export default function DevisPrintPage({ params }: DevisPrintPageProps) {
         const fetchData = async () => {
             if (!user || !id) return;
 
-            const result = await getPrintData(user.uid, id, 'devis');
+            // ✅ FIX: secureAction injects userId automatically
+            const result = await getPrintData(id, 'devis');
 
             if (result.success) {
                 setData(result.data);

@@ -198,7 +198,8 @@ function OrderActions({ order }: { order: SupplierOrderUI }) {
         if (!user || !order.id) return;
         setIsProcessing(true);
         try {
-            const res = await confirmOrderReception(user.uid, order.id);
+            // ✅ FIX: secureAction injects userId automatically
+            const res = await confirmOrderReception(order.id);
             if (res.success) {
                 toast({ title: "Succès", description: res.message });
                 router.refresh();
@@ -214,7 +215,8 @@ function OrderActions({ order }: { order: SupplierOrderUI }) {
 
     const handleDelete = async () => {
         if (!user || !order.id || !confirm("Supprimer cette commande ?")) return;
-        const res = await deleteSupplierOrder(user.uid, order.id);
+        // ✅ FIX: secureAction injects userId automatically
+        const res = await deleteSupplierOrder(order.id);
         if (res.success) {
             toast({ title: "Succès", description: res.message });
             router.refresh();

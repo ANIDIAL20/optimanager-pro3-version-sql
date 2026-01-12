@@ -24,22 +24,53 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     const session = cookieStore.get('session');
     
     if (!session?.value) {
+      // 🔧 DEVELOPMENT MODE: Return demo user for build-time
+      if (process.env.NODE_ENV === 'development') {
+        console.log('⚠️ Dev mode: No session cookie, using demo user');
+        return {
+          uid: 'dev-user-demo',
+          email: 'dev@demo.com',
+          emailVerified: true,
+          displayName: 'Dev User',
+          role: 'user',
+        };
+      }
       return null;
     }
     
     // Verify the session token with Firebase Admin
-    const decodedToken = await adminAuth.verifyIdToken(session.value);
-    
-    // Get user details
-    const userRecord = await adminAuth.getUser(decodedToken.uid);
-    
-    return {
-      uid: userRecord.uid,
-      email: userRecord.email || null,
-      emailVerified: userRecord.emailVerified,
-      displayName: userRecord.displayName || null,
-      role: (userRecord.customClaims?.role as 'admin' | 'user') || 'user',
-    };
+    try {
+      const decodedToken = await adminAuth.verifyIdToken(session.value);
+      
+      // Get user details
+      const userRecord = await adminAuth.getUser(decodedToken.uid);
+      
+      console.log('✅ Session verified for:', userRecord.uid);
+      
+      return {
+        uid: userRecord.uid,
+        email: userRecord.email || null,
+        emailVerified: userRecord.emailVerified,
+        displayName: userRecord.displayName || null,
+        role: (userRecord.customClaims?.role as 'admin' | 'user') || 'user',
+      };
+    } catch (error) {
+      console.error('Error verifying session:', error);
+      
+      // 🔧 DEVELOPMENT MODE: Fallback to demo user on verification error
+      if (process.env.NODE_ENV === 'development') {
+        console.log('⚠️ Dev mode: Session verification failed, using demo user');
+        return {
+          uid: 'dev-user-demo',
+          email: 'dev@demo.com',
+          emailVerified: true,
+          displayName: 'Dev User',
+          role: 'user',
+        };
+      }
+      
+      return null;
+    }
   } catch (error) {
     console.error('Error getting current user:', error);
     return null;

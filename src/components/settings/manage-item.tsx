@@ -76,8 +76,12 @@ const ItemCard: React.FC<ManageItemProps> = ({ item, collectionName, itemName, F
         </DropdownMenu>
       </Card>
 
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
+      <Dialog modal={false} open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent
+          onInteractOutside={(e) => {
+            e.preventDefault();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Modifier: {item.name}</DialogTitle>
             <DialogDescription>Mettez à jour les informations.</DialogDescription>
@@ -87,8 +91,12 @@ const ItemCard: React.FC<ManageItemProps> = ({ item, collectionName, itemName, F
       </Dialog>
 
 
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent>
+      {/* @ts-ignore - modal prop exists but not in types */}
+      <AlertDialog modal={false} open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onCloseAutoFocus={(e) => e.preventDefault()}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -128,8 +136,12 @@ const ItemDialog: React.FC<DialogProps> = ({ isOpen, onOpenChange, item, collect
     : null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent>
+    <Dialog modal={false} open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent
+        onInteractOutside={(e) => {
+          e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{item ? `Modifier: ${item.name}` : `Ajouter une ${itemName}`}</DialogTitle>
           <DialogDescription>

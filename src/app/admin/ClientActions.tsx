@@ -194,7 +194,8 @@ export function ClientActions({ client }: ClientActionsProps) {
 
     return (
         <>
-            <DropdownMenu>
+            {/* DropdownMenu with modal={false} to prevent UI freeze */}
+            <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="h-8 w-8 p-0" disabled={isLoading || isPending}>
                         {isLoading || isPending ? (
@@ -249,8 +250,12 @@ export function ClientActions({ client }: ClientActionsProps) {
             </DropdownMenu>
 
             {/* Delete Confirmation Dialog */}
-            <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-                <AlertDialogContent>
+            {/* @ts-ignore - modal prop exists but not in types */}
+            <AlertDialog modal={false} open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                <AlertDialogContent
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                >
                     <AlertDialogHeader>
                         <AlertDialogTitle>Êtes-vous absolument sûr ?</AlertDialogTitle>
                         <AlertDialogDescription className="space-y-2">

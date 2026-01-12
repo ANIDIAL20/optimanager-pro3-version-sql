@@ -1,135 +1,434 @@
 'use server';
 
-import { getFirestore } from 'firebase-admin/firestore';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { db } from '@/db';
+import { lensOrders, clients, prescriptions } from '@/db/schema';
+import { secureAction } from '@/lib/secure-action';
+import { logSuccess, logFailure } from '@/lib/audit-log';
+import { eq, and, desc } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
-// Initialize Firebase Admin
-if (!getApps().length) {
-    initializeApp({
-        credential: cert({
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-        }),
+// ========================================
+// TYPE DEFINITIONS
+// ========================================
+
+export interface LensOrderInput {
+  clientId: number;
+  prescriptionId?: number | null;
+  orderType: 'progressive' | 'bifocal' | 'unifocal' | 'contact';
+  lensType: string;
+  treatment?: string | null;
+  supplierName: string;
+  rightEye?: any;
+  leftEye?: any;
+  unitPrice: number;
+  quantity: number;
+  totalPrice: number;
+  status?: 'pending' | 'ordered' | 'received' | 'delivered';
+  notes?: string;
+}
+
+export interface LensOrder {
+  id: number;
+  userId: string;
+  clientId: number;
+  prescriptionId: number | null;
+  orderType: string;
+  lensType: string;
+  treatment: string | null;
+  supplierName: string;
+  rightEye: any | null;
+  leftEye: any | null;
+  unitPrice: string;
+  quantity: number;
+  totalPrice: string;
+  status: string;
+  orderDate: Date | null;
+  receivedDate: Date | null;
+  deliveredDate: Date | null;
+  notes: string | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+}
+
+// ========================================
+// LENS ORDER ACTIONS
+// ========================================
+
+/**
+ * Get all lens orders for user
+ */
+export const getLensOrders = secureAction(async (userId, user) => {
+  try {
+    const results = await db.query.lensOrders.findMany({
+      where: eq(lensOrders.userId, userId),
+      orderBy: [desc(lensOrders.createdAt)],
+      with: {
+        client: true,
+        prescription: true
+      }
     });
-}
+    
+    await logSuccess(userId, 'READ', 'lens_orders', undefined, { count: results.length });
+    return { success: true, data: results };
 
-export interface ReceptionData {
-    supplierId: string;
-    supplierName: string;
-    buyingPrice: number;
-    supplierInvoiceRef: string;
-    receivedAt: Date;
-}
-
-/**
- * Mark a lens order as received and record supplier cost information
- */
-export async function receiveLensOrder(
-    userId: string,
-    saleId: string,
-    data: ReceptionData
-) {
-    console.log(`📦 Receiving lens order: ${saleId}`);
-
-    try {
-        const db = getFirestore();
-        const saleRef = db.collection(`stores/${userId}/sales`).doc(saleId);
-
-        // Verify the sale exists
-        const saleDoc = await saleRef.get();
-        if (!saleDoc.exists) {
-            return {
-                success: false,
-                error: 'Commande introuvable',
-            };
-        }
-
-        // Update the sale with reception data
-        await saleRef.update({
-            status: 'recue',
-            supplierId: data.supplierId,
-            supplierName: data.supplierName,
-            buyingPrice: data.buyingPrice,
-            supplierInvoiceRef: data.supplierInvoiceRef,
-            receivedAt: data.receivedAt.toISOString(),
-            updatedAt: new Date().toISOString(),
-        });
-
-        console.log(`✅ Lens order ${saleId} marked as received`);
-
-        // Revalidate relevant paths
-        revalidatePath(`/clients/[id]`, 'page');
-        revalidatePath('/dashboard/ventes');
-
-        return {
-            success: true,
-            message: 'Commande réceptionnée avec succès',
-        };
-
-    } catch (error: any) {
-        console.error('💥 Error receiving lens order:', error);
-        return {
-            success: false,
-            error: error.message || 'Erreur lors de la réception de la commande',
-        };
-    }
-}
+  } catch (error: any) {
+    await logFailure(userId, 'READ', 'lens_orders', error.message);
+    return { 
+      success: false, 
+      error: 'Erreur lors de la récupération des commandes de verres' 
+    };
+  }
+});
 
 /**
- * Mark a lens order as delivered to the client
+ * Get lens orders for specific client
  */
-export async function deliverLensOrder(
-    userId: string,
-    saleId: string
-) {
-    console.log(`✅ Delivering lens order: ${saleId}`);
+export const getClientLensOrders = secureAction(async (userId, user, clientId: string) => {
+  try {
+    const clientIdNum = parseInt(clientId);
+    const results = await db.query.lensOrders.findMany({
+      where: and(
+        eq(lensOrders.userId, userId),
+        eq(lensOrders.clientId, clientIdNum)
+      ),
+      orderBy: [desc(lensOrders.createdAt)],
+      with: {
+        prescription: true
+      }
+    });
+    
+    await logSuccess(userId, 'READ', 'lens_orders', undefined, { clientId, count: results.length });
+    return { success: true, data: results };
 
+  } catch (error: any) {
+    await logFailure(userId, 'READ', 'lens_orders', error.message);
+    return { 
+      success: false, 
+      error: 'Erreur lors de la récupération des commandes de verres du client' 
+    };
+  }
+});
+
+/**
+ * Get single lens order
+ */
+export const getLensOrder = secureAction(async (userId, user, orderId: string) => {
+  try {
+    const orderIdNum = parseInt(orderId);
+    const result = await db.query.lensOrders.findFirst({
+      where: and(
+        eq(lensOrders.id, orderIdNum),
+        eq(lensOrders.userId, userId)
+      ),
+      with: {
+        client: true,
+        prescription: true
+      }
+    });
+    
+    if (!result) {
+      return { success: false, error: 'Commande de verres introuvable' };
+    }
+    
+    return { success: true, data: result };
+
+  } catch (error: any) {
+    return { 
+      success: false, 
+      error: error.message || 'Erreur lors de la récupération de la commande' 
+    };
+  }
+});
+
+/**
+ * Create lens order
+ */
+export const createLensOrder = secureAction(async (userId, user, input: LensOrderInput) => {
+  try {
+    // Verify client ownership
+    const clientExists = await db.query.clients.findFirst({
+      where: and(eq(clients.id, input.clientId), eq(clients.userId, userId))
+    });
+    
+    if (!clientExists) {
+      return { success: false, error: 'Client introuvable' };
+    }
+
+    // Verify prescription ownership if provided
+    if (input.prescriptionId) {
+      const prescriptionExists = await db.query.prescriptions.findFirst({
+        where: and(
+          eq(prescriptions.id, input.prescriptionId),
+          eq(prescriptions.userId, userId)
+        )
+      });
+      
+      if (!prescriptionExists) {
+        return { success: false, error: 'Ordonnance introuvable' };
+      }
+    }
+
+    const [created] = await db.insert(lensOrders)
+      .values({
+        userId,
+        clientId: input.clientId,
+        prescriptionId: input.prescriptionId || null,
+        orderType: input.orderType,
+        lensType: input.lensType,
+        treatment: input.treatment || null,
+        supplierName: input.supplierName,
+        rightEye: input.rightEye || null,
+        leftEye: input.leftEye || null,
+        unitPrice: input.unitPrice.toString(),
+        quantity: input.quantity,
+        totalPrice: input.totalPrice.toString(),
+        status: input.status || 'pending',
+        orderDate: new Date(),
+        notes: input.notes || null
+      })
+      .returning();
+    
+    await logSuccess(userId, 'CREATE', 'lens_orders', created.id.toString());
+
+    revalidatePath('/dashboard/clients');
+    revalidatePath(`/dashboard/clients/${input.clientId}`);
+    
+    return { 
+      success: true, 
+      message: 'Commande de verres créée',
+      data: created 
+    };
+
+  } catch (error: any) {
+    await logFailure(userId, 'CREATE', 'lens_orders', error.message);
+    return { 
+      success: false, 
+      error: 'Erreur lors de la création de la commande de verres' 
+    };
+  }
+});
+
+/**
+ * Update lens order
+ */
+export const updateLensOrder = secureAction(
+  async (userId, user, orderId: string, input: Partial<LensOrderInput>) => {
     try {
-        const db = getFirestore();
-        const saleRef = db.collection(`stores/${userId}/sales`).doc(saleId);
+      const orderIdNum = parseInt(orderId);
 
-        // Verify the sale exists and is in 'recue' status
-        const saleDoc = await saleRef.get();
-        if (!saleDoc.exists) {
-            return {
-                success: false,
-                error: 'Commande introuvable',
-            };
-        }
+      const existing = await db.select().from(lensOrders)
+        .where(and(eq(lensOrders.id, orderIdNum), eq(lensOrders.userId, userId)))
+        .limit(1);
+      
+      if (existing.length === 0) {
+        return { success: false, error: 'Commande de verres introuvable' };
+      }
 
-        const saleData = saleDoc.data();
-        if (saleData?.status !== 'recue') {
-            return {
-                success: false,
-                error: 'La commande doit être réceptionnée avant d\'être livrée',
-            };
-        }
+      const updateData: any = { updatedAt: new Date() };
+      
+      if (input.orderType) updateData.orderType = input.orderType;
+      if (input.lensType) updateData.lensType = input.lensType;
+      if (input.treatment !== undefined) updateData.treatment = input.treatment;
+      if (input.supplierName) updateData.supplierName = input.supplierName;
+      if (input.rightEye !== undefined) updateData.rightEye = input.rightEye;
+      if (input.leftEye !== undefined) updateData.leftEye = input.leftEye;
+      if (input.unitPrice) updateData.unitPrice = input.unitPrice.toString();
+      if (input.quantity) updateData.quantity = input.quantity;
+      if (input.totalPrice) updateData.totalPrice = input.totalPrice.toString();
+      if (input.status) updateData.status = input.status;
+      if (input.notes !== undefined) updateData.notes = input.notes;
 
-        // Update the sale to delivered status
-        await saleRef.update({
-            status: 'livree',
-            deliveredAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-        });
+      const [updated] = await db.update(lensOrders)
+        .set(updateData)
+        .where(eq(lensOrders.id, orderIdNum))
+        .returning();
+      
+      await logSuccess(userId, 'UPDATE', 'lens_orders', orderId);
 
-        console.log(`✅ Lens order ${saleId} marked as delivered`);
-
-        // Revalidate relevant paths
-        revalidatePath(`/clients/[id]`, 'page');
-        revalidatePath('/dashboard/ventes');
-
-        return {
-            success: true,
-            message: 'Commande marquée comme livrée',
-        };
+      revalidatePath('/dashboard/clients');
+      revalidatePath(`/dashboard/clients/${updated.clientId}`);
+      
+      return { success: true, message: 'Commande de verres mise à jour', data: updated };
 
     } catch (error: any) {
-        console.error('💥 Error delivering lens order:', error);
-        return {
-            success: false,
-            error: error.message || 'Erreur lors de la livraison de la commande',
-        };
+      await logFailure(userId, 'UPDATE', 'lens_orders', error.message, orderId);
+      return { 
+        success: false, 
+        error: 'Erreur lors de la mise à jour de la commande' 
+      };
     }
-}
+  }
+);
+
+/**
+ * Mark order as received
+ */
+export const receiveLensOrder = secureAction(async (userId, user, orderId: string) => {
+  try {
+    const orderIdNum = parseInt(orderId);
+
+    const [updated] = await db.update(lensOrders)
+      .set({
+        status: 'received',
+        receivedDate: new Date(),
+        updatedAt: new Date()
+      })
+      .where(and(
+        eq(lensOrders.id, orderIdNum),
+        eq(lensOrders.userId, userId)
+      ))
+      .returning();
+    
+    if (!updated) {
+      return { success: false, error: 'Commande de verres introuvable' };
+    }
+    
+    await logSuccess(userId, 'UPDATE', 'lens_orders', orderId, { action: 'received' });
+
+    revalidatePath('/dashboard/clients');
+    revalidatePath(`/dashboard/clients/${updated.clientId}`);
+    
+    return { 
+      success: true, 
+      message: 'Commande marquée comme reçue',
+      data: updated 
+    };
+
+  } catch (error: any) {
+    await logFailure(userId, 'UPDATE', 'lens_orders', error.message, orderId);
+    return { 
+      success: false, 
+      error: 'Erreur lors de la réception de la commande' 
+    };
+  }
+});
+
+/**
+ * Mark order as delivered
+ */
+export const deliverLensOrder = secureAction(async (userId, user, orderId: string) => {
+  try {
+    const orderIdNum = parseInt(orderId);
+
+    const [updated] = await db.update(lensOrders)
+      .set({
+        status: 'delivered',
+        deliveredDate: new Date(),
+        updatedAt: new Date()
+      })
+      .where(and(
+        eq(lensOrders.id, orderIdNum),
+        eq(lensOrders.userId, userId)
+      ))
+      .returning();
+    
+    if (!updated) {
+      return { success: false, error: 'Commande de verres introuvable' };
+    }
+    
+    await logSuccess(userId, 'UPDATE', 'lens_orders', orderId, { action: 'delivered' });
+
+    revalidatePath('/dashboard/clients');
+    revalidatePath(`/dashboard/clients/${updated.clientId}`);
+    
+    return { 
+      success: true, 
+      message: 'Commande marquée comme livrée',
+      data: updated 
+    };
+
+  } catch (error: any) {
+    await logFailure(userId, 'UPDATE', 'lens_orders', error.message, orderId);
+    return { 
+      success: false, 
+      error: 'Erreur lors de la livraison de la commande' 
+    };
+  }
+});
+
+/**
+ * Delete lens order
+ */
+export const deleteLensOrder = secureAction(async (userId, user, orderId: string) => {
+  try {
+    const orderIdNum = parseInt(orderId);
+
+    const [deleted] = await db.delete(lensOrders)
+      .where(and(
+        eq(lensOrders.id, orderIdNum),
+        eq(lensOrders.userId, userId)
+      ))
+      .returning();
+    
+    if (!deleted) {
+      return { success: false, error: 'Commande de verres introuvable' };
+    }
+    
+    await logSuccess(userId, 'DELETE', 'lens_orders', orderId);
+
+    revalidatePath('/dashboard/clients');
+    revalidatePath(`/dashboard/clients/${deleted.clientId}`);
+    
+    return { 
+      success: true, 
+      message: 'Commande de verres supprimée',
+      data: deleted 
+    };
+
+  } catch (error: any) {
+    await logFailure(userId, 'DELETE', 'lens_orders', error.message, orderId);
+    return { 
+      success: false, 
+      error: 'Erreur lors de la suppression de la commande' 
+    };
+  }
+});
+
+/**
+ * Update lens order status (simplified dedicated function)
+ * ✅ SECURED - Auto-injects userId via secureAction
+ */
+export const updateLensOrderStatus = secureAction(
+  async (userId: string, user: any, orderId: number, status: string) => {
+    try {
+      // Verify ownership
+      const existing = await db.select().from(lensOrders)
+        .where(and(eq(lensOrders.id, orderId), eq(lensOrders.userId, userId)))
+        .limit(1);
+
+      if (existing.length === 0) {
+        return { success: false, error: 'Commande introuvable' };
+      }
+
+      // Update only status and updatedAt
+      const [updated] = await db.update(lensOrders)
+        .set({
+          status,
+          updatedAt: new Date()
+        })
+        .where(eq(lensOrders.id, orderId))
+        .returning();
+
+      await logSuccess(userId, 'UPDATE', 'lens_orders', orderId.toString(), { status });
+
+      // Revalidate relevant paths
+      revalidatePath(`/dashboard/clients/${updated.clientId}`);
+      revalidatePath('/dashboard/clients');
+      revalidatePath('/dashboard/lens-orders');
+
+      return {
+        success: true,
+        message: 'Statut mis à jour',
+        data: updated
+      };
+
+    } catch (error: any) {
+      console.error('❌ Error updating lens order status:', error);
+      await logFailure(userId, 'UPDATE', 'lens_orders', error.message, orderId.toString());
+      return {
+        success: false,
+        error: 'Erreur lors de la mise à jour du statut'
+      };
+    }
+  }
+);

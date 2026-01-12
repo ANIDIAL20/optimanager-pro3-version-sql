@@ -203,14 +203,18 @@ export function ManageBrands() {
         )}
       </CardContent>
       <CardFooter className="flex flex-wrap gap-2">
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <Dialog modal={false} open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button>
               <PlusCircle className="mr-2 h-4 w-4" />
               Ajouter une Marque
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent
+            onInteractOutside={(e) => {
+              e.preventDefault();
+            }}
+          >
             <DialogHeader>
               <DialogTitle>Ajouter une nouvelle marque</DialogTitle>
               <DialogDescription>

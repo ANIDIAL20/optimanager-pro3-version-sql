@@ -6,7 +6,7 @@
 'use server';
 
 import { db } from '@/db';
-import { clients, prescriptions } from '@/db/schema';
+import { clients, prescriptions, sales, lensOrders } from '@/db/schema';
 import { eq, and, or, like, desc } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
@@ -397,5 +397,90 @@ export const deleteClient = secureAction(async (userId, user, clientId: string) 
             success: false,
             error: 'Erreur lors de la suppression du client'
         };
+    }
+});
+
+/**
+ * Get client snapshot with recent activity
+ * ✅ SECURED - Returns comprehensive client overview
+ */
+export const getClientSnapshot = secureAction(async (userId, user, clientId: string) => {
+    console.log(`📊 Fetching snapshot for client: ${clientId}`);
+
+    try {
+        const clientIdNum = parseInt(clientId);
+
+        // Get client
+        const client = await db.query.clients.findFirst({
+            where: and(
+                eq(clients.id, clientIdNum),
+                eq(clients.userId, userId)
+            )
+        });
+
+        if (!client) {
+            return { success: false, error: 'Client not found' };
+        }
+
+        // Get recent sales (last 10 for debt calculation)
+        const recentSales = await db.query.sales.findMany({
+            where: and(
+                eq(sales.userId, userId),
+                eq(sales.clientId, clientIdNum)
+            ),
+            orderBy: [desc(sales.createdAt)],
+            limit: 10
+        });
+
+        // Get recent prescriptions (last 3)
+        const recentPrescriptions = await db.query.prescriptions.findMany({
+            where: and(
+                eq(prescriptions.userId, userId),
+                eq(prescriptions.clientId, clientIdNum)
+            ),
+            orderBy: [desc(prescriptions.createdAt)],
+            limit: 3
+        });
+
+        // Get pending lens orders
+        const pendingOrders = await db.query.lensOrders.findMany({
+            where: and(
+                eq(lensOrders.userId, userId),
+                eq(lensOrders.clientId, clientIdNum),
+                eq(lensOrders.status, 'pending')
+            )
+        });
+
+        // Calculate total debt from sales
+        const totalDebt = recentSales.reduce((sum, s) => {
+            const remaining = parseFloat(s.remainingAmount || '0');
+            return sum + remaining;
+        }, 0);
+
+        // Get last visit date from most recent sale
+        const lastVisit = recentSales.length > 0 ? recentSales[0].createdAt : null;
+
+        // Get last prescription
+        const lastPrescription = recentPrescriptions.length > 0 ? recentPrescriptions[0] : null;
+
+        console.log(`✅ Snapshot fetched with ${recentSales.length} sales, ${recentPrescriptions.length} prescriptions`);
+        await logSuccess(userId, 'READ', 'clients', clientId, { snapshot: true });
+
+        return {
+            success: true,
+            data: {
+                client,
+                totalDebt,
+                lastVisit,
+                lastPrescription,
+                recentSales,
+                recentPrescriptions,
+                pendingOrders
+            }
+        };
+    } catch (error: any) {
+        console.error('💥 Error fetching client snapshot:', error);
+        await logFailure(userId, 'READ', 'clients', error.message, clientId);
+        return { success: false, error: error.message };
     }
 });

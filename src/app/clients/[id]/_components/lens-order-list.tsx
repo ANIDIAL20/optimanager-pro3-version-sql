@@ -264,8 +264,27 @@ export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
         </CardContent>
       </Card>
 
-      <Dialog open={isUpdateDialogOpen} onOpenChange={setIsUpdateDialogOpen}>
-        <DialogContent>
+      {/* Update Status Dialog */}
+      <Dialog 
+        modal={false}
+        open={isUpdateDialogOpen} 
+        onOpenChange={(open) => {
+          setIsUpdateDialogOpen(open);
+          if (!open) {
+            // 🛑 FORCE FIX: Manually restore body interactivity after Dialog closes
+            setTimeout(() => {
+              document.body.style.pointerEvents = 'auto';
+              document.body.style.overflow = 'auto';
+            }, 100);
+          }
+        }}
+      >
+        <DialogContent 
+          className="sm:max-w-[425px]" 
+          onInteractOutside={(e) => {
+            e.preventDefault();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Modifier le statut de la commande</DialogTitle>
             <DialogDescription>
@@ -306,7 +325,7 @@ export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
             </Select>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsUpdateDialogOpen(false)}>Annuler</Button>
+            <Button variant="outline" onClick={() => setIsUpdateDialogOpen(false)} disabled={isUpdating}>Annuler</Button>
             <Button onClick={handleUpdateStatus} disabled={isUpdating}>
               {isUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Enregistrer
@@ -315,8 +334,14 @@ export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isViewDetailsOpen} onOpenChange={setIsViewDetailsOpen}>
-        <DialogContent className="max-w-3xl">
+      {/* View Details Dialog */}
+      <Dialog modal={false} open={isViewDetailsOpen} onOpenChange={setIsViewDetailsOpen}>
+        <DialogContent 
+          className="max-w-3xl"
+          onInteractOutside={(e) => {
+            e.preventDefault();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Détails de la Commande</DialogTitle>
             <DialogDescription>

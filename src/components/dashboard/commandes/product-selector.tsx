@@ -13,8 +13,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useFirestore, useFirebase } from '@/firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { getProducts } from '@/app/actions/products-actions';
 import type { Product } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -39,27 +38,21 @@ export function ProductSelector({
 }: ProductSelectorProps) {
     const [searchQuery, setSearchQuery] = React.useState('');
     const [allProducts, setAllProducts] = React.useState<Product[]>([]);
-    // Local cart: productId -> quantity
     const [selectedItems, setSelectedItems] = React.useState<Record<string, number>>({});
     const [isLoading, setIsLoading] = React.useState(false);
     const [activeCategory, setActiveCategory] = React.useState('all');
-    const firestore = useFirestore();
-    const { user } = useFirebase();
 
     // Load all products
     React.useEffect(() => {
         const loadProducts = async () => {
-            if (!firestore || !user || !open) return;
+            if (!open) return;
 
             setIsLoading(true);
             try {
-                const productsRef = collection(firestore, `stores/${user.uid}/products`);
-                const snapshot = await getDocs(productsRef);
-                const products = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                } as Product));
-                setAllProducts(products);
+                const result = await getProducts();
+                if (result.success && result.data) {
+                    setAllProducts(result.data as Product[]);
+                }
             } catch (error) {
                 console.error('Error loading products:', error);
             } finally {
@@ -68,7 +61,7 @@ export function ProductSelector({
         };
 
         loadProducts();
-    }, [firestore, user, open]);
+    }, [open]);
 
     // Reset cart when dialog closes
     React.useEffect(() => {
