@@ -230,8 +230,12 @@ function PurchaseDetailsPageContent({ purchaseId }: { purchaseId: string }) {
                     </Card>
                 </div>
             </div>
-            <AlertDialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
-                <AlertDialogContent>
+            {/* @ts-ignore - modal prop exists but not in types */}
+            <AlertDialog modal={false} open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
+                <AlertDialogContent
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                >
                     <AlertDialogHeader>
                         <AlertDialogTitle>Confirmer la réception ?</AlertDialogTitle>
                         <AlertDialogDescription>

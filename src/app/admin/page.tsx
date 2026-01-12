@@ -1,6 +1,6 @@
 import { verifySuperAdmin } from "@/lib/admin-utils";
 import { getAllClients, getSaaSStats, getGlobalBanner } from "@/app/actions/adminActions";
-import CreateClientForm from "@/components/admin/CreateClientForm";
+import EnhancedCreateClientForm from "@/components/admin/EnhancedCreateClientForm";
 import ClientsTable from "@/components/admin/ClientsTable";
 import { GlobalBannerManager } from "@/components/admin/GlobalBannerManager";
 import { SaaSGrowthChart } from "@/components/admin/SaaSGrowthChart";
@@ -110,7 +110,7 @@ export default async function AdminDashboardPage() {
 
                 {/* Sidebar Actions */}
                 <div className="space-y-6">
-                    <CreateClientForm />
+                    <EnhancedCreateClientForm />
                     <GlobalBannerManager initialData={banner} />
                 </div>
             </div>

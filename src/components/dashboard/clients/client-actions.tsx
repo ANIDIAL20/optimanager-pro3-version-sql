@@ -115,13 +115,16 @@ export function ClientActions({ client }: ClientActionsProps) {
                 </DropdownMenuContent>
             </DropdownMenu>
 
-            <AlertDialog open={open} onOpenChange={setOpen}>
-                <AlertDialogContent>
+            {/* @ts-ignore - modal prop exists but not in types */}
+            <AlertDialog modal={false} open={open} onOpenChange={setOpen}>
+                <AlertDialogContent
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                >
                     <AlertDialogHeader>
                         <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            Cette action est irréversible. Cela supprimera définitivement le client
-                            <span className="font-semibold text-slate-900"> {client.prenom} {client.nom}</span> et tout son historique.
+                            Cette action ne peut pas être annulée. Le client "{client.nom}" sera définitivement supprimé.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -131,10 +134,10 @@ export function ClientActions({ client }: ClientActionsProps) {
                                 e.preventDefault();
                                 handleDelete();
                             }}
-                            className="bg-red-600 hover:bg-red-700 text-white"
                             disabled={isLoading}
+                            className="bg-red-600 hover:bg-red-700"
                         >
-                            {isLoading ? "Suppression..." : "Supprimer"}
+                            {isLoading ? 'Suppression...' : 'Supprimer'}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

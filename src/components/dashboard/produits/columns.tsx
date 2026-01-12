@@ -256,28 +256,27 @@ function ProductActions({ product }: { product: Product }) {
                 </DropdownMenuContent>
             </DropdownMenu>
 
-            <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-                <AlertDialogContent>
+            {/* @ts-ignore - modal prop exists but not in types */}
+            <AlertDialog modal={false} open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                <AlertDialogContent
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                >
                     <AlertDialogHeader>
                         <AlertDialogTitle>Êtes-vous absolument sûr?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            Cette action est irréversible. Cela supprimera définitivement le produit{" "}
-                            <span className="font-semibold text-slate-900">"{product.nomProduit}"</span>{" "}
-                            (Réf: {product.reference}) de la base de données.
+                            Cette action ne peut pas être annulée. Le produit "<span className="font-semibold text-slate-900">{product.nomProduit}</span>" sera définitivement
+                            supprimé de votre inventaire.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel disabled={isDeleting}>Annuler</AlertDialogCancel>
                         <AlertDialogAction
-                            onClick={(e) => {
-                                e.preventDefault();
-                                handleDelete();
-                            }}
-                            disabled={isBusy}
+                            onClick={handleDelete}
+                            disabled={isDeleting}
                             className="bg-red-600 hover:bg-red-700"
                         >
-                            {isBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Supprimer
+                            {isDeleting ? 'Suppression...' : 'Supprimer'}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

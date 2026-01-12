@@ -319,8 +319,12 @@ export default function SupplierView() {
                 </div>
             </div>
 
-            <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-                <AlertDialogContent>
+            {/* @ts-ignore - modal prop exists but not in types */}
+            <AlertDialog modal={false} open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                <AlertDialogContent
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                >
                     <AlertDialogHeader>
                         <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
                         <AlertDialogDescription>
