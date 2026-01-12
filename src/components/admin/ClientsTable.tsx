@@ -272,8 +272,8 @@ export default function ClientsTable({ clients }: { clients: ClientData[] }) {
             )}
 
             {/* Reset Password Dialog */}
-            <Dialog open={isResetOpen} onOpenChange={setIsResetOpen}>
-                <DialogContent>
+            <Dialog open={isResetOpen} onOpenChange={setIsResetOpen} modal={false}>
+                <DialogContent onInteractOutside={(e) => e.preventDefault()}>
                     <DialogHeader>
                         <DialogTitle>Réinitialiser le mot de passe</DialogTitle>
                         <DialogDescription>

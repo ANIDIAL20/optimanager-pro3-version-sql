@@ -96,8 +96,8 @@ export function PlanManagementModal({ client, open, onOpenChange }: PlanManageme
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[600px]">
+        <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
+            <DialogContent className="sm:max-w-[600px]" onInteractOutside={(e) => e.preventDefault()}>
                 <DialogHeader>
                     <DialogTitle>Gestion Client: {client.displayName}</DialogTitle>
                     <DialogDescription>

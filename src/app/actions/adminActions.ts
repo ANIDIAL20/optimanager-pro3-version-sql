@@ -10,8 +10,9 @@ import { Timestamp } from 'firebase-admin/firestore';
 const resend = new Resend(process.env.RESEND_API_KEY || "re_placeholder_for_build");
 
 const PRICING = {
-  monthly: 200, // MAD
-  yearly: 2000, // MAD
+  starter: { monthly: 200, yearly: 2000 },
+  professional: { monthly: 400, yearly: 4000 },
+  enterprise: { monthly: 800, yearly: 8000 }
 };
 
 export type ClientData = {
@@ -20,7 +21,36 @@ export type ClientData = {
   displayName?: string;
   phoneNumber?: string;
   status: 'active' | 'suspended' | 'frozen';
-  plan: 'monthly' | 'yearly' | 'trial';
+  plan: 'monthly' | 'yearly' | 'trial'; // Keep for backward compatibility
+  
+  // 🆕 DUAL-COMPONENT PRICING SYSTEM
+  pricingTier?: 'starter' | 'professional' | 'enterprise' | 'custom';
+  
+  // App License Component
+  appLicenseEnabled?: boolean;
+  appLicenseAmount?: number;
+  appLicenseType?: 'one-time' | 'annual';
+  
+  // Subscription Component
+  subscriptionEnabled?: boolean;
+  subscriptionAmount?: number;
+  subscriptionCycle?: 'monthly' | 'yearly';
+  
+  // Payment dates
+  nextPaymentDate?: string; // ISO String - Custom payment date
+  
+  // Trial
+  trialEnabled?: boolean;
+  trialDays?: number;
+  
+  // Features & Limits
+  features?: string[];
+  limits?: {
+    maxUsers: number;
+    maxClients: number;
+    maxStorageGB: number;
+  };
+  
   subscriptionEndDate: string; // ISO String
   lastLogin?: string; // ISO String
   revenue: number; // Calculated revenue from this user
@@ -184,13 +214,27 @@ export async function getSaaSStats() {
       return created > thirtyDaysAgo;
     }).length;
 
-    // Revenue Calculation (MRR Estimation)
-    // Monthly = 200, Yearly = 2000 / 12 ~= 166.6
+    // Revenue Calculation (MRR Estimation with new pricing tiers)
     let totalRevenue = 0;
     clients.forEach(c => {
       if (c.status === 'active') {
-        if (c.plan === 'monthly') totalRevenue += PRICING.monthly;
-        if (c.plan === 'yearly') totalRevenue += Math.round(PRICING.yearly / 12);
+        // New pricing tier logic
+        if (c.pricingTier && c.pricingTier !== 'custom') {
+          const tier = c.pricingTier as keyof typeof PRICING;
+          const monthlyPrice = c.billingCycle === 'yearly' 
+            ? Math.round(PRICING[tier].yearly / 12)
+            : PRICING[tier].monthly;
+          totalRevenue += monthlyPrice;
+        } else if (c.customPrice) {
+          const monthlyPrice = c.billingCycle === 'yearly' 
+            ? Math.round(c.customPrice / 12)
+            : c.customPrice;
+          totalRevenue += monthlyPrice;
+        } else {
+          // Legacy fallback for old clients
+          if (c.plan === 'monthly') totalRevenue += PRICING.professional.monthly;
+          if (c.plan === 'yearly') totalRevenue += Math.round(PRICING.professional.yearly / 12);
+        }
       }
     });
 
@@ -254,6 +298,20 @@ export async function getAllClients() {
       endDate = data.expires;
     }
 
+    // Calculate revenue based on new pricing model
+    let revenue = 0;
+    if (data.pricingTier && data.pricingTier !== 'custom') {
+      const tier = data.pricingTier as keyof typeof PRICING;
+      const cycle = (data.billingCycle || 'monthly') as 'monthly' | 'yearly';
+      revenue = PRICING[tier]?.[cycle] || 0;
+    } else if (data.customPrice) {
+      revenue = data.customPrice;
+    } else {
+      // Fallback to legacy plan field
+      revenue = data.plan === 'yearly' ? PRICING.professional.yearly : 
+                data.plan === 'monthly' ? PRICING.professional.monthly : 0;
+    }
+
     return {
       uid: doc.id,
       email: data.email,
@@ -261,9 +319,24 @@ export async function getAllClients() {
       phoneNumber: data.phoneNumber || 'N/A',
       status: data.status,
       plan: data.plan || 'trial',
+      
+      // 🆕 DUAL-COMPONENT PRICING
+      pricingTier: data.pricingTier,
+      appLicenseEnabled: data.appLicenseEnabled || false,
+      appLicenseAmount: data.appLicenseAmount || 0,
+      appLicenseType: data.appLicenseType || 'one-time',
+      subscriptionEnabled: data.subscriptionEnabled || false,
+      subscriptionAmount: data.subscriptionAmount || 0,
+      subscriptionCycle: data.subscriptionCycle || 'monthly',
+      nextPaymentDate: data.nextPaymentDate?.toDate ? data.nextPaymentDate.toDate().toISOString() : null,
+      trialEnabled: data.trialEnabled,
+      trialDays: data.trialDays,
+      features: data.features || [],
+      limits: data.limits || getDefaultLimits(data.pricingTier || 'professional'),
+      
       subscriptionEndDate: endDate,
       lastLogin: data.lastLogin?.toDate ? data.lastLogin.toDate().toISOString() : null,
-      revenue: data.plan === 'yearly' ? PRICING.yearly : (data.plan === 'monthly' ? PRICING.monthly : 0),
+      revenue: revenue,
       quotas: data.quotas || { maxProducts: 500, maxTeamMembers: 2, maxStorage: 1 },
       gracePeriodDays: data.gracePeriodDays || 3
     } as ClientData;
@@ -445,4 +518,40 @@ export async function getClientUsageStats(uid: string) {
     console.error("Error fetching usage stats:", error);
     return { products: 0, teamMembers: 0, storageMB: 0 };
   }
+}
+
+// ========================================
+// HELPER FUNCTIONS FOR ENHANCED PRICING
+// ========================================
+
+function getDefaultLimits(tier: string) {
+  const limits = {
+    starter: { maxUsers: 1, maxClients: 100, maxStorageGB: 1 },
+    professional: { maxUsers: 3, maxClients: 500, maxStorageGB: 5 },
+    enterprise: { maxUsers: 10, maxClients: 1000, maxStorageGB: 10 },
+    custom: { maxUsers: 3, maxClients: 500, maxStorageGB: 5 }
+  };
+  return limits[tier as keyof typeof limits] || limits.professional;
+}
+
+function getPlanDisplayName(tier: string) {
+  const names = {
+    starter: 'Starter',
+    professional: 'Professional',
+    enterprise: 'Enterprise',
+    custom: 'Plan personnalisé'
+  };
+  return names[tier as keyof typeof names] || 'Professional';
+}
+
+function getFeatureDisplayName(feature: string) {
+  const names = {
+    inventory: 'Gestion d\'inventaire',
+    reports: 'Rapports de vente',
+    export: 'Export de données',
+    api: 'Accès API',
+    multistore: 'Multi-magasins',
+    analytics: 'Analyses avancées'
+  };
+  return names[feature as keyof typeof names] || feature;
 }
