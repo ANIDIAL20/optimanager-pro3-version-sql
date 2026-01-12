@@ -1,9 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { useFirestore, useCollection, useMemoFirebase, useFirebase } from '@/firebase';
-import { collection, query, orderBy } from 'firebase/firestore';
-import type { ContactLensPrescription } from '@/lib/types';
+import { getContactLensPrescriptions } from '@/app/actions/contact-lens-prescriptions-actions';
+import type { ContactLensPrescription } from '@/app/actions/contact-lens-prescriptions-actions';
 import {
   Card,
   CardContent,
@@ -29,24 +28,31 @@ interface ContactLensPrescriptionListProps {
 }
 
 export function ContactLensPrescriptionList({ clientId }: ContactLensPrescriptionListProps) {
-  const firestore = useFirestore();
-  const { user } = useFirebase();
-  const prescriptionsQuery = useMemoFirebase(
-    () =>
-      firestore && user
-        ? query(
-          collection(firestore, `stores/${user.uid}/clients/${clientId}/contact_lens_prescriptions`),
-          orderBy('date', 'desc')
-        )
-        : null,
-    [firestore, user, clientId]
-  );
+  const [prescriptions, setPrescriptions] = React.useState<ContactLensPrescription[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const {
-    data: prescriptions,
-    isLoading,
-    error,
-  } = useCollection<ContactLensPrescription>(prescriptionsQuery);
+  React.useEffect(() => {
+    const loadPrescriptions = async () => {
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        const result = await getContactLensPrescriptions(clientId);
+        if (result.success && result.data) {
+          setPrescriptions(result.data);
+        } else {
+          setError('Impossible de charger les prescriptions');
+        }
+      } catch (err) {
+        setError('Erreur lors du chargement');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadPrescriptions();
+  }, [clientId]);
 
   return (
     <Card>
@@ -90,15 +96,18 @@ export function ContactLensPrescriptionList({ clientId }: ContactLensPrescriptio
               </TableRow>
             </TableHeader>
             <TableBody>
-              {prescriptions.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell>{format(new Date(p.date), 'dd/MM/yyyy')}</TableCell>
-                  <TableCell>{p.lensType}</TableCell>
-                  <TableCell>{p.lensBrand || '-'}</TableCell>
-                  <TableCell>{`${p.odSphere || '-'} / ${p.odBc || '-'} / ${p.odDia || '-'}`}</TableCell>
-                  <TableCell>{`${p.ogSphere || '-'} / ${p.ogBc || '-'} / ${p.ogDia || '-'}`}</TableCell>
-                </TableRow>
-              ))}
+              {prescriptions.map((p) => {
+                const data = p.data as any; // Type assertion for JSON data
+                return (
+                  <TableRow key={p.id}>
+                    <TableCell>{p.date ? format(new Date(p.date), 'dd/MM/yyyy') : '-'}</TableCell>
+                    <TableCell>{data?.lensType || '-'}</TableCell>
+                    <TableCell>{data?.brand || '-'}</TableCell>
+                    <TableCell>{`${data?.rightEye?.power || '-'} / ${data?.rightEye?.baseCurve || '-'} / ${data?.rightEye?.diameter || '-'}`}</TableCell>
+                    <TableCell>{`${data?.leftEye?.power || '-'} / ${data?.leftEye?.baseCurve || '-'} / ${data?.leftEye?.diameter || '-'}`}</TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}

@@ -86,7 +86,8 @@ export function QuickClientDialog({ onClientCreated }: QuickClientDialogProps) {
                 phone: telephone
             };
 
-            const result = await createClient(user.uid, clientData);
+            // ✅ FIX: secureAction injects userId automatically
+            const result = await createClient(clientData);
 
             if (result.success && result.id) {
                 toast({

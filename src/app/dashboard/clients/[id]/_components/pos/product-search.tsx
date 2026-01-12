@@ -1,8 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useCollection, useFirestore, useMemoFirebase, useFirebase } from '@/firebase';
-import { collection, query, where } from 'firebase/firestore';
+import { getProducts } from '@/app/actions/products-actions';
 import { Search, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -44,33 +43,34 @@ interface ProductSearchProps {
 export function ProductSearch({ onProductSelect }: ProductSearchProps) {
     const [searchTerm, setSearchTerm] = React.useState('');
     const debouncedSearchTerm = useDebounceValue(searchTerm, 500);
-    const firestore = useFirestore();
-    const { user } = useFirebase();
+    const [allProducts, setAllProducts] = React.useState<Product[]>([]);
+    const [isLoading, setIsLoading] = React.useState(true);
+    const [categories, setCategories] = React.useState<{ id: string; name: string }[]>([]);
 
-    const productsQuery = useMemoFirebase(
-        () => {
-            if (!firestore || !user) return null;
-            // Note: simple text search in Firestore is limited. 
-            // Ideally we'd use Algolia or similar, but here we fetch all or filter client-side 
-            // if the dataset is small, or use simple prefix matches if feasible.
-            // For now, let's fetch all products and filter client-side for better UX on small datasets,
-            // or rely on 'name >= term' for prefix search. 
-            // Let's assume fetching all active products is okay for < 1000 items.
-            return collection(firestore, `stores/${user.uid}/products`);
-        },
-        [firestore, user]
-    );
+    // Load products on mount
+    React.useEffect(() => {
+        const loadData = async () => {
+            setIsLoading(true);
+            try {
+                const result = await getProducts();
+                if (result.success && result.data) {
+                    setAllProducts(result.data as Product[]);
+                    
+                    // Extract unique categories
+                    const uniqueCategories = [...new Set(result.data.map(p => p.categorie).filter(Boolean))];
+                    setCategories(uniqueCategories.map(cat => ({ id: cat, name: cat })));
+                }
+            } catch (error) {
+                console.error('Error loading products:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
 
-    const { data: allProducts, isLoading } = useCollection<Product>(productsQuery);
+        loadData();
+    }, []);
 
     const [selectedCategory, setSelectedCategory] = React.useState<string>('all');
-
-    // Fetch categories for filter
-    const categoriesQuery = useMemoFirebase(
-        () => firestore && user ? collection(firestore, `stores/${user.uid}/categories`) : null,
-        [firestore, user]
-    );
-    const { data: categories } = useCollection<{ id: string; name: string }>(categoriesQuery);
 
     const filteredProducts = React.useMemo(() => {
         if (!allProducts) return [];

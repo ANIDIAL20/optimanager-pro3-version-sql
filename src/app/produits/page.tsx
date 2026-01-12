@@ -40,12 +40,6 @@ export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [categoryFilter, setCategoryFilter] = React.useState<string>('all');
 
-  // Fetch products
-  const { user } = useFirebase(); // Used for brands/categories queries still
-  // const firestore = useFirestore(); // Still needed for aux queries below
-
-  const firestore = useFirestore();
-
   const [products, setProducts] = React.useState<Product[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = React.useState(true);
 

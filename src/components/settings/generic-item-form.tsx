@@ -82,7 +82,7 @@ export function GenericItemForm({ item, collectionName, itemName, onSuccess }: G
             <FormItem>
               <FormLabel>Nom</FormLabel>
               <FormControl>
-                <Input placeholder={`Nom de la ${itemName.toLowerCase()}`} {...field} />
+                <Input placeholder={`Nom de ${itemName ? `la ${itemName.toLowerCase()}` : "l'élément"}`} {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>

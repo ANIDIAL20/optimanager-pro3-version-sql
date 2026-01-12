@@ -18,8 +18,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
-import { useFirestore, useFirebase } from '@/firebase';
-import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { getClients } from '@/app/actions/clients-actions';
 import type { Client } from '@/lib/types';
 import { QuickClientDialog } from './quick-client-dialog';
 
@@ -34,49 +33,48 @@ export function ClientSelector({ onSelect, selectedClient }: ClientSelectorProps
     const [clients, setClients] = React.useState<Client[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
     const [showQuickCreate, setShowQuickCreate] = React.useState(false);
-    const firestore = useFirestore();
-    const { user } = useFirebase();
 
     // Search clients based on query
     const searchClients = React.useCallback(async () => {
-        if (!firestore || !user) return;
-
         setIsLoading(true);
         try {
-            const clientsRef = collection(firestore, `stores/${user.uid}/clients`);
+            const result = await getClients();
 
-            // If no search query, get recent clients
-            if (!searchQuery.trim()) {
-                const q = query(clientsRef, orderBy('lastVisit', 'desc'), limit(10));
-                const snapshot = await getDocs(q);
-                const clientsData = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
+            if (result.success && result.clients) {
+                let clientsData = result.clients;
+
+                // If search query, filter client-side
+                if (searchQuery.trim()) {
+                    const searchLower = searchQuery.toLowerCase();
+                    clientsData = clientsData.filter((client: any) =>
+                        (client.fullName?.toLowerCase().includes(searchLower)) ||
+                        (client.phone?.includes(searchQuery))
+                    );
+                }
+
+                // Sort by most recent and limit
+                clientsData = clientsData
+                    .sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+                    .slice(0, 10);
+
+                // Map to legacy Client format
+                const mappedClients: Client[] = clientsData.map((c: any) => ({
+                    id: c.id,
+                    nom: c.fullName?.split(' ').pop() || '',
+                    prenom: c.fullName?.split(' ')[0] || '',
+                    telephone1: c.phone || '',
+                    ville: c.city || '',
+                    lastVisit: c.createdAt || '',
                 } as Client));
-                setClients(clientsData);
-            } else {
-                // Search by name - get all and filter client-side
-                const snapshot = await getDocs(clientsRef);
-                const allClients = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                } as Client));
 
-                const searchLower = searchQuery.toLowerCase();
-                const filtered = allClients.filter(client =>
-                    client.nom?.toLowerCase().includes(searchLower) ||
-                    client.prenom?.toLowerCase().includes(searchLower) ||
-                    client.telephone1?.includes(searchQuery)
-                ).slice(0, 10);
-
-                setClients(filtered);
+                setClients(mappedClients);
             }
         } catch (error) {
             console.error('Error searching clients:', error);
         } finally {
             setIsLoading(false);
         }
-    }, [searchQuery, firestore, user]);
+    }, [searchQuery]);
 
     React.useEffect(() => {
         searchClients();

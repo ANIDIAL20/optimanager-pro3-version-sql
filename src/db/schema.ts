@@ -219,19 +219,102 @@ export const prescriptions = pgTable('prescriptions', {
 });
 
 // ========================================
+// 9. CONTACT LENS PRESCRIPTIONS TABLE
+// ========================================
+export const contactLensPrescriptions = pgTable('contact_lens_prescriptions', {
+  id: serial('id').primaryKey(),
+  firebaseId: text('firebase_id').unique(),
+  userId: text('user_id').notNull(),
+  
+  // Client reference
+  clientId: integer('client_id').references(() => clients.id),
+  
+  // Contact lens prescription data (store as JSON)
+  prescriptionData: json('prescription_data').notNull(),
+  
+  // Metadata
+  date: timestamp('date'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+// ========================================
+// 10. LENS ORDERS TABLE
+// ========================================
+export const lensOrders = pgTable('lens_orders', {
+  id: serial('id').primaryKey(),
+  firebaseId: text('firebase_id').unique(),
+  userId: text('user_id').notNull(),
+  
+  // References
+  clientId: integer('client_id').references(() => clients.id),
+  prescriptionId: integer('prescription_id').references(() => prescriptions.id),
+  
+  // Order details
+  orderType: text('order_type').notNull(), // 'progressive', 'bifocal', 'unifocal', 'contact'
+  lensType: text('lens_type').notNull(),
+  treatment: text('treatment'),
+  supplierName: text('supplier_name').notNull(),
+  
+  // Prescription details (stored as JSON if needed)
+  rightEye: json('right_eye'),
+  leftEye: json('left_eye'),
+  
+  // Pricing
+  unitPrice: decimal('unit_price', { precision: 10, scale: 2 }).notNull(),
+  quantity: integer('quantity').default(1).notNull(),
+  totalPrice: decimal('total_price', { precision: 10, scale: 2 }).notNull(),
+  
+  // Status tracking
+  status: text('status').default('pending').notNull(), // 'pending', 'ordered', 'received', 'delivered'
+  orderDate: timestamp('order_date').defaultNow(),
+  receivedDate: timestamp('received_date'),
+  deliveredDate: timestamp('delivered_date'),
+  
+  // Additional info
+  notes: text('notes'),
+  
+  // Audit
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+// ========================================
 // RELATIONS (for Drizzle Relational Queries)
 // ========================================
 
 export const clientsRelations = relations(clients, ({ many }) => ({
   prescriptions: many(prescriptions),
+  contactLensPrescriptions: many(contactLensPrescriptions),
+  lensOrders: many(lensOrders),
   sales: many(sales),
   devis: many(devis),
 }));
 
-export const prescriptionsRelations = relations(prescriptions, ({ one }) => ({
+export const prescriptionsRelations = relations(prescriptions, ({ one, many }) => ({
   client: one(clients, {
     fields: [prescriptions.clientId],
     references: [clients.id],
+  }),
+  lensOrders: many(lensOrders),
+}));
+
+export const contactLensPrescriptionsRelations = relations(contactLensPrescriptions, ({ one }) => ({
+  client: one(clients, {
+    fields: [contactLensPrescriptions.clientId],
+    references: [clients.id],
+  }),
+}));
+
+export const lensOrdersRelations = relations(lensOrders, ({ one }) => ({
+  client: one(clients, {
+    fields: [lensOrders.clientId],
+    references: [clients.id],
+  }),
+  prescription: one(prescriptions, {
+    fields: [lensOrders.prescriptionId],
+    references: [prescriptions.id],
   }),
 }));
 

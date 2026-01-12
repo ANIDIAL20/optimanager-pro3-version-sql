@@ -5,6 +5,7 @@ import { User, onAuthStateChanged, Auth } from 'firebase/auth';
 import { auth, db, app } from '@/lib/firebase';
 import { doc, onSnapshot, Firestore } from 'firebase/firestore';
 import { FirebaseApp } from 'firebase/app';
+import { createSessionCookie, clearSessionCookie } from '@/lib/auth-session';
 
 // تعريف نوع البيانات (User Context Only) - as requested by user
 interface UserContextType {
@@ -28,10 +29,18 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // 1. الاستماع لتغييرات حالة الدخول (Auth)
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
 
       if (currentUser) {
+        // 🆕 Create server-side session cookie
+        try {
+          await createSessionCookie(currentUser);
+          console.log('✅ Session cookie created for:', currentUser.uid);
+        } catch (error) {
+          console.error('❌ Failed to create session cookie:', error);
+        }
+
         // (اختياري) جلب بيانات إضافية للمستخدم من /users/{uid} فقط إذا كنت تستعملها
         // لاحظ أننا نستخدم المسار الآمن: users/uid
         const userDocRef = doc(db, 'users', currentUser.uid);
@@ -45,6 +54,8 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 
         return () => unsubscribeSnapshot();
       } else {
+        // 🆕 Clear session cookie on logout
+        await clearSessionCookie();
         setUserData(null);
         setIsUserLoading(false);
       }

@@ -16,8 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
-import { useFirestore, useFirebase } from '@/firebase';
-import { collection, addDoc } from 'firebase/firestore';
+import { createClient } from '@/app/actions/clients-actions';
 import { Loader2, UserPlus } from 'lucide-react';
 import type { Client } from '@/lib/types';
 
@@ -58,42 +57,48 @@ export function QuickClientDialog({
     });
 
     const onSubmit = async (data: QuickClientFormValues) => {
-        if (!firestore || !user) {
-            toast({
-                variant: 'destructive',
-                title: 'Erreur',
-                description: 'Vous devez être connecté.',
-            });
-            return;
-        }
-
         try {
-            const clientData = {
-                ...data,
-                sexe: 'Homme' as const,
-                creditBalance: 0,
-                lastVisit: new Date().toISOString(),
-            };
-
-            const clientsRef = collection(firestore, `stores/${user.uid}/clients`);
-            const docRef = await addDoc(clientsRef, clientData);
-
-            const newClient: Client = {
-                id: docRef.id,
-                ...clientData,
-            };
-
-            toast({
-                title: 'Client créé',
-                description: `${data.prenom} ${data.nom} a été ajouté avec succès.`,
+            const result = await createClient({
+                fullName: `${data.prenom} ${data.nom}`,
+                phone: data.tel,
+                email: '',
+                address: '',
+                city: data.ville || '',
+                notes: ''
             });
 
-            // Reset form
-            form.reset();
+            if (result.success) {
+                toast({
+                    title: 'Client créé',
+                    description: `${data.prenom} ${data.nom} a été ajouté avec succès.`,
+                });
 
-            // Notify parent and close
-            onClientCreated(newClient);
-            onOpenChange(false);
+                // Reset form
+                form.reset();
+
+                // Create client object for parent
+                const newClient: Client = {
+                    id: result.id!,
+                    nom: data.nom,
+                    prenom: data.prenom,
+                    telephone1: data.telephone1,
+                    cni: data.cni || '',
+                    ville: data.ville || '',
+                    sexe: 'Homme',
+                    creditBalance: 0,
+                    lastVisit: new Date().toISOString()
+                } as Client;
+
+                // Notify parent and close
+                onClientCreated(newClient);
+                onOpenChange(false);
+            } else {
+                toast({
+                    variant: 'destructive',
+                    title: 'Erreur',
+                    description: result.error || 'Impossible de créer le client.',
+                });
+            }
         } catch (error) {
             console.error('Error creating client:', error);
             toast({

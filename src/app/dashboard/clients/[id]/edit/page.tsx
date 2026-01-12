@@ -92,10 +92,7 @@ export default function EditClientPage() {
     React.useEffect(() => {
          let isMounted = true;
          async function load() {
-             // ... logic from previous step ...
-         async function load() {
              try {
-                const { getClient } = await import('@/app/actions/clients-actions'); // Dynamic import to be safe? No, let's fix imports properly.
                 const res = await getClient(id);
                 if (!isMounted) return;
                 
@@ -110,7 +107,6 @@ export default function EditClientPage() {
                          nom,
                          prenom,
                          telephone1: c.phone || '',
-                         // other fields
                      } as unknown as Client;
                      
                      setClient(adapted);
@@ -119,19 +115,12 @@ export default function EditClientPage() {
                      form.reset({
                         nom: nom || '',
                         prenom: prenom || '',
-                        sexe: 'Homme', // Default or map if stored
-                        cni: c.cni || '', // cni not in ActionClient? It defines cni? No. 
-                        // clients-actions.ts Client interface has: id, name, phone, email, mutuelle, address, dateOfBirth... 
-                        // It does NOT have cni, sexe, ville, telephone2.
-                        // So data might be lost if we don't fetch it or if schema doesn't support it.
-                        // The user migrated data to Neon. The schema should support it.
-                        // Let's check schema.ts later? Or just assume for now.
-                        // If fields are missing in action response, they will be empty.
-                        // We will map what we have.
+                        sexe: 'Homme',
+                        cni: '',
                         email: c.email || '',
                         telephone1: c.phone || '',
-                        telephone2: '', // Missing
-                        ville: '', // Missing
+                        telephone2: '',
+                        ville: '',
                         adresse: c.address || '',
                         mutuelle: c.mutuelle || '',
                         dateNaissance: c.dateOfBirth ? new Date(c.dateOfBirth) : undefined,
@@ -159,7 +148,8 @@ export default function EditClientPage() {
                 dateNaissance: data.dateNaissance ? format(data.dateNaissance, 'yyyy-MM-dd') : null,
             };
 
-            const result = await updateClient(id, updatedData); // id is string from params
+            // ✅ FIX: secureAction injects userId automatically, only pass clientId and data
+            const result = await updateClient(id, updatedData);
 
             if (result.success) {
                 toast({

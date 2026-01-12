@@ -39,20 +39,32 @@ export function ClientActions({ client }: ClientActionsProps) {
     const router = useRouter();
 
     const handleDelete = async () => {
-        if (!user) return;
+        if (!user || !confirm('Êtes-vous sûr de vouloir supprimer ce client ?')) return;
 
         try {
             setIsLoading(true);
-            const result = await deleteClient(user.uid, client.id);
-
+            // ✅ FIX: secureAction injects userId automatically, only pass clientId
+            const result = await deleteClient(client.id);
+            
             if (result.success) {
-                toast.success("Client supprimé avec succès");
-                router.refresh();
+                toast({
+                    title: 'Client supprimé',
+                    description: result.message,
+                });
+                router.push('/dashboard/clients');
             } else {
-                toast.error(result.error || "Erreur lors de la suppression");
+                toast({
+                    title: 'Erreur',
+                    description: result.error,
+                    variant: 'destructive',
+                });
             }
         } catch (error) {
-            toast.error("Erreur inattendue");
+            toast({
+                title: 'Erreur',
+                description: 'Une erreur est survenue lors de la suppression.',
+                variant: 'destructive',
+            });
         } finally {
             setIsLoading(false);
             setOpen(false);

@@ -14,9 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Eye, ShoppingBag, Loader2, MoreHorizontal, Package, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { SensitiveData } from '@/components/ui/sensitive-data';
-import { useFirestore, useCollection, useMemoFirebase, useFirebase } from '@/firebase';
-import { collection, query, where, orderBy } from 'firebase/firestore';
-import { format } from 'date-fns';
+import { getSales } from '@/app/actions/sales-actions';
 import { Sale } from '@/lib/types';
 import {
     DropdownMenu,
@@ -41,39 +39,44 @@ interface ExtendedSale extends Sale {
 }
 
 export function PurchaseHistoryTable({ clientId }: PurchaseHistoryTableProps) {
-    const firestore = useFirestore();
-    const { user } = useFirebase();
     const { toast } = useToast();
+    const [sales, setSales] = React.useState<ExtendedSale[]>([]);
+    const [isLoading, setIsLoading] = React.useState(true);
 
     // Modal state
     const [selectedSaleForReception, setSelectedSaleForReception] = React.useState<string | null>(null);
     const [isDeliveringOrder, setIsDeliveringOrder] = React.useState<string | null>(null);
 
-    console.log('🔍 Querying sales for clientId:', clientId);
+    // Fetch sales for this client
+    React.useEffect(() => {
+        const loadSales = async () => {
+            setIsLoading(true);
+            try {
+                const result = await getSales();
+                if (result.success && result.data) {
+                    // Filter by clientId and sort by date (newest first)
+                    const clientSales = result.data
+                        .filter(s => s.clientId?.toString() === clientId)
+                        .sort((a, b) => {
+                            const dateA = new Date(a.createdAt || a.date || 0).getTime();
+                            const dateB = new Date(b.createdAt || b.date || 0).getTime();
+                            return dateB - dateA;
+                        });
+                    setSales(clientSales as ExtendedSale[]);
+                    console.log(`✅ Found ${clientSales.length} sales for client ${clientId}`);
+                } else {
+                    setSales([]);
+                }
+            } catch (error) {
+                console.error('Error loading sales:', error);
+                setSales([]);
+            } finally {
+                setIsLoading(false);
+            }
+        };
 
-    // Query to fetch sales for this client
-    // Note: Removing orderBy from query to avoid "Missing Index" issues. Sorting client-side instead.
-    const salesQuery = useMemoFirebase(
-        () => (firestore && user && clientId ?
-            query(
-                collection(firestore, `stores/${user.uid}/sales`),
-                where('clientId', '==', clientId)
-            ) : null),
-        [firestore, user, clientId]
-    );
-
-    const { data: rawSales, isLoading } = useCollection<ExtendedSale>(salesQuery);
-
-    const sales = React.useMemo(() => {
-        if (!rawSales) return [];
-        console.log(`✅ Found ${rawSales.length} sales for client ${clientId}`);
-        // Sort client-side by date (newest first)
-        return [...rawSales].sort((a, b) => {
-            const dateA = new Date(a.createdAt || a.date || 0).getTime();
-            const dateB = new Date(b.createdAt || b.date || 0).getTime();
-            return dateB - dateA;
-        });
-    }, [rawSales, clientId]);
+        loadSales();
+    }, [clientId]);
 
     const getStatusBadge = (status?: string, remaining?: number) => {
         // Normalize status
@@ -130,16 +133,26 @@ export function PurchaseHistoryTable({ clientId }: PurchaseHistoryTableProps) {
     };
 
     const handleDeliverOrder = async (saleId: string) => {
-        if (!user) return;
-
         setIsDeliveringOrder(saleId);
         try {
-            const result = await deliverLensOrder(user.uid, saleId);
+            const result = await deliverLensOrder(saleId);
             if (result.success) {
                 toast({
                     title: "Succès",
                     description: "Commande marquée comme livrée",
                 });
+                // Reload sales after delivery
+                const updatedResult = await getSales();
+                if (updatedResult.success && updatedResult.data) {
+                    const clientSales = updatedResult.data
+                        .filter(s => s.clientId?.toString() === clientId)
+                        .sort((a, b) => {
+                            const dateA = new Date(a.createdAt || a.date || 0).getTime();
+                            const dateB = new Date(b.createdAt || b.date || 0).getTime();
+                            return dateB - dateA;
+                        });
+                    setSales(clientSales as ExtendedSale[]);
+                }
             } else {
                 toast({
                     title: "Erreur",

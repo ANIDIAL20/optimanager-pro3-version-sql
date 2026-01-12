@@ -26,7 +26,8 @@ export function PurchaseHistoryList({ clientId }: PurchaseHistoryListProps) {
             if (!user) return;
             setIsLoading(true);
             try {
-                const result = await getClientSales(user.uid, clientId);
+                // ✅ FIX: secureAction injects userId automatically
+                const result = await getClientSales(clientId);
                 if (result.success && result.sales) {
                     setSales(result.sales);
                 } else {
