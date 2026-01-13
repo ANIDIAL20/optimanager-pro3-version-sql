@@ -6,6 +6,7 @@ import { getDashboardStats } from '@/app/actions/dashboard-actions';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
+import { SensitiveData } from '@/components/ui/sensitive-data';
 import { cn } from '@/lib/utils';
 import {
     TrendingUp,
@@ -94,7 +95,7 @@ export default function DashboardPage() {
                                     Chiffre d'Affaires Global
                                 </p>
                                 <h2 className="text-4xl font-bold tracking-tight text-slate-900 group-hover:text-emerald-700 transition-colors">
-                                    {data?.globalRevenue.toFixed(2)} DH
+                                    <SensitiveData value={data?.globalRevenue || 0} type="currency" currency="DH" />
                                 </h2>
                             </div>
                             <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-md">
@@ -260,7 +261,7 @@ export default function DashboardPage() {
                                     </div>
                                     <div className="flex items-center gap-4">
                                         <span className="text-sm font-bold text-slate-900 bg-slate-50 px-2 py-1 rounded-md">
-                                            {activity.amount.toFixed(0)} DH
+                                            <SensitiveData value={activity.amount} type="currency" currency="DH" />
                                         </span>
                                         <Badge
                                             variant={activity.status === 'Payé' ? 'default' : 'destructive'}

@@ -2,10 +2,12 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { useFirebase, useFirestore } from '@/firebase';
-import { getClients, createClient, deleteClient, Client } from '@/app/actions/clients-actions';
-import { getSales } from '@/app/actions/sales-actions';
-import { collection, query, orderBy, getDocs } from 'firebase/firestore';
+import { useFirebase } from '@/firebase';
+import { getClients, deleteClient } from '@/features/clients/actions';
+import { getSales } from '@/features/sales/actions';
+import { type Client } from '@/features/clients/repository';
+import { type Sale } from '@/features/sales/repository';
+
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import {
@@ -42,14 +44,23 @@ import { fr } from 'date-fns/locale';
 import { SensitiveData } from '@/components/ui/sensitive-data';
 
 // Extended Client type to include calculated fields
-interface ExtendedClient extends Client {
+// Extended Client type to include calculated fields
+interface ExtendedClient {
+    id: string; // UI expects string IDs
+    name: string; // UI expects 'name' (mapped from fullName)
+    email?: string | null;
+    phone?: string | null;
+    mutuelle?: string | null;
+    address?: string | null;
     balance: number;
     lastVisit: Date | null;
+    createdAt?: Date | null;
+    updatedAt?: Date | null;
 }
 
 export default function ClientsPage() {
     const { user } = useFirebase();
-    const firestore = useFirestore();
+
     const { toast } = useToast();
 
     const [clients, setClients] = React.useState<ExtendedClient[]>([]);
@@ -65,39 +76,29 @@ export default function ClientsPage() {
     });
 
     // Load data (Clients + Sales)
+    // Load data (Clients + Sales)
     const loadData = React.useCallback(async () => {
-        if (!user || !firestore) return;
+        // Waif for user to be ready on client side (optional but good for UX)
+        if (!user) return;
 
         setIsLoading(true);
         try {
-            console.log("🔄 Loading Clients Data...");
-            // 1. Fetch Clients
-            const clientsResult = await getClients(user.uid);
-
-            if (!clientsResult.success) {
-                console.error("❌ Failed to fetch clients:", clientsResult.error);
-                toast({
-                    title: 'Erreur',
-                    description: 'Impossible de charger les clients.',
-                    variant: 'destructive',
-                });
-                // Check if we should stop here or continue? Let's continue with empty list to avoid crash
-            }
-
-            const clientsData = clientsResult.success ? clientsResult.clients : [];
+            console.log("🔄 Loading Clients Data (New Arch)...");
+            
+            // 1. Fetch Clients (New Action - returns array or throws)
+            const clientsData = await getClients(undefined); // Pass undefined to satisfy TS
             console.log(`✅ Fetched ${clientsData.length} clients.`);
 
-            // 2. Fetch Sales to calculate Balance & Last Visit (Via Server Action)
-            const salesResult = await getSales(user.uid);
-            const salesList = salesResult.success ? salesResult.sales : [];
+            // 2. Fetch Sales (New Action - returns array or throws)
+            const salesList = await getSales(undefined); // Pass undefined to satisfy TS
             console.log(`✅ Fetched ${salesList.length} sales.`);
 
-            const salesByClient: Record<string, any[]> = {};
+            const salesByClient: Record<number, Sale[]> = {};
             let totalCredit = 0;
             let ongoingOrders = 0;
 
             salesList.forEach(sale => {
-                const clientId = sale.clientId;
+                const clientId = sale.clientId; // this is number in new schema?
                 if (clientId) {
                     if (!salesByClient[clientId]) {
                         salesByClient[clientId] = [];
@@ -106,7 +107,7 @@ export default function ClientsPage() {
                 }
 
                 // Global Metrics Logic
-                const reste = sale.resteAPayer || 0;
+                const reste = parseFloat(sale.resteAPayer || '0');
                 if (reste > 0.01) {
                     totalCredit += reste;
                     ongoingOrders++;
@@ -115,34 +116,23 @@ export default function ClientsPage() {
 
             // 3. Merge Data
             const enrichedClients: ExtendedClient[] = clientsData.map(client => {
-                const clientSales = salesByClient[client.id!] || [];
+                const clientSales = salesByClient[client.id] || [];
 
                 // Calculate Balance (Sum of unpaid amounts)
-                const balance = clientSales.reduce((sum, sale) => sum + (sale.resteAPayer || 0), 0);
+                const balance = clientSales.reduce((sum, sale) => sum + parseFloat(sale.resteAPayer || '0'), 0);
 
                 // Find Last Visit (Most recent sale date)
                 let lastVisit: Date | null = null;
                 if (clientSales.length > 0) {
                     // Sort sales by date desc
                     clientSales.sort((a, b) => {
-                        const socketA = a.date || a.createdAt;
-                        const socketB = b.date || b.createdAt;
-                        if (!socketA) return 1;
-                        if (!socketB) return -1;
-
-                        // Handle Firestore timestamps vs Strings
-                        const timeA = typeof socketA.toDate === 'function' ? socketA.toDate().getTime() : new Date(socketA).getTime();
-                        const timeB = typeof socketB.toDate === 'function' ? socketB.toDate().getTime() : new Date(socketB).getTime();
-
-                        return timeB - timeA;
+                        const dateA = a.date ? new Date(a.date) : new Date(a.createdAt || 0);
+                        const dateB = b.date ? new Date(b.date) : new Date(b.createdAt || 0);
+                        return dateB.getTime() - dateA.getTime();
                     });
 
                     const lastSale = clientSales[0];
-                    const lastSaleDate = lastSale.date || lastSale.createdAt;
-
-                    if (lastSaleDate) {
-                        lastVisit = typeof lastSaleDate.toDate === 'function' ? lastSaleDate.toDate() : new Date(lastSaleDate);
-                    }
+                    lastVisit = lastSale.date ? new Date(lastSale.date) : new Date(lastSale.createdAt || 0);
                 }
 
                 // Fallback to client updated/created if no sales
@@ -152,15 +142,20 @@ export default function ClientsPage() {
                 }
 
                 return {
-                    ...client,
+                    id: client.id.toString(), // Convert number to string
+                    name: client.fullName,    // Map fullName -> name
+                    email: client.email,
+                    phone: client.phone,
+                    mutuelle: null, // New schema migth not have mutuelle mapped yet?
+                    address: client.address,
                     balance,
-                    lastVisit
+                    lastVisit,
+                    createdAt: client.createdAt,
+                    updatedAt: client.updatedAt
                 };
             });
 
-            // Default sort: alphabetical or by recent visit? 
-            // Let's sort by creation/recent activity if possible, or name. 
-            // The previous code had name sort.
+            // Default sort: Alphabetical
             enrichedClients.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
             setClients(enrichedClients);
@@ -171,17 +166,17 @@ export default function ClientsPage() {
                 ongoingOrders: ongoingOrders
             });
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("💥 Error loading client data:", error);
             toast({
                 title: '❌ Erreur',
-                description: 'Une erreur critique est survenue.',
+                description: error.message || 'Impossible de charger les données.',
                 variant: 'destructive',
             });
         } finally {
             setIsLoading(false);
         }
-    }, [user, firestore, toast]);
+    }, [user, toast]);
 
     React.useEffect(() => {
         loadData();
@@ -204,16 +199,16 @@ export default function ClientsPage() {
     }, [searchQuery, clients]);
 
     // Delete client
+    // Delete client
     const handleDelete = async (clientId: string) => {
-        if (!user || !confirm('Êtes-vous sûr de vouloir supprimer ce client ? Cette action est irréversible.')) return;
+        if (!confirm('Êtes-vous sûr de vouloir supprimer ce client ? Cette action est irréversible.')) return;
 
-        // ✅ FIX: secureAction injects userId automatically, only pass clientId
-        const result = await deleteClient(clientId);
-        if (result.success) {
-            toast({ title: '✅ Succès', description: result.message });
+        try {
+            await deleteClient(clientId); // Uses cookie for auth
+            toast({ title: '✅ Succès', description: 'Client supprimé avec succès.' });
             loadData();
-        } else {
-            toast({ title: '❌ Erreur', description: result.error, variant: 'destructive' });
+        } catch (error: any) {
+            toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
         }
     };
 

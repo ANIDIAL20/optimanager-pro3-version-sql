@@ -30,11 +30,8 @@ export function PrivacyProvider({ children }: { children: React.ReactNode }) {
         });
     };
 
-    // Prevent hydration mismatch by not rendering until client-side is ready
-    if (!isHydrated) {
-        return <>{children}</>;
-    }
-
+    // ✅ FIX: Always provide context, even during hydration
+    // This prevents "usePrivacy must be used within PrivacyProvider" errors
     return (
         <PrivacyContext.Provider value={{ isPatientMode, togglePatientMode }}>
             {children}

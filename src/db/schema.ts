@@ -335,3 +335,58 @@ export const devisRelations = relations(devis, ({ one }) => ({
     references: [sales.id],
   }),
 }));
+
+// ========================================
+// REMINDERS TABLE (Shop Owner Feature)
+// ========================================
+export const reminders = pgTable('reminders', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(), // 🔒 CRITICAL: Shop Owner ID (data isolation)
+  
+  // Basic Info
+  title: text('title').notNull(),
+  description: text('description'),
+  reminderType: text('reminder_type').notNull(), // 'ONE_TIME', 'RECURRING', 'MANUAL'
+  status: text('status').notNull().default('PENDING'), // 'PENDING', 'COMPLETED', 'DISMISSED', 'EXPIRED'
+  
+  // Timing Configuration
+  targetDate: timestamp('target_date').notNull(), // When the event is due
+  notificationDate: timestamp('notification_date').notNull(), // When to send notification
+  notificationOffsetDays: integer('notification_offset_days'), // Days before target to notify
+  
+  // Recurrence Configuration
+  isRecurring: boolean('is_recurring').notNull().default(false),
+  recurrenceInterval: integer('recurrence_interval'), // e.g., 1, 4, 12
+  recurrenceUnit: text('recurrence_unit'), // 'DAYS', 'WEEKS', 'MONTHS', 'YEARS'
+  parentReminderId: integer('parent_reminder_id'), // Points to original recurring template
+  nextReminderId: integer('next_reminder_id'), // Points to next occurrence (linked list)
+  
+  // Polymorphic Relationship (link to any entity)
+  relatedEntityType: text('related_entity_type'), // 'SUPPLIER', 'CHECK', 'CONTRACT', 'CLIENT', etc.
+  relatedEntityId: text('related_entity_id'), // ID of the related entity
+  
+  // Notification Tracking
+  notificationSent: boolean('notification_sent').notNull().default(false),
+  notificationSentAt: timestamp('notification_sent_at'),
+  notificationChannels: json('notification_channels').$type<string[]>(), // ['EMAIL', 'IN_APP', 'SMS']
+  
+  // Metadata
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+  completedAt: timestamp('completed_at'),
+  dismissedAt: timestamp('dismissed_at'),
+});
+
+// Reminder Relations (self-referencing for linked list)
+export const remindersRelations = relations(reminders, ({ one }) => ({
+  parent: one(reminders, {
+    fields: [reminders.parentReminderId],
+    references: [reminders.id],
+    relationName: 'reminder_parent',
+  }),
+  next: one(reminders, {
+    fields: [reminders.nextReminderId],
+    references: [reminders.id],
+    relationName: 'reminder_next',
+  }),
+}));

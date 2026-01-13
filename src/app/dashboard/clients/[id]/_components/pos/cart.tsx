@@ -5,6 +5,7 @@ import { Trash2, Plus, Minus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { SensitiveData } from '@/components/ui/sensitive-data';
 import type { Product } from '@/lib/types';
 
 export interface CartItem {
@@ -46,12 +47,14 @@ export function Cart({ items, onUpdateQuantity, onRemoveItem, onClearCart }: Car
                         <div key={item.product.id} className="flex gap-4 items-start bg-card p-3 rounded-lg border">
                             <div className="flex-1">
                                 <h4 className="font-medium line-clamp-1">{item.product.nomProduit}</h4>
-                                <p className="text-sm text-muted-foreground">{item.product.prixVente.toFixed(2)} MAD / unité</p>
+                                <p className="text-sm text-muted-foreground">
+                                    <SensitiveData value={item.product.prixVente} type="currency" /> / unité
+                                </p>
                             </div>
 
                             <div className="flex flex-col items-end gap-2">
                                 <div className="font-bold">
-                                    {(item.product.prixVente * item.quantity).toFixed(2)} MAD
+                                    <SensitiveData value={item.product.prixVente * item.quantity} type="currency" />
                                 </div>
 
                                 <div className="flex items-center gap-2">
@@ -92,7 +95,9 @@ export function Cart({ items, onUpdateQuantity, onRemoveItem, onClearCart }: Car
             <div className="mt-4 pt-4 border-t space-y-2">
                 <div className="flex justify-between items-center text-lg font-bold">
                     <span>Total</span>
-                    <span className="text-primary">{total.toFixed(2)} MAD</span>
+                    <span className="text-primary">
+                        <SensitiveData value={total} type="currency" className="text-primary" />
+                    </span>
                 </div>
             </div>
         </div>

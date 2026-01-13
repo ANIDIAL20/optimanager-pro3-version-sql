@@ -11,6 +11,7 @@ import { Download, Printer, Share2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/logo';
+import { SensitiveData } from '@/components/ui/sensitive-data';
 
 interface SaleWithDetails extends Sale {
   details: OrderDetail[];
@@ -117,8 +118,12 @@ export function Invoice({ sale, client }: InvoiceProps) {
                 <tr key={item.id} className="border-b">
                   <td className="p-3">{item.nom}</td>
                   <td className="p-3 text-center">{item.quantite}</td>
-                  <td className="p-3 text-right">{item.prix.toFixed(2)} MAD</td>
-                  <td className="p-3 text-right">{(item.prix * item.quantite).toFixed(2)} MAD</td>
+                  <td className="p-3 text-right">
+                    <SensitiveData value={item.prix} type="currency" />
+                  </td>
+                  <td className="p-3 text-right">
+                    <SensitiveData value={item.prix * item.quantite} type="currency" />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -129,7 +134,7 @@ export function Invoice({ sale, client }: InvoiceProps) {
           <div className="w-full max-w-xs space-y-2">
             <div className="flex justify-between">
               <span className="text-gray-600">Sous-total:</span>
-              <span>{(sale.totalNet || 0).toFixed(2)} MAD</span>
+              <span><SensitiveData value={sale.totalNet || 0} type="currency" /></span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">TVA (0%):</span>
@@ -138,15 +143,15 @@ export function Invoice({ sale, client }: InvoiceProps) {
             <Separator />
             <div className="flex justify-between font-bold text-lg">
               <span>Total Net:</span>
-              <span>{(sale.totalNet || 0).toFixed(2)} MAD</span>
+              <span><SensitiveData value={sale.totalNet || 0} type="currency" /></span>
             </div>
             <div className="flex justify-between text-gray-600">
               <span>Montant Payé:</span>
-              <span>{(sale.totalPaye || 0).toFixed(2)} MAD</span>
+              <span><SensitiveData value={sale.totalPaye || 0} type="currency" /></span>
             </div>
             <div className="flex justify-between font-semibold text-red-600">
               <span>Reste à Payer:</span>
-              <span>{(sale.resteAPayer || 0).toFixed(2)} MAD</span>
+              <span><SensitiveData value={sale.resteAPayer || 0} type="currency" className="text-red-600" /></span>
             </div>
           </div>
         </section>

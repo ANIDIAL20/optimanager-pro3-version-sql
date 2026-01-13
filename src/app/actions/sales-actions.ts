@@ -68,10 +68,14 @@ export interface CreateSaleInput {
  */
 export const getSales = secureAction(async (userId, user) => {
     try {
+        console.log('📊 Fetching sales for userId:', userId);
+        
         const salesData = await db.query.sales.findMany({
             where: eq(sales.userId, userId),
             orderBy: [desc(sales.createdAt)]
         });
+
+        console.log(`✅ Found ${salesData.length} sales`);
 
         const mappedSales: Sale[] = salesData.map(s => ({
             id: s.id.toString(),
@@ -102,8 +106,11 @@ export const getSales = secureAction(async (userId, user) => {
         return { success: true, sales: mappedSales };
 
     } catch (error: any) {
+        console.error('💥 ERROR in getSales:', error);
+        console.error('💥 Error message:', error.message);
+        console.error('💥 Error stack:', error.stack);
         await logFailure(userId, 'READ', 'sales', error.message);
-        return { success: false, error: 'Erreur lors de la récupération des ventes', sales: [] };
+        return { success: false, error: `Erreur lors de la récupération des ventes: ${error.message}`, sales: [] };
     }
 });
 
