@@ -30,9 +30,10 @@ import { getCategoryIcon } from '@/lib/category-icons';
 import { PaymentSection } from '@/app/clients/[id]/_components/pos/payment-section';
 
 // Server Actions
-import { getClients } from '@/app/actions/clients-actions';
-import { getProducts, getCategories, type Product as ActionProduct } from '@/app/actions/products-actions';
-import { createSale } from '@/app/actions/sales-actions';
+// Server Actions - NEW Architecture
+import { getClients } from '@/features/clients/actions';
+import { getProducts, getCategories, type Product as ActionProduct } from '@/app/actions/products-actions'; // Still using this for POS products 
+import { createSale } from '@/features/sales/actions';
 
 // Use CartItem type definition
 interface CartItem {
@@ -66,30 +67,33 @@ export default function NewSalePage() {
         async function loadData() {
             try {
                 // 1. Clients
-                const clientsRes = await getClients();
+                const clientsRes = await getClients(undefined);
                 if (isMounted) {
-                     if (clientsRes.success && clientsRes.clients) {
+                    // New getClients returns Client[] directly
+                    if (Array.isArray(clientsRes)) {
                         // Adapt clients to legacy interface
-                        const adaptedClients: any[] = clientsRes.clients.map(c => {
-                            const nameParts = c.name.split(' ');
+                        const adaptedClients: any[] = clientsRes.map(c => {
+                            const fullName = c.fullName || c.name || '';
+                            const nameParts = fullName.split(' ');
                             const prenom = nameParts.length > 1 ? nameParts[0] : '';
-                            const nom = nameParts.length > 1 ? nameParts.slice(1).join(' ') : c.name;
+                            const nom = nameParts.length > 1 ? nameParts.slice(1).join(' ') : fullName;
                             return {
                                 ...c,
+                                id: c.id.toString(), // Convert number to string for UI
+                                name: fullName,      // Ensure name property exists
                                 nom,
                                 prenom,
                                 telephone1: c.phone || '',
-                                id: c.id?.toString() || '',
                             };
                         });
                         setClients(adaptedClients);
-                     }
-                     setIsLoadingClients(false);
+                    }
+                    setIsLoadingClients(false);
                 }
 
                 // 2. Products
                 setIsLoadingProducts(true);
-                const productsRes = await getProducts();
+                const productsRes = await getProducts(undefined);
                 if (isMounted) {
                     if (productsRes.success && productsRes.data) {
                         // Map ActionProduct to local Product (legacy)
@@ -205,29 +209,50 @@ export default function NewSalePage() {
 
         try {
             // Prepare items for Server Action
-            // Action expects: productRef, productName, quantity, unitPrice, total
+            // Prepare items matching saleItemSchema
             const saleItems = cartItems.map(item => ({
-                productRef: item.product.id, // Using ID as ref
-                productName: item.product.nomProduit,
+                productId: item.product.id,
+                name: item.product.nomProduit,
                 quantity: item.quantity,
-                unitPrice: item.product.prixVente,
+                price: item.product.prixVente,
                 total: item.product.prixVente * item.quantity
             }));
 
+            // Client ID handling (ensure number)
+            const clientIdNum = selectedClient?.id ? parseInt(selectedClient.id) : undefined;
+
+            // Calculate Totals
+            const totalTTC = cartItems.reduce((sum, item) => sum + (item.product.prixVente * item.quantity), 0);
+            const totalHT = totalTTC / 1.2; // Assuming 20% TVA for simplicity as default
+            const totalTVA = totalTTC - totalHT;
+            
+            // Call New Feature Action
             const result = await createSale({
-                clientId: selectedClient?.id, // Can be undefined
+                clientId: clientIdNum,
+                clientName: selectedClient?.name,
                 items: saleItems,
-                paymentMethod: paymentData.method,
+                
+                // Financials (Required by Zod Schema)
+                totalHT: parseFloat(totalHT.toFixed(2)),
+                totalTVA: parseFloat(totalTVA.toFixed(2)),
+                totalTTC: parseFloat(totalTTC.toFixed(2)),
+                totalPaid: paymentData.amountPaid,
+                
+                paymentMethod: paymentData.method as any,
                 notes: paymentData.notes,
-                // totals calculated on server, but we can pass them if trusted or for validation
+                status: paymentData.amountPaid >= totalTTC ? 'PAYE' : paymentData.amountPaid > 0 ? 'PARTIEL' : 'IMPAYE'
             });
 
-            if (result.success) {
+            if (result && (result as any).id) {
                  toast({ title: "✅ Vente réussie !", description: "La vente a été enregistrée avec succès." });
                  clearCart();
-                 router.push(`/dashboard/ventes/${result.id}`);
+                 // New architecture returns object, legacy might have returned success bool. 
+                 // Our createSale returns the Sale object directly or throws? 
+                 // createAction wrapper returns the result of the handler.
+                 // Handler returns newSale.
+                 router.push(`/dashboard/ventes/${(result as any).id}`);
             } else {
-                 throw new Error(result.error);
+                 throw new Error("Réponse invalide du serveur");
             }
 
         } catch (error: any) {
