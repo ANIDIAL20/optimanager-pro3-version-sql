@@ -27,6 +27,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { SensitiveData } from '@/components/ui/sensitive-data';
 
 interface LensOrderListProps {
   clientId: string;
@@ -212,7 +213,7 @@ export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
                     <TableCell>{order.supplierName}</TableCell>
                     <TableCell>{getStatusBadge(order.status)}</TableCell>
                     <TableCell className="text-right font-medium">
-                      {order.totalPrice} MAD
+                      <SensitiveData value={parseFloat(order.totalPrice)} type="currency" />
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -342,7 +343,9 @@ export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
               <div className="grid grid-cols-2 gap-4 border-t pt-4">
                 <div>
                   <p className="text-sm font-medium text-slate-500">Prix Unitaire</p>
-                  <p className="text-lg font-semibold">{selectedOrder.unitPrice} MAD</p>
+                  <p className="text-lg font-semibold">
+                    <SensitiveData value={parseFloat(selectedOrder.unitPrice)} type="currency" />
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-slate-500">Quantité</p>
@@ -350,7 +353,9 @@ export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
                 </div>
                 <div className="col-span-2">
                   <p className="text-sm font-medium text-slate-500">Prix Total</p>
-                  <p className="text-2xl font-bold text-blue-600">{selectedOrder.totalPrice} MAD</p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    <SensitiveData value={parseFloat(selectedOrder.totalPrice)} type="currency" className="text-blue-600" />
+                  </p>
                 </div>
               </div>
 

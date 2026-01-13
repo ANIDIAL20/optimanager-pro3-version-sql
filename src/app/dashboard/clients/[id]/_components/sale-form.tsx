@@ -48,6 +48,7 @@ import {
 } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { SensitiveData } from '@/components/ui/sensitive-data';
 import { Invoice } from './invoice';
 
 const SaleItemSchema = z.object({
@@ -302,8 +303,12 @@ export function SaleForm({ client }: SaleFormProps) {
                             )}
                           />
                         </TableCell>
-                        <TableCell className="text-right">{item.price.toFixed(2)} MAD</TableCell>
-                        <TableCell className="text-right">{(item.price * watchItems[index].quantity).toFixed(2)} MAD</TableCell>
+                        <TableCell className="text-right">
+                          <SensitiveData value={item.price} type="currency" />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <SensitiveData value={item.price * watchItems[index].quantity} type="currency" />
+                        </TableCell>
                         <TableCell>
                           <Button variant="ghost" size="icon" onClick={() => remove(index)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
@@ -358,15 +363,15 @@ export function SaleForm({ client }: SaleFormProps) {
                 <div className="space-y-2 rounded-md bg-muted p-4">
                   <div className="flex justify-between font-medium">
                     <span>Total Net:</span>
-                    <span>{totalNet.toFixed(2)} MAD</span>
+                    <span><SensitiveData value={totalNet} type="currency" /></span>
                   </div>
                   <div className="flex justify-between text-muted-foreground text-sm">
                     <span>Payé:</span>
-                    <span>{watchTotalPaye.toFixed(2)} MAD</span>
+                    <span><SensitiveData value={watchTotalPaye} type="currency" /></span>
                   </div>
                   <div className="flex justify-between font-bold text-lg text-destructive">
                     <span>Reste à Payer:</span>
-                    <span>{resteAPayer.toFixed(2)} MAD</span>
+                    <span><SensitiveData value={resteAPayer} type="currency" className="text-destructive" /></span>
                   </div>
                 </div>
               </div>

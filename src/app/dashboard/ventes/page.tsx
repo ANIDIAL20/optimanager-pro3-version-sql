@@ -372,7 +372,9 @@ function KanbanGrid({ sales, clientsMap }: { sales: Sale[], clientsMap: Map<stri
 
                             {/* Amount */}
                             <div className="flex justify-between items-baseline">
-                                <span className="text-2xl font-bold text-slate-900">{safeNum(sale.totalNet).toFixed(0)} dh</span>
+                                <span className="text-2xl font-bold text-slate-900">
+                                    <SensitiveData value={sale.totalNet} type="currency" currency="dh" />
+                                </span>
                                 <Badge
                                     variant={isPaid ? "secondary" : "outline"}
                                     className={cn(
@@ -388,7 +390,7 @@ function KanbanGrid({ sales, clientsMap }: { sales: Sale[], clientsMap: Map<stri
                             {!isPaid && (
                                 <div className="bg-orange-50 p-2 rounded-md text-orange-800 text-xs font-medium flex justify-between">
                                     <span>Reste:</span>
-                                    <span>{safeNum(sale.resteAPayer).toFixed(2)} dh</span>
+                                    <span><SensitiveData value={sale.resteAPayer} type="currency" currency="dh" /></span>
                                 </div>
                             )}
 
@@ -448,8 +450,14 @@ function EnhancedListView({ sales, clientsMap }: { sales: Sale[], clientsMap: Ma
                             </div>
 
                             <div className="col-span-2">
-                                <div className="font-bold text-slate-900">{safeNum(sale.totalNet).toFixed(2)} MAD</div>
-                                {!isPaid && <div className="text-xs text-orange-600 font-medium">Reste: {safeNum(sale.resteAPayer).toFixed(2)}</div>}
+                                <div className="font-bold text-slate-900">
+                                    <SensitiveData value={sale.totalNet} type="currency" />
+                                </div>
+                                {!isPaid && (
+                                    <div className="text-xs text-orange-600 font-medium">
+                                        Reste: <SensitiveData value={sale.resteAPayer} type="currency" className="text-orange-600" />
+                                    </div>
+                                )}
                             </div>
 
                             <div className="col-span-2">

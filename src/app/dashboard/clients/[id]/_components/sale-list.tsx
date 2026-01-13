@@ -24,6 +24,7 @@ import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
+import { SensitiveData } from '@/components/ui/sensitive-data';
 
 interface SaleListProps {
   clientId: string;
@@ -102,9 +103,15 @@ export function SaleList({ clientId }: SaleListProps) {
               {sales.map((sale) => (
                 <TableRow key={sale.id}>
                   <TableCell>{format(new Date(sale.date), 'dd/MM/yyyy HH:mm')}</TableCell>
-                  <TableCell>{(sale.totalNet || 0).toFixed(2)} MAD</TableCell>
-                  <TableCell>{(sale.totalPaye || 0).toFixed(2)} MAD</TableCell>
-                  <TableCell className="font-medium text-destructive">{(sale.resteAPayer || 0).toFixed(2)} MAD</TableCell>
+                  <TableCell>
+                    <SensitiveData value={sale.totalNet || 0} type="currency" />
+                  </TableCell>
+                  <TableCell>
+                    <SensitiveData value={sale.totalPaye || 0} type="currency" />
+                  </TableCell>
+                  <TableCell className="font-medium text-destructive">
+                    <SensitiveData value={sale.resteAPayer || 0} type="currency" className="text-destructive" />
+                  </TableCell>
                   <TableCell>{getPaymentStatusBadge(sale.resteAPayer || 0)}</TableCell>
                 </TableRow>
               ))}

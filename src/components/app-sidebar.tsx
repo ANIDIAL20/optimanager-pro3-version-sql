@@ -15,7 +15,8 @@ import {
     FileText,
     Receipt,
     FileSpreadsheet,
-    Warehouse
+    Warehouse,
+    Bell
 } from "lucide-react";
 
 import {
@@ -169,6 +170,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
                 {/* PARAMETRES */}
                 <SidebarMenu>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton asChild isActive={pathname === '/dashboard/reminders'} tooltip="Rappels">
+                            <Link href="/dashboard/reminders">
+                                <Bell />
+                                <span>Rappels</span>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+
                     <SidebarMenuItem>
                         <SidebarMenuButton asChild isActive={pathname === '/dashboard/parametres'} tooltip="Paramètres">
                             <Link href="/dashboard/parametres">
