@@ -10,7 +10,8 @@ export class SaleService {
    */
   async processSale(userId: string, data: SaleInput) {
     // 1. Validate Stock Availability
-    // 1. Validate Stock Availability
+    // TODO: Re-enable after fixing ProductRepository.findById query issue
+    /*
     for (const item of data.items) {
       if (item.productId) {
         // Parse ID to number since schema defines it as serial (integer)
@@ -33,6 +34,8 @@ export class SaleService {
         }
       }
     }
+    */
+    console.warn('⚠️ Stock validation temporarily disabled');
 
     // 2. Prepare Sale Data
     const status = data.totalPaid >= data.totalTTC ? 'paye' : 
