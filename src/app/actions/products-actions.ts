@@ -346,3 +346,31 @@ export const getLowStockProducts = secureAction(async (userId, user, threshold?:
         return { success: false, error: error.message };
     }
 });
+
+/**
+ * Get distinct categories from products
+ */
+export const getCategories = secureAction(async (userId, user) => {
+    try {
+        const results = await db
+            .selectDistinct({ category: products.categorie })
+            .from(products)
+            .where(
+                and(
+                    eq(products.userId, userId),
+                    sql`${products.categorie} IS NOT NULL`
+                )
+            );
+
+        const categories = results
+            .map(r => r.category)
+            .filter((c): c is string => !!c && c.trim() !== '')
+            .sort()
+            .map(c => ({ id: c, name: c }));
+
+        return { success: true, data: categories };
+    } catch (error: any) {
+        console.error('Error fetching categories:', error);
+        return { success: false, error: 'Erreur récupération catégories' };
+    }
+});
