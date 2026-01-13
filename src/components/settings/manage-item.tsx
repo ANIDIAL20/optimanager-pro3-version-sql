@@ -28,7 +28,7 @@ interface ManageItemProps {
 
 const ItemCard: React.FC<ManageItemProps> = ({ item, collectionName, itemName, FormComponent, onSuccess }) => {
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
   const firestore = useFirestore();
   const { toast } = useToast();
 
@@ -47,7 +47,7 @@ const ItemCard: React.FC<ManageItemProps> = ({ item, collectionName, itemName, F
       title: `${itemName} supprimé(e)`,
       description: `L'élément "${item.name}" a été supprimé.`,
     });
-    setIsDeleteDialogOpen(false);
+    setShowDeleteDialog(false);
     onSuccess();
   };
 
@@ -63,6 +63,7 @@ const ItemCard: React.FC<ManageItemProps> = ({ item, collectionName, itemName, F
 
         {item.category && <p className="text-xs text-muted-foreground">{item.category}</p>}
         {item.type && <p className="text-xs text-muted-foreground">{item.type}</p>}
+        
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100">
@@ -70,12 +71,20 @@ const ItemCard: React.FC<ManageItemProps> = ({ item, collectionName, itemName, F
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setIsEditDialogOpen(true)}>Modifier</DropdownMenuItem>
-            <DropdownMenuItem className="text-destructive" onClick={() => setIsDeleteDialogOpen(true)}>Supprimer</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)}>
+              Modifier
+            </DropdownMenuItem>
+            <DropdownMenuItem 
+              className="text-destructive" 
+              onSelect={() => setShowDeleteDialog(true)}
+            >
+              Supprimer
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </Card>
 
+      {/* Edit Dialog */}
       <Dialog modal={false} open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent
           onInteractOutside={(e) => {
@@ -90,12 +99,13 @@ const ItemCard: React.FC<ManageItemProps> = ({ item, collectionName, itemName, F
         </DialogContent>
       </Dialog>
 
-
+      {/* Delete Alert Dialog - Separated from DropdownMenu */}
       {/* @ts-ignore - modal prop exists but not in types */}
-      <AlertDialog modal={false} open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <AlertDialog modal={false} open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
         >
           <AlertDialogHeader>
             <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
@@ -105,7 +115,9 @@ const ItemCard: React.FC<ManageItemProps> = ({ item, collectionName, itemName, F
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">Supprimer</AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
+              Supprimer
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
