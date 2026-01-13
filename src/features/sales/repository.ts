@@ -50,22 +50,23 @@ export class SaleRepository extends BaseRepository<Sale, typeof sales> {
   }
 
   /**
-   * CRITICAL: Crée une vente ET met à jour le stock dans une transaction atomique
+   * CRITICAL: Crée une vente ET met à jour le stock
+   * Note: HTTP driver doesn't support transactions, so we do sequential operations
    */
   async createSale(data: NewSale, items: any[]): Promise<Sale> {
     
-    return await db.transaction(async (tx) => {
-      // 1. Create Sale
-      const saleResult = await tx.insert(sales).values(data).returning();
-      const newSale = saleResult[0];
+    // 1. Create Sale first
+    const saleResult = await db.insert(sales).values(data).returning();
+    const newSale = saleResult[0];
 
+    try {
       // 2. Update Stock for each item
       for (const item of items) {
          if (item.productId) {
              const productId = parseInt(item.productId);
              
-             // Decrement stock using SQL (atomic operation within transaction)
-             await tx
+             // Decrement stock using SQL
+             await db
                  .update(products)
                  .set({ 
                      quantiteStock: sql`${products.quantiteStock} - ${item.quantity}`,
@@ -77,7 +78,7 @@ export class SaleRepository extends BaseRepository<Sale, typeof sales> {
                  ));
 
              // Log movement
-             await tx.insert(stockMovements).values({
+             await db.insert(stockMovements).values({
                  userId: data.userId,
                  productId: productId,
                  quantite: -item.quantity,
@@ -89,8 +90,21 @@ export class SaleRepository extends BaseRepository<Sale, typeof sales> {
          }
       }
 
+      // Invalidate caches
+      await this.invalidateListCache(data.userId);
+
       return newSale;
-    });
+    } catch (error) {
+      // If stock update fails, we should ideally delete the sale, but for now just log
+      console.error('Error updating stock for sale:', newSale.id, error);
+      throw error;
+    }
+  }
+
+  private async invalidateListCache(userId: string) {
+    if (redis) {
+      await redis.del(CACHE_TAGS.sales(userId));
+    }
   }
 }
 

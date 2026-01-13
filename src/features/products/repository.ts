@@ -156,24 +156,34 @@ export class ProductRepository extends BaseRepository<Product, typeof products> 
     }
 
     // 2. DB Query - Explicit usage of products table to avoid BaseRepository generic issues
-    const result = await db
-        .select()
-        .from(products)
-        .where(eq(products.id, id))
-        .limit(1);
-    
-    const item = result[0] || null;
+    try {
+        const result = await db
+            .select()
+            .from(products)
+            .where(eq(products.id, id))
+            .limit(1);
+        
+        const item = result[0] || null;
 
-    // 3. Set Cache
-    if (item && redis) {
-        try {
-            await redis.set(cacheKey, JSON.stringify(item), { ex: 300 });
-        } catch (e) {
-            console.warn('Redis error:', e);
+        // 3. Set Cache
+        if (item && redis) {
+            try {
+                await redis.set(cacheKey, JSON.stringify(item), { ex: 300 });
+            } catch (e) {
+                console.warn('Redis error:', e);
+            }
         }
-    }
 
-    return item;
+        return item;
+    } catch (error: any) {
+        console.error('ProductRepository.findById error:', {
+            id,
+            error: error.message,
+            stack: error.stack,
+            details: error
+        });
+        throw new Error(`Impossible de récupérer le produit (ID: ${id}): ${error.message}`);
+    }
   }
 }
 
