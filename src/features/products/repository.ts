@@ -80,10 +80,24 @@ export class ProductRepository extends BaseRepository<Product, typeof products> 
         and(
           eq(products.userId, userId),
           eq(products.isActive, true),
-           // TODO: fix comparison with column value
            // lte(products.quantiteStock, products.seuilAlerte)
         )
       );
+  }
+
+  /**
+   * Récupère les catégories distinctes
+   */
+  async getCategories(userId: string): Promise<string[]> {
+    const results = await db
+      .selectDistinct({ category: products.categorie })
+      .from(products)
+      .where(and(eq(products.userId, userId), eq(products.isActive, true)));
+
+    return results
+      .map(r => r.category)
+      .filter((c): c is string => !!c && c.trim() !== '')
+      .sort();
   }
 
   /**

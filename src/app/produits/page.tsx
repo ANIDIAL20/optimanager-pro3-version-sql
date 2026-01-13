@@ -1,8 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import { collection, query, where } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase, useFirebase } from '@/firebase';
 import { DataTable } from '@/components/ui/data-table';
 import { columns, type Product } from '@/components/dashboard/produits/columns';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
@@ -14,146 +12,99 @@ import {
   Package,
   AlertTriangle,
   TrendingUp,
-  Layers,
-  Glasses,
-  Disc,
-  Eye,
-  SprayCan,
-  Link as LinkIcon,
-  Briefcase,
-  Puzzle
+  Layers
 } from 'lucide-react';
 import Link from 'next/link';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-
 import { getCategoryIcon } from '@/lib/category-icons';
 import { InvoiceScannerDialog } from '@/components/products/invoice-scanner-dialog';
-import { getProducts } from '@/app/actions/products-actions';
-
-
+import { getProducts, getCategories } from '@/features/products/actions';
+import { useToast } from '@/hooks/use-toast';
 
 export default function ProductsPage() {
-  const firestore = useFirestore();
-  const { user } = useFirebase();
   const [searchTerm, setSearchTerm] = React.useState('');
   const [categoryFilter, setCategoryFilter] = React.useState<string>('all');
-
   const [products, setProducts] = React.useState<Product[]>([]);
-  const [isLoadingProducts, setIsLoadingProducts] = React.useState(true);
+  const [categories, setCategories] = React.useState<{id: string, name: string}[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const { toast } = useToast();
 
-  // Fetch products via Server Action
   React.useEffect(() => {
-    async function fetchProducts() {
-      setIsLoadingProducts(true);
+    let isMounted = true;
+
+    async function fetchData() {
+      setIsLoading(true);
       try {
-        const response = await getProducts(searchTerm);
-        if (response.success && response.data) {
-          setProducts(response.data);
-        } else {
-          console.error("Failed to fetch products:", response.error);
-             // Optional: toast error
+        // 1. Fetch Products using server search if term exists, else all
+        const productsData = await getProducts(searchTerm);
+        
+        // 2. Fetch Categories
+        const categoriesData = await getCategories();
+
+        if (isMounted) {
+          // Map to Frontend Product Interface
+          // New Architecture returns Drizzle entities { nom, prixVente (string), ... }
+          // Frontend expects { nomProduit, prixVente (number), ... }
+          const mappedProducts: Product[] = productsData.map((p: any) => ({
+            id: p.id.toString(),
+            reference: p.reference || '',
+            nomProduit: p.nom,
+            prixAchat: parseFloat(p.prixAchat || '0'),
+            prixVente: parseFloat(p.prixVente || '0'),
+            quantiteStock: p.quantiteStock || 0,
+            stockMin: p.seuilAlerte || 5,
+            categorie: p.categorie || '',
+            marque: p.marque || '',
+            description: p.description,
+            // Legacy IDs not really needed if we use names, but keeping empty for safety
+            categorieId: '',
+            marqueId: ''
+          }));
+
+          setProducts(mappedProducts);
+          setCategories(categoriesData);
         }
       } catch (err) {
-        console.error("Error fetching products:", err);
+        console.error("Error fetching data:", err);
+        toast({
+            variant: "destructive",
+            title: "Erreur",
+            description: "Impossible de charger les produits."
+        });
       } finally {
-        setIsLoadingProducts(false);
+        if (isMounted) setIsLoading(false);
       }
     }
-    // Debounce search? For now, fetch on mount and maybe search button or simple debounce
-    // But getProducts accepts search. If we want client-side filter (legacy behavior), we can fetch all then filter.
-    // The previous code fetched all and filtered.
-    // Let's stick to fetching all on mount, and client-side filter for now to match exact behavior, 
-    // OR use the server-side search.
-    // Previous code: `useCollection` (live).
-    // Let's just fetch all (searchTerm empty) and filter client side to be safe/fast for small datasets, 
-    // OR pass searchTerm to server.
-    // The UI has a search input.
-    // Let's pass valid search term if user stopped typing.
+
+    // Debounce search
     const timer = setTimeout(() => {
-        fetchProducts();
+        fetchData();
     }, 300);
-    return () => clearTimeout(timer);
-  }, [searchTerm]); // Re-fetch on search change
 
-  // Fetch brands (marques) - Keep Legacy Firebase for now
-  const brandsQuery = useMemoFirebase(
-    () => firestore && user ? collection(firestore, `stores/${user.uid}/marques`) : null,
-    [firestore, user]
-  );
-  const { data: brands, isLoading: isLoadingBrands } = useCollection<{ id: string; name: string }>(brandsQuery);
+    return () => {
+        isMounted = false;
+        clearTimeout(timer);
+    };
+  }, [searchTerm, toast]);
 
-  // Fetch categories
-  const categoriesQuery = useMemoFirebase(
-    () => firestore && user ? collection(firestore, `stores/${user.uid}/categories`) : null,
-    [firestore, user]
-  );
-  const { data: categories, isLoading: isLoadingCategories } = useCollection<{ id: string; name: string }>(categoriesQuery);
-
-  // Join logic simplified: The Server Action returns populated `marque` and `categorie` strings.
-  // But we might want to enrich them if they are missing (legacy fallback).
-  const processedProducts = React.useMemo(() => {
-    if (!products) return [];
-    
-    return products.map(product => {
-        // Use server-provided name, fallback to lookup if ID exists but name is empty
-        const marqueName = product.marque || (product.marqueId && brands?.find(b => b.id === product.marqueId)?.name);
-        const categoryName = product.categorie || (product.categorieId && categories?.find(c => c.id === product.categorieId)?.name);
-        
-        return {
-            ...product,
-            marque: marqueName,
-            categorie: categoryName
-        };
-    });
-  }, [products, brands, categories]);
-
-  const isLoading = isLoadingProducts || isLoadingBrands || isLoadingCategories;
-
-  // Filter products (Category tabs)
+  // Filter products by Category Tab
   const filteredProducts = React.useMemo(() => {
-    if (!processedProducts) return [];
-    return processedProducts.filter(product => {
-      // Filter by category ID from tabs?
-      // Tab values are category Ids (e.g. "cat_123") or "all".
-      // Product might have `categorieId`.
-      // If product only has `categorie` name, this filter breaks if tabs use IDs.
-      // Tabs use `categories` from Firebase which have IDs.
-      // If server action returns `categorieId` as 'legacy', we might have issue.
-      // `products-actions.ts` returns `categorieId: 'legacy'`.
-      // We need real IDs to filter by tabs.
-      // Issue: Neon migration didn't map IDs perfectly? or `categorie` column stores name.
-      // Migration script:
-      // `const categorie = data.categorie || (data.categorieId && categoriesCache.get(data.categorieId)) || '';`
-      // So Neon stores NAME.
-      // Tabs use IDs.
-      // WE NEED TO MATCH BY NAME then?
-      // `categories` from Firebase has `{id, name}`.
-      // We can find the Category ID for the product's Category Name.
-      
-      if (categoryFilter === 'all') return true;
-      
-      // Find selected category name
-      const selectedCat = categories?.find(c => c.id === categoryFilter);
-      if (!selectedCat) return false;
-      
-      // Compare names
-      return product.categorie === selectedCat.name || product.categorieId === categoryFilter;
-    });
-  }, [processedProducts, categoryFilter, categories]);
+    if (categoryFilter === 'all') return products;
+    return products.filter(p => p.categorie === categoryFilter);
+  }, [products, categoryFilter]);
 
   // Stats
   const stats = React.useMemo(() => {
-    if (!processedProducts) return { total: 0, lowStock: 0, totalValue: 0 };
     return {
-      total: processedProducts.length,
-      lowStock: processedProducts.filter(p => p.quantiteStock < 10).length,
-      totalValue: processedProducts.reduce((acc, p) => acc + (p.prixVente * p.quantiteStock), 0),
+      total: products.length,
+      lowStock: products.filter(p => p.quantiteStock < (p.stockMin || 5)).length,
+      totalValue: products.reduce((acc, p) => acc + (p.prixVente * p.quantiteStock), 0),
     };
-  }, [processedProducts]);
+  }, [products]);
 
-  if (isLoading) {
+  if (isLoading && products.length === 0) {
     return <LoadingSkeleton />;
   }
 
@@ -166,7 +117,8 @@ export default function ProductsPage() {
           <p className="text-slate-600 mt-1">Gérez votre inventaire et vos produits</p>
         </div>
         <div className="flex gap-2">
-          <InvoiceScannerDialog />
+          {/* Scanner uses Server Actions? Check comp */}
+          <InvoiceScannerDialog /> 
           <Button asChild className="bg-gradient-to-r from-blue-600 to-teal-500 hover:from-blue-700 hover:to-teal-600 shadow-md">
             <Link href="/produits/new">
               <Plus className="mr-2 h-4 w-4" />
@@ -245,8 +197,9 @@ export default function ProductsPage() {
                   <Layers className="mr-2 h-4 w-4" />
                   Tout
                 </TabsTrigger>
-                {categories?.map((category) => {
+                {categories.map((category) => {
                   const Icon = getCategoryIcon(category.name);
+                  // category.id IS category.name in new logic (mapped as {id: name, name: name})
                   return (
                     <TabsTrigger key={category.id} value={category.id} className="px-3 py-1.5 text-xs sm:text-sm">
                       <Icon className="mr-2 h-4 w-4" />
@@ -263,7 +216,7 @@ export default function ProductsPage() {
       {/* Data Table */}
       <DataTable
         columns={columns}
-        data={filteredProducts || []}
+        data={filteredProducts}
         searchKey="reference"
         searchValue={searchTerm}
       />

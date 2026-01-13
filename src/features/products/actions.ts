@@ -56,7 +56,10 @@ export const deleteProduct = createAction(
     [authenticate()],
     async (ctx: any) => {
         const { userId, input: productId } = ctx;
-        await productRepository.deleteProduct(productId, userId);
+        const id = parseInt(productId);
+        if (isNaN(id)) throw new Error('Invalid ID');
+        
+        await productRepository.deleteProduct(id, userId);
         revalidatePath('/dashboard/produits');
         return { success: true };
     }
@@ -65,8 +68,22 @@ export const deleteProduct = createAction(
 export const getProducts = createAction(
     [authenticate()],
     async (ctx: any) => {
-        const { userId } = ctx;
+        const { userId, input } = ctx;
+        if (input && typeof input === 'string' && input.trim().length > 0) {
+            return await productRepository.search(userId, input);
+        }
         return await productRepository.findByUserId(userId);
+    }
+);
+
+export const getCategories = createAction(
+    [authenticate()],
+    async (ctx: any) => {
+        const { userId } = ctx;
+        const distinctCategories = await productRepository.getCategories(userId);
+        // Returns objects with id/name for UI compatibility (Tabs use id)
+        // Since we don't have IDs for categories in Neon yet (storing strings), we use name as ID.
+        return distinctCategories.map(c => ({ id: c, name: c }));
     }
 );
 
@@ -74,7 +91,11 @@ export const getProduct = createAction(
     [authenticate()],
     async (ctx: any) => {
         const { userId, input: productId } = ctx;
-        const product = await productRepository.findById(productId);
+        // Check if productId is number
+        const id = parseInt(productId);
+        if (isNaN(id)) throw new Error('Invalid ID');
+
+        const product = await productRepository.findById(id); // expects number
         
         if (!product || product.userId !== userId) {
             throw new Error('Produit introuvable');

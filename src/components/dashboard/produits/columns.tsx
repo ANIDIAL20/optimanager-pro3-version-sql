@@ -26,10 +26,8 @@ import {
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import type { Product as ProductType } from "@/lib/types";
-import { useFirestore, useFirebase } from "@/firebase";
-import { doc, deleteDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
-import { deleteProduct } from "@/app/actions/products-actions";
+import { deleteProduct } from "@/features/products/actions";
 
 // Extend Product type for table display with optional populated fields
 export type Product = ProductType & {
@@ -185,30 +183,21 @@ function ProductActions({ product }: { product: Product }) {
     const [isDeleting, setIsDeleting] = React.useState(false);
     const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
     const { toast } = useToast();
-    const firestore = useFirestore();
-    const { user } = useFirebase();
-
     const handleDelete = async () => {
-        // if (!firestore || !user) return; // Server action handles auth/user check internally 
-        // But we rely on session. `deleteProduct` is secureAction.
-        
         setIsDeleting(true);
         startTransition(async () => {
             try {
-                const result = await deleteProduct(product.id);
+                // Feature action throws on error
+                await deleteProduct(product.id);
 
-                if (result.success) {
-                    toast({
-                        title: "Produit supprimé",
-                        description: `Le produit "${product.nomProduit}" a été supprimé avec succès.`,
-                    });
-                     // Close dialog
-                    setShowDeleteDialog(false);
-                    // Refresh data
-                    router.refresh();
-                } else {
-                     throw new Error(result.error);
-                }
+                toast({
+                    title: "Produit supprimé",
+                    description: `Le produit "${product.nomProduit}" a été supprimé avec succès.`,
+                });
+                // Close dialog
+                setShowDeleteDialog(false);
+                // Refresh data
+                router.refresh();
 
             } catch (error: any) {
                 console.error("Error deleting product:", error);
