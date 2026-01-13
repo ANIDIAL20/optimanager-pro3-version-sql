@@ -10,11 +10,26 @@ export class SaleService {
    */
   async processSale(userId: string, data: SaleInput) {
     // 1. Validate Stock Availability
+    // 1. Validate Stock Availability
     for (const item of data.items) {
       if (item.productId) {
-        const product = await productRepository.findById(item.productId);
-        if (product && product.quantiteStock !== null && product.quantiteStock < item.quantity) {
-          throw new Error(`Stock insuffisant pour ${item.name} (Dispo: ${product.quantiteStock})`);
+        // Parse ID to number since schema defines it as serial (integer)
+        const productId = parseInt(item.productId);
+        if (isNaN(productId)) {
+            console.warn(`Invalid productId skipped: ${item.productId}`);
+            continue;
+        }
+
+        const product = await productRepository.findById(productId);
+        
+        if (!product) {
+           throw new Error(`Produit introuvable (ID: ${item.productId})`);
+        }
+        
+        // Check stock (ensure types are handled safely)
+        const currentStock = product.quantiteStock ?? 0;
+        if (currentStock < item.quantity) {
+          throw new Error(`Stock insuffisant pour ${item.name} (Dispo: ${currentStock})`);
         }
       }
     }
