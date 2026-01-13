@@ -238,7 +238,7 @@ export default function NewSalePage() {
                 totalTTC: parseFloat(totalTTC.toFixed(2)),
                 totalPaid: paymentData.amountPaid,
                 
-                paymentMethod: paymentData.method as any,
+                paymentMethod: paymentData.method.toUpperCase() as any,
                 notes: paymentData.notes,
                 status: paymentData.amountPaid >= totalTTC ? 'PAYE' : paymentData.amountPaid > 0 ? 'PARTIEL' : 'IMPAYE'
             });
