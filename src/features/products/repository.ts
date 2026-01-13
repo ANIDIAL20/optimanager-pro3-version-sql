@@ -142,6 +142,39 @@ export class ProductRepository extends BaseRepository<Product, typeof products> 
       await redis.del(CACHE_TAGS.products(userId));
     }
   }
+  async findById(id: number): Promise<Product | null> {
+    const cacheKey = CACHE_TAGS.products(id.toString());
+    
+    // 1. Check Cache
+    if (redis) {
+        try {
+            const cached = await redis.get(cacheKey);
+            if (cached) return cached as Product;
+        } catch (e) {
+            console.warn('Redis error:', e);
+        }
+    }
+
+    // 2. DB Query - Explicit usage of products table to avoid BaseRepository generic issues
+    const result = await db
+        .select()
+        .from(products)
+        .where(eq(products.id, id))
+        .limit(1);
+    
+    const item = result[0] || null;
+
+    // 3. Set Cache
+    if (item && redis) {
+        try {
+            await redis.set(cacheKey, JSON.stringify(item), { ex: 300 });
+        } catch (e) {
+            console.warn('Redis error:', e);
+        }
+    }
+
+    return item;
+  }
 }
 
 export const productRepository = new ProductRepository();
