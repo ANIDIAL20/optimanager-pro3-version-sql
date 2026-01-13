@@ -13,6 +13,8 @@ import type { SettingsItem } from '@/lib/types';
 import { GenericItemForm } from './generic-item-form';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { deleteDocumentNonBlocking } from '@/firebase';
 
 interface ManageGenericProps {
   collectionName: string;
@@ -35,6 +37,7 @@ export function ManageGeneric({
 }: ManageGenericProps) {
   const [isAddDialogOpen, setIsAddDialogOpen] = React.useState(false);
   const [isSeeding, setIsSeeding] = React.useState(false);
+  const [itemToDelete, setItemToDelete] = React.useState<SettingsItem | null>(null);
   const firestore = useFirestore();
   const { toast } = useToast();
 
@@ -51,6 +54,18 @@ export function ManageGeneric({
     setIsAddDialogOpen(false);
     refetch();
   }
+
+  const handleDelete = () => {
+    if (!firestore || !user || !itemToDelete) return;
+    const docRef = doc(firestore, `stores/${user.uid}/${collectionName}`, itemToDelete.id);
+    deleteDocumentNonBlocking(docRef);
+    toast({
+      title: `${itemName} supprimé(e)`,
+      description: `L'élément "${itemToDelete.name}" a été supprimé.`,
+    });
+    setItemToDelete(null);
+    refetch();
+  };
 
   const handleSeedDatabase = async () => {
     if (!firestore || !seedData || !user) return;
@@ -133,7 +148,15 @@ export function ManageGeneric({
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {items?.map(item => (
-                <ManageItem key={item.id} item={item} collectionName={collectionName} itemName={itemName} FormComponent={FormComponent} onSuccess={refetch} />
+                <ManageItem 
+                  key={item.id} 
+                  item={item} 
+                  collectionName={collectionName} 
+                  itemName={itemName} 
+                  FormComponent={FormComponent} 
+                  onSuccess={refetch}
+                  onDeleteClick={setItemToDelete}
+                />
               ))}
             </div>
           </>
@@ -161,6 +184,25 @@ export function ManageGeneric({
           </Button>
         )}
       </CardFooter>
+
+      {/* Single Shared Delete Dialog - Outside the loop */}
+      {/* @ts-ignore - modal prop exists but not in types */}
+      <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Cette action est irréversible. L'élément "{itemToDelete?.name}" sera définitivement supprimé.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
