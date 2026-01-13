@@ -82,7 +82,7 @@ export function PrintDocumentTemplate({ type, data }: PrintDocumentTemplateProps
                             <span className="text-lg font-bold text-slate-800 tracking-widest">{title}</span>
                         </div>
                         <div className="text-xs space-y-1">
-                            <p className="font-semibold text-slate-900">N° {document.id?.slice(0, 8).toUpperCase()}</p>
+                            <p className="font-semibold text-slate-900">N° {String(document.id || '').slice(0, 8).toUpperCase()}</p>
                             <p className="text-slate-600">{dateLabel}: {formatDate(dateValue)}</p>
                             {isDevis && (
                                 <p className="text-slate-500">Validité: 15 jours</p>
