@@ -4,6 +4,7 @@ import * as React from 'react';
 import Image from 'next/image';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { formatCurrencyToWords } from '@/lib/format-number-to-words';
 
 interface PrintDocumentTemplateProps {
     type: 'devis' | 'facture';
@@ -185,6 +186,16 @@ export function PrintDocumentTemplate({ type, data }: PrintDocumentTemplateProps
                             </div>
                         )}
                     </div>
+                </div>
+
+                {/* Amount in Words - Moroccan Standard */}
+                <div className="mb-8 p-4 bg-slate-50 border border-slate-200 rounded-md print:bg-slate-50 print:border-slate-200">
+                    <p className="text-xs text-slate-600 mb-2">
+                        {isDevis ? 'Arrêté le présent devis' : 'Arrêté la présente facture'} à la somme de :
+                    </p>
+                    <p className="text-sm font-bold uppercase tracking-wide text-slate-900">
+                        {formatCurrencyToWords(totalTTC)}
+                    </p>
                 </div>
 
                 {/* Footer sticking to bottom of A4 if possible, or just at end */}
