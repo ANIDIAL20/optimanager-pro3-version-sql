@@ -4,7 +4,7 @@
 import * as React from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MoreVertical } from 'lucide-react';
+import { MoreVertical, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
@@ -44,24 +44,32 @@ const ItemCard: React.FC<ManageItemProps> = ({ item, collectionName, itemName, F
         {item.category && <p className="text-xs text-muted-foreground">{item.category}</p>}
         {item.type && <p className="text-xs text-muted-foreground">{item.type}</p>}
         
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100">
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)}>
-              Modifier
-            </DropdownMenuItem>
-            <DropdownMenuItem 
-              className="text-destructive" 
-              onSelect={() => onDeleteClick(item)}
-            >
-              Supprimer
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* Action Buttons Container */}
+        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100">
+          {/* Delete Button - Standalone to avoid dropdown race condition */}
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50"
+            onClick={() => onDeleteClick(item)}
+          >
+            <Trash2 size={18} />
+          </Button>
+
+          {/* Edit Dropdown Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-6 w-6">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)}>
+                Modifier
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </Card>
 
       {/* Edit Dialog */}

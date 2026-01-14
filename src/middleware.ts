@@ -1,21 +1,13 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import NextAuth from 'next-auth';
+import { authConfig } from './auth.config';
 
-export async function middleware(request: NextRequest) {
-    const session = request.cookies.get("session")?.value;
-    const { pathname } = request.nextUrl;
-
-    // Protect /admin and /dashboard routes
-    if (pathname.startsWith("/admin") || pathname.startsWith("/dashboard")) {
-        if (!session) {
-            // Redirect to login if no session is present
-            return NextResponse.redirect(new URL("/login", request.url));
-        }
-    }
-
-    return NextResponse.next();
-}
+export default NextAuth(authConfig).auth;
 
 export const config = {
-    matcher: ["/admin/:path*", "/dashboard/:path*"],
+  matcher: [
+    // Skip Next.js internals and all static files
+    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+    // Always run for API routes
+    '/(api|trpc)(.*)',
+  ],
 };
