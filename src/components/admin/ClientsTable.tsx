@@ -4,9 +4,6 @@ import { useState } from 'react';
 import { ClientData, toggleClientStatus, extendSubscription, deleteClient, resetClientPassword } from '@/app/actions/adminActions';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useFirestore } from '@/firebase';
-import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
-import { getStorage, ref as storageRef, listAll, deleteObject } from 'firebase/storage';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -66,13 +63,9 @@ export default function ClientsTable({ clients }: { clients: ClientData[] }) {
             `⚠️ SUPPRESSION COMPLÈTE ⚠️\n\n` +
             `Vous êtes sur le point de supprimer DÉFINITIVEMENT:\n\n` +
             `✓ Le compte: ${email}\n` +
-            `✓ Tous les produits du magasin\n` +
-            `✓ Toutes les ventes et commandes\n` +
-            `✓ Tous les clients enregistrés\n` +
-            `✓ Tous les fichiers (logos, etc.)\n` +
-            `✓ Toutes les données Firestore\n\n` +
+            `✓ Toutes les données associées dans PostgreSQL\n\n` +
             `Cette action est IRRÉVERSIBLE!\n\n` +
-            `Tapez OK pour confirmer.`
+            `Cliquez OK pour confirmer.`
         );
 
         if (!confirmed) return;
@@ -80,64 +73,9 @@ export default function ClientsTable({ clients }: { clients: ClientData[] }) {
         setLoadingId(uid);
 
         try {
-            const storage = getStorage();
-
-            // Step 1: Delete Storage files
-            toast.info('Suppression des fichiers...');
-            try {
-                // Delete logos folder
-                const logosRef = storageRef(storage, `logos/${uid}`);
-                const logosList = await listAll(logosRef);
-                await Promise.all(logosList.items.map(item => deleteObject(item)));
-
-                // Delete users folder
-                const usersRef = storageRef(storage, `users/${uid}`);
-                const usersList = await listAll(usersRef);
-                await Promise.all(usersList.items.map(item => deleteObject(item)));
-            } catch (storageError) {
-                // Storage might be empty, continue
-                console.warn('Storage deletion warning:', storageError);
-            }
-
-            // Step 2: Delete Firestore collections
-            toast.info('Suppression des données Firestore...');
-            const firestore = useFirestore();
-            if (firestore) {
-                try {
-                    // Delete products
-                    const productsRef = collection(firestore, `stores/${uid}/products`);
-                    const productsSnap = await getDocs(productsRef);
-                    await Promise.all(productsSnap.docs.map(d => deleteDoc(d.ref)));
-
-                    // Delete sales
-                    const salesRef = collection(firestore, `stores/${uid}/sales`);
-                    const salesSnap = await getDocs(salesRef);
-                    await Promise.all(salesSnap.docs.map(d => deleteDoc(d.ref)));
-
-                    // Delete clients
-                    const clientsRef = collection(firestore, `stores/${uid}/clients`);
-                    const clientsSnap = await getDocs(clientsRef);
-                    await Promise.all(clientsSnap.docs.map(d => deleteDoc(d.ref)));
-
-                    // Delete settings
-                    const settingsRef = collection(firestore, `stores/${uid}/settings`);
-                    const settingsSnap = await getDocs(settingsRef);
-                    await Promise.all(settingsSnap.docs.map(d => deleteDoc(d.ref)));
-
-                    // Delete prescriptions
-                    const prescriptionsRef = collection(firestore, `stores/${uid}/prescriptions`);
-                    const prescriptionsSnap = await getDocs(prescriptionsRef);
-                    await Promise.all(prescriptionsSnap.docs.map(d => deleteDoc(d.ref)));
-
-                    // Delete store doc itself
-                    await deleteDoc(doc(firestore, `stores/${uid}`));
-                } catch (firestoreError) {
-                    console.warn('Firestore deletion warning:', firestoreError);
-                }
-            }
-
-            // Step 3: Delete Auth user and client profile via server action
-            toast.info('Suppression du compte utilisateur...');
+            // Delete user and all associated data via server action
+            // The server action handles cascading deletes in PostgreSQL
+            toast.info('Suppression du compte et des données...');
             const res = await deleteClient(uid);
 
             setLoadingId(null);

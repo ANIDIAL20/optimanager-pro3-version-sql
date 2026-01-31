@@ -1,30 +1,15 @@
-'use client';
+import { auth } from "@/auth";
+import { redirect } from "next/navigation";
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useUser } from '@/firebase/provider';
-import { Loader2 } from 'lucide-react';
+export default async function HomePage() {
+  // 1. كنتحققو من السيسيون باستعمال Auth.js
+  const session = await auth();
 
-export default function HomePage() {
-  const { user, isUserLoading } = useUser();
-  const router = useRouter();
+  // 2. إلا كان المستخدم موجود، ديه للداشبورد
+  if (session?.user) {
+    redirect("/dashboard");
+  }
 
-  useEffect(() => {
-    // 1. ننتظر التحميل
-    if (isUserLoading) return;
-
-    // 2. التوجيه
-    if (user) {
-      router.replace('/dashboard'); // ✅ إلى الداشبورد
-    } else {
-      router.replace('/login'); // ❌ إلى تسجيل الدخول
-    }
-  }, [user, isUserLoading, router]);
-
-  // شاشة بيضاء نظيفة أثناء التوجيه
-  return (
-    <div className="flex h-screen w-full items-center justify-center bg-white">
-      <Loader2 className="h-8 w-8 animate-spin text-blue-600 opacity-50" />
-    </div>
-  );
+  // 3. إلا ماكانش، ديه لصفحة الدخول
+  redirect("/login");
 }

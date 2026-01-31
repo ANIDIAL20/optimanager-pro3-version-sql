@@ -5,8 +5,9 @@
 
 'use server';
 
+
 import { db } from '@/db';
-import { supplierOrders } from '@/db/schema';
+import { supplierOrders, suppliers } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
@@ -127,12 +128,46 @@ export const confirmOrderReception = secureAction(async (userId, user, orderId: 
 /**
  * Create Supplier Order
  */
+
+import { suppliers } from '@/db/schema'; // Add this import
+
+// ...
+
+/**
+ * Create Supplier Order
+ */
 export const createSupplierOrder = secureAction(async (userId, user, data: any) => {
     try {
         const paid = data.amountPaid || 0;
         
-        // Map status
-        // data.paymentStatus is derived
+        // 1. Find Supplier to get Payment Terms
+        const supplier = await db.query.suppliers.findFirst({
+            where: and(
+                eq(suppliers.userId, userId),
+                eq(suppliers.name, data.supplierName)
+            )
+        });
+
+        // 2. Calculate Due Date
+        let dueDate: Date | null = null;
+        if (supplier?.paymentTerms) {
+            const terms = supplier.paymentTerms.toLowerCase();
+            const date = new Date(data.date); // Order date
+
+            if (terms.includes('30')) {
+                date.setDate(date.getDate() + 30);
+                dueDate = date;
+            } else if (terms.includes('60')) {
+                date.setDate(date.getDate() + 60);
+                dueDate = date;
+            } else if (terms.includes('90')) {
+                date.setDate(date.getDate() + 90);
+                dueDate = date;
+            } else if (terms.includes('comptant')) {
+                dueDate = new Date(data.date); // Due immediately
+            }
+            // Add more logic if needed
+        }
         
         const newOrder = {
             userId,
@@ -143,6 +178,7 @@ export const createSupplierOrder = secureAction(async (userId, user, data: any) 
             resteAPayer: (data.totalAmount - paid).toString(),
             statut: 'EN_COURS',
             dateCommande: new Date(data.date),
+            dueDate: dueDate, // Insert calculated due date
             notes: data.note,
             createdAt: new Date()
         };

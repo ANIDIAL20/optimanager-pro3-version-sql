@@ -15,8 +15,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Scan, Upload, CheckCircle, Trash2, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useFirestore, useFirebase } from '@/firebase';
-import { collection, writeBatch, doc } from 'firebase/firestore';
+// TODO: Migrate to SQL products actions
+// import { useFirestore, useFirebase } from '@/firebase';
+// import { collection, writeBatch, doc } from 'firebase/firestore';
 
 interface ExtractedProduct {
     name: string;
@@ -43,8 +44,8 @@ export function InvoiceScannerDialog() {
     const [invoiceData, setInvoiceData] = React.useState<InvoiceData | null>(null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const { toast } = useToast();
-    const firestore = useFirestore();
-    const { user } = useFirebase();
+    // const firestore = useFirestore();
+    // const { user } = useFirebase();
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -125,6 +126,15 @@ export function InvoiceScannerDialog() {
     };
 
     const handleSave = async () => {
+        // TODO: Implement SQL-based product import
+        toast({
+            variant: "destructive",
+            title: "Migration en cours",
+            description: "Le scanner de facture nécessite une migration SQL. Fonctionnalité temporairement désactivée.",
+        });
+        return;
+        
+        /* Firebase version - to be replaced
         if (!firestore || !user || !invoiceData || invoiceData.products.length === 0) return;
         setIsSaving(true);
 
@@ -170,6 +180,7 @@ export function InvoiceScannerDialog() {
         } finally {
             setIsSaving(false);
         }
+        */
     };
 
     const updateProduct = (index: number, field: keyof ExtractedProduct, value: any) => {

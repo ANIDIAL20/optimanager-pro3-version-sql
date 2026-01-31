@@ -1,4 +1,4 @@
-import { verifySuperAdmin } from "@/lib/admin-utils";
+import { requireAdmin } from "@/lib/admin-utils";
 
 export default async function AdminLayout({
     children,
@@ -7,7 +7,7 @@ export default async function AdminLayout({
 }) {
     // This Layout acts as a strict security barrier.
     // No page inside /admin will render unless this passes.
-    await verifySuperAdmin();
+    await requireAdmin();
 
     return (
         <div className="min-h-screen bg-gray-50">

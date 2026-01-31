@@ -7,7 +7,7 @@ import AppShell from "@/components/app-shell";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "sonner";
 
-import { FirebaseClientProvider } from "@/firebase";
+import { SessionProvider } from "next-auth/react";
 import { PrivacyProvider } from "@/context/privacy-context";
 import { getGlobalBanner } from "@/app/actions/adminActions";
 
@@ -41,13 +41,13 @@ export default async function RootLayout({
         className={cn("font-body antialiased", "min-h-screen w-full")}
         suppressHydrationWarning
       >
-        <FirebaseClientProvider>
+        <SessionProvider>
           <PrivacyProvider>
             <AppShell banner={banner}>
               {children}
             </AppShell>
           </PrivacyProvider>
-        </FirebaseClientProvider>
+        </SessionProvider>
         <Toaster />
         <SonnerToaster />
       </body>

@@ -1,24 +1,16 @@
 'use client';
 
-import { signOut } from 'firebase/auth';
-import { useAuth } from '@/firebase';
+import { signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { LogOut } from 'lucide-react';
 
 export default function LogoutButton() {
     const router = useRouter();
-    const auth = useAuth();
 
     const handleLogout = async () => {
         try {
-            if (auth) {
-                await signOut(auth);
-                // Optional: Call a server action to clear the session cookie if you use one
-                // await clearSessionCookie(); 
-                document.cookie = 'session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;'; // Client-side clear attempt
-                router.push('/login');
-                router.refresh();
-            }
+            await signOut({ callbackUrl: '/login' });
+            router.refresh();
         } catch (error) {
             console.error("Erreur lors de la déconnexion:", error);
         }

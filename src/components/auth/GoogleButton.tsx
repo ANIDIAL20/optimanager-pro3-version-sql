@@ -1,13 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { initializeFirebase } from "@/firebase";
-const { auth } = initializeFirebase();
-import { loginWithGoogle } from "@/actions/auth-actions";
+import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { toast } from "sonner"; // Assuming standard sonner toast
+import { toast } from "sonner";
 
 export default function GoogleButton() {
     const [isLoading, setIsLoading] = useState(false);
@@ -16,31 +13,23 @@ export default function GoogleButton() {
     const handleGoogleSignIn = async () => {
         setIsLoading(true);
         try {
-            const provider = new GoogleAuthProvider();
-            // Ensure we force account selection to avoid auto-login loops if multiple accounts
-            provider.setCustomParameters({ prompt: 'select_account' });
+            const result = await signIn('google', {
+                callbackUrl: '/dashboard',
+                redirect: false,
+            });
 
-            // 1. Popup Sign In
-            const result = await signInWithPopup(auth, provider);
-            const user = result.user;
-
-            // 2. Get Token
-            const idToken = await user.getIdToken();
-
-            // 3. Server Action Sync
-            const serverResult = await loginWithGoogle(idToken);
-
-            if (serverResult.success) {
-                toast.success("Signed in with Google");
-                router.refresh();
-                router.push("/dashboard");
-            } else {
-                throw new Error(serverResult.error || "Server sync failed");
+            if (result?.error) {
+                throw new Error(result.error);
             }
 
+            if (result?.ok) {
+                toast.success("Connexion avec Google réussie");
+                router.push("/dashboard");
+                router.refresh();
+            }
         } catch (error: any) {
             console.error("Google Sign In Error", error);
-            toast.error("Failed to sign in with Google.");
+            toast.error("Échec de la connexion avec Google.");
         } finally {
             setIsLoading(false);
         }
@@ -76,7 +65,7 @@ export default function GoogleButton() {
                             fill="#EA4335"
                         />
                     </svg>
-                    <span>Continue with Google</span>
+                    <span>Continuer avec Google</span>
                 </>
             )}
         </button>

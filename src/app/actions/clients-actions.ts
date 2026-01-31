@@ -36,9 +36,16 @@ export interface Prescription {
 export interface Client {
     id?: string;
     name: string;
+    prenom?: string;
+    nom?: string;
     phone: string;
+    phone2?: string;
     email?: string;
+    gender?: string;
+    cin?: string;
     mutuelle?: string;
+    mutuelle?: string;
+    city?: string;
     address?: string;
     dateOfBirth?: string;
     prescriptions?: Prescription[];
@@ -74,7 +81,8 @@ export const getClients = secureAction(async (userId, user, searchQuery?: string
             name: client.fullName,
             phone: client.phone || '',
             email: client.email || undefined,
-            mutuelle: undefined, // TODO: Add if needed in schema
+            city: client.city || undefined,
+            mutuelle: client.mutuelle || undefined, // TODO: Add if needed in schema
             address: client.address || undefined,
             dateOfBirth: undefined, // TODO: Add if needed in schema
             prescriptions: client.prescriptions.map(p => p.prescriptionData as any) || [], // 👈 Prescriptions included!
@@ -145,6 +153,7 @@ export const getClient = secureAction(async (userId, user, clientId: string) => 
             name: clientWithPrescriptions.fullName,
             phone: clientWithPrescriptions.phone || '',
             email: clientWithPrescriptions.email || undefined,
+            city: clientWithPrescriptions.city || undefined,
             address: clientWithPrescriptions.address || undefined,
             prescriptions: clientWithPrescriptions.prescriptions.map(p => p.prescriptionData as any) || [], // 👈 Prescriptions included!
             createdAt: clientWithPrescriptions.createdAt?.toISOString() || new Date().toISOString(),
@@ -184,10 +193,18 @@ export const createClient = secureAction(async (userId, user, data: Omit<Client,
         const clientData = {
             userId, // ⚠️ CRITICAL: Set userId
             fullName: data.name,
+            prenom: data.prenom || null,
+            nom: data.nom || null,
             phone: data.phone,
+            phone2: data.phone2 || null,
             email: data.email || null,
+            gender: data.gender || null,
+            cin: data.cin || null,
+            dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
+            mutuelle: data.mutuelle || null,
+            mutuelle: data.mutuelle || null,
             address: data.address || null,
-            city: null,
+            city: data.city || null,
             notes: null,
             balance: '0',
             totalSpent: '0',
@@ -251,9 +268,17 @@ export const updateClient = secureAction(async (userId, user, clientId: string, 
         };
 
         if (data.name) updateData.fullName = data.name;
+        if ((data as any).prenom !== undefined) updateData.prenom = (data as any).prenom;
+        if ((data as any).nom !== undefined) updateData.nom = (data as any).nom;
         if (data.phone !== undefined) updateData.phone = data.phone;
+        if (data.phone2 !== undefined) updateData.phone2 = data.phone2;
         if (data.email !== undefined) updateData.email = data.email;
+        if ((data as any).gender !== undefined) updateData.gender = (data as any).gender;
+        if ((data as any).cin !== undefined) updateData.cin = (data as any).cin;
+        if (data.dateOfBirth !== undefined) updateData.dateOfBirth = data.dateOfBirth ? new Date(data.dateOfBirth) : null;
+        if (data.mutuelle !== undefined) updateData.mutuelle = data.mutuelle;
         if (data.address !== undefined) updateData.address = data.address;
+        if (data.city !== undefined) updateData.city = data.city;
 
         // Update the client
         await db

@@ -10,13 +10,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
-import { useFirestore, useFirebase } from '@/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { getStorage } from 'firebase/storage';
-import { getAuth } from 'firebase/auth';
 import { Loader2, Upload, Building2, Image as ImageIcon } from 'lucide-react';
 import Image from 'next/image';
+import { getShopProfile, upsertShopProfile } from '@/app/actions/shop-actions';
 
 const shopFormSchema = z.object({
     shopName: z.string().min(2, 'Le nom doit contenir au moins 2 caractères.'),
@@ -31,9 +27,6 @@ type ShopFormValues = z.infer<typeof shopFormSchema>;
 
 export function ShopProfileForm() {
     const { toast } = useToast();
-    const firestore = useFirestore();
-    const { user } = useFirebase();
-    const storage = getStorage();
     const [isLoading, setIsLoading] = React.useState(true);
     const [isUploading, setIsUploading] = React.useState(false);
     const [logoPreview, setLogoPreview] = React.useState<string | null>(null);
@@ -51,32 +44,28 @@ export function ShopProfileForm() {
         },
     });
 
-    // Load existing settings
+    // Load existing settings from SQL
     React.useEffect(() => {
         const loadSettings = async () => {
-            if (!firestore || !user) return;
-
             try {
                 setIsLoading(true);
-                const settingsRef = doc(firestore, `stores/${user.uid}/settings`, 'shop');
-                const settingsSnap = await getDoc(settingsRef);
+                const profile = await getShopProfile();
 
-                if (settingsSnap.exists()) {
-                    const data = settingsSnap.data();
+                if (profile) {
                     form.reset({
-                        shopName: data.shopName || '',
-                        address: data.address || '',
-                        phone: data.phone || '',
-                        ice: data.ice || '',
-                        rib: data.rib || '',
-                        logoUrl: data.logoUrl || '',
+                        shopName: profile.shopName || '',
+                        address: profile.address || '',
+                        phone: profile.phone || '',
+                        ice: profile.ice || '',
+                        rib: profile.rib || '',
+                        logoUrl: profile.logoUrl || '',
                     });
-                    if (data.logoUrl) {
-                        setLogoPreview(data.logoUrl);
+                    if (profile.logoUrl) {
+                        setLogoPreview(profile.logoUrl);
                     }
                 }
             } catch (error) {
-                console.error('Error loading settings:', error);
+                console.error('Error loading shop profile:', error);
                 toast({
                     variant: 'destructive',
                     title: 'Erreur',
@@ -88,19 +77,12 @@ export function ShopProfileForm() {
         };
 
         loadSettings();
-    }, [firestore, user, form, toast]);
+    }, [form, toast]);
 
-    // Handle logo upload - Base64 solution to bypass CORS issues
+    // Handle logo upload - Base64 solution
     const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        console.log('🚀 Base64 Upload: handleLogoUpload called');
-
         const file = event.target.files?.[0];
-        if (!file) {
-            console.log('⚠️ No file selected');
-            return;
-        }
-
-        console.log('📄 File selected:', file.name, 'Size:', file.size, 'Type:', file.type);
+        if (!file) return;
 
         // Validate file type
         if (!file.type.startsWith('image/')) {
@@ -112,68 +94,40 @@ export function ShopProfileForm() {
             return;
         }
 
-        // Validate file size - Base64 increases size by ~33%, so limit to 1.5MB to stay under Firestore's 1MB limit per field
-        if (file.size > 1.5 * 1024 * 1024) {
+        // Validate file size (2MB limit)
+        if (file.size > 2 * 1024 * 1024) {
             toast({
                 variant: 'destructive',
                 title: 'Fichier trop volumineux',
-                description: "L'image ne doit pas dépasser 1.5 MB (limitation Firestore).",
+                description: "L'image ne doit pas dépasser 2 MB.",
             });
             return;
         }
 
-        // ✅ Verify authentication
-        const auth = getAuth();
-        const currentUser = auth.currentUser;
-
-        if (!currentUser) {
-            console.error('❌ Upload aborted: auth.currentUser is null');
-            toast({
-                variant: 'destructive',
-                title: 'Erreur d\'authentification',
-                description: 'Veuillez actualiser la page et réessayer.',
-            });
-            return;
-        }
-
-        console.log('✅ Auth verified. User ID:', currentUser.uid);
         setIsUploading(true);
 
         try {
-            console.log('🎯 Converting image to Base64...');
-
             // Convert image to Base64
             const base64String = await new Promise<string>((resolve, reject) => {
                 const reader = new FileReader();
 
                 reader.onloadend = () => {
                     const result = reader.result as string;
-                    console.log('✅ Base64 conversion completed. Length:', result.length);
                     resolve(result);
                 };
 
                 reader.onerror = () => {
-                    console.error('❌ FileReader error');
                     reject(new Error('Erreur lors de la lecture du fichier'));
                 };
 
                 reader.readAsDataURL(file);
             });
 
-            console.log('🎯 Saving to Firestore...');
-
-            // Save Base64 string directly to Firestore
-            if (!firestore) {
-                throw new Error('Firestore non initialisé');
-            }
-
-            const settingsRef = doc(firestore, `stores/${currentUser.uid}/settings`, 'shop');
-            await setDoc(settingsRef, {
+            // Save via server action
+            await upsertShopProfile({
+                ...form.getValues(),
                 logoUrl: base64String,
-                updatedAt: new Date().toISOString(),
-            }, { merge: true }); // merge: true pour ne pas écraser les autres champs
-
-            console.log('✅ Logo saved to Firestore successfully!');
+            });
 
             // Update form and preview
             form.setValue('logoUrl', base64String);
@@ -181,52 +135,36 @@ export function ShopProfileForm() {
 
             toast({
                 title: 'Logo téléchargé',
-                description: 'Votre logo a été enregistré avec succès (Base64).',
+                description: 'Votre logo a été enregistré avec succès.',
             });
 
         } catch (error: any) {
-            console.error('❌ Upload error:', error);
-
-            let errorMessage = 'Impossible de télécharger le logo.';
-
-            if (error?.message) {
-                errorMessage = `Erreur: ${error.message}`;
-            }
-
+            console.error('Upload error:', error);
             toast({
                 variant: 'destructive',
                 title: 'Erreur de téléchargement',
-                description: errorMessage,
+                description: error?.message || 'Impossible de télécharger le logo.',
             });
-
         } finally {
-            // ✅ ALWAYS stop the spinner
             setIsUploading(false);
-            console.log('🏁 Upload process completed');
         }
     };
 
     // Submit form
     const onSubmit = async (data: ShopFormValues) => {
-        if (!firestore || !user) return;
-
         try {
-            const settingsRef = doc(firestore, `stores/${user.uid}/settings`, 'shop');
-            await setDoc(settingsRef, {
-                ...data,
-                updatedAt: new Date().toISOString(),
-            });
+            await upsertShopProfile(data);
 
             toast({
                 title: 'Paramètres enregistrés',
                 description: 'Vos paramètres de boutique ont été mis à jour.',
             });
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error saving settings:', error);
             toast({
                 variant: 'destructive',
                 title: 'Erreur',
-                description: "Une erreur s'est produite lors de l'enregistrement.",
+                description: error?.message || "Une erreur s'est produite lors de l'enregistrement.",
             });
         }
     };

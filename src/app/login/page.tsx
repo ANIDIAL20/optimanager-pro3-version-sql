@@ -3,8 +3,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
-import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import {
     Loader2,
@@ -17,7 +16,6 @@ import {
     ShoppingCart,
     BarChart3
 } from 'lucide-react';
-import { createSession } from '@/actions/auth-actions';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -190,12 +188,24 @@ export default function LoginPage() {
     const handleGoogleLogin = async () => {
         setLoading(true);
         setError('');
-        const provider = new GoogleAuthProvider();
+        
         try {
-            const result = await signInWithPopup(auth, provider);
-            await handleServerSession(result.user);
+            const result = await signIn('google', { 
+                callbackUrl: '/dashboard',
+                redirect: false 
+            });
+            
+            if (result?.error) {
+                setError("Erreur de connexion Google.");
+                setLoading(false);
+            } else if (result?.ok) {
+                toast.success("Connexion réussie");
+                router.push('/dashboard');
+            }
         } catch (err: any) {
-            console.error(err);
+            if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
+                console.error(err);
+            }
             setError("Erreur de connexion Google.");
             setLoading(false);
         }
@@ -211,32 +221,25 @@ export default function LoginPage() {
         const password = formData.get('password') as string;
 
         try {
-            const result = await signInWithEmailAndPassword(auth, email, password);
-            await handleServerSession(result.user);
-        } catch (err: any) {
-            console.error(err);
-            setError("Email ou mot de passe incorrect.");
-            setLoading(false);
-        }
-    };
+            const result = await signIn('credentials', {
+                email,
+                password,
+                redirect: false,
+            });
 
-    const handleServerSession = async (user: any) => {
-        try {
-            const idToken = await user.getIdToken();
-            const result = await createSession(idToken);
-
-            if (result.success) {
+            if (result?.error) {
+                setError("Email ou mot de passe incorrect.");
+                setLoading(false);
+            } else if (result?.ok) {
                 toast.success("Connexion réussie");
                 await new Promise(resolve => setTimeout(resolve, 100));
-                const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-                const redirectUrl = user.email === adminEmail ? '/admin' : '/dashboard';
-                window.location.href = redirectUrl;
-            } else {
-                setError("Erreur de session serveur.");
-                setLoading(false);
+                router.push('/dashboard');
             }
-        } catch (err) {
-            setError("Erreur technique: " + err);
+        } catch (err: any) {
+            if (err.code !== 'auth/invalid-credential') {
+                console.error(err);
+            }
+            setError("Email ou mot de passe incorrect.");
             setLoading(false);
         }
     };

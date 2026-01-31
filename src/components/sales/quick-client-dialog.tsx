@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { UserPlus, Loader2 } from 'lucide-react';
 import { createClient } from '@/app/actions/clients-actions';
 import { Client } from '@/lib/types';
-import { useFirebase } from '@/firebase';
+// import { useFirebase } from '@/firebase'; // No longer needed - secureAction handles auth
 import { useToast } from '@/hooks/use-toast';
 import { MutuelleSelector } from '@/components/clients/mutuelle-selector';
 
@@ -19,7 +19,7 @@ interface QuickClientDialogProps {
 export function QuickClientDialog({ onClientCreated }: QuickClientDialogProps) {
     const [open, setOpen] = React.useState(false);
     const [isLoading, setIsLoading] = React.useState(false);
-    const { user } = useFirebase();
+    // const { user } = useFirebase(); // No longer needed
     const { toast } = useToast();
 
     // Form states
@@ -31,7 +31,7 @@ export function QuickClientDialog({ onClientCreated }: QuickClientDialogProps) {
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!user) return;
+        // Removed: if (!user) return; - Auth handled by secureAction
         if (!nom || !prenom || !telephone) {
             toast({
                 title: "Champs manquants",

@@ -57,7 +57,7 @@ export const deleteProduct = createAction(
     async (ctx: any) => {
         const { userId, input: productId } = ctx;
         const id = parseInt(productId);
-        if (isNaN(id)) throw new Error('Invalid ID');
+        if (isNaN(id)) throw new Error('ID invalide');
         
         await productRepository.deleteProduct(id, userId);
         revalidatePath('/dashboard/produits');
@@ -93,7 +93,7 @@ export const getProduct = createAction(
         const { userId, input: productId } = ctx;
         // Check if productId is number
         const id = parseInt(productId);
-        if (isNaN(id)) throw new Error('Invalid ID');
+        if (isNaN(id)) throw new Error('ID invalide');
 
         const product = await productRepository.findById(id); // expects number
         

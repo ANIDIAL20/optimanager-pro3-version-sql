@@ -16,10 +16,14 @@ export class ClientRepository extends BaseRepository<Client, typeof clients> {
   /**
    * Trouve tous les clients d'un utilisateur spécifique (Propriétaire du magasin)
    */
-  async findByUserId(userId: string): Promise<Client[]> {
-    const cacheKey = CACHE_TAGS.clients(userId);
+  async findByUserId(userId: string, role: string = 'user'): Promise<Client[]> {
+    
+    // 🔑 1. Cache Key Differentiation
+    const cacheKey = role === 'admin' 
+        ? CACHE_TAGS.clients('__ADMIN_ALL__') 
+        : CACHE_TAGS.clients(userId);
 
-    // 1. Try Cache
+    // 2. Try Cache
     if (redis) {
       try {
         const cached = await redis.get(cacheKey);
@@ -29,14 +33,33 @@ export class ClientRepository extends BaseRepository<Client, typeof clients> {
       }
     }
 
-    // 2. DB Query
-    const results = await db
-      .select()
-      .from(clients)
-      .where(and(eq(clients.userId, userId), eq(clients.isActive, true)))
-      .orderBy(desc(clients.createdAt));
+    // 3. DB Query
+    let results;
 
-    // 3. Set Cache (Short TTL because lists verify often)
+    if (role === 'admin') {
+      // Admin fetches all active clients
+      results = await db
+        .select()
+        .from(clients)
+        .where(eq(clients.isActive, true))
+        .orderBy(desc(clients.createdAt));
+    } else {
+      // Standard user fetches their own clients
+      try {
+        results = await db
+          .select()
+          .from(clients)
+          .where(and(eq(clients.userId, userId), eq(clients.isActive, true)))
+          .orderBy(desc(clients.createdAt));
+      } catch (err: any) {
+        console.error('❌ DB_QUERY_ERROR:', err);
+        console.error('❌ ERROR_CODE:', err.code);
+        console.error('❌ ERROR_MESSAGE:', err.message);
+        throw err;
+      }
+    }
+
+    // 4. Set Cache
     if (redis) {
       try {
         await redis.set(cacheKey, JSON.stringify(results), { ex: 300 });

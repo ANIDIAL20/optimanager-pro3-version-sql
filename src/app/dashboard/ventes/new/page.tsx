@@ -2,8 +2,8 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import type { Client, Product } from '@/lib/types'; // Uses legacy Client? We need to adapt.
-import { Cart } from '@/app/clients/[id]/_components/pos/cart'; // Unused?
+import type { Client, Product } from '@/lib/types';
+// import { Cart } from '@/app/dashboard/clients/[id]/_components/pos/cart'; // Unused
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -27,7 +27,7 @@ import { ClientSelector } from '@/components/sales/client-selector';
 import { QuickClientDialog } from '@/components/sales/quick-client-dialog';
 import { cn } from '@/lib/utils';
 import { getCategoryIcon } from '@/lib/category-icons';
-import { PaymentSection } from '@/app/clients/[id]/_components/pos/payment-section';
+import { PaymentSection } from '@/app/dashboard/clients/[id]/_components/pos/payment-section';
 
 // Server Actions
 // Server Actions - NEW Architecture
