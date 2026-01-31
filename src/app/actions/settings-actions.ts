@@ -1,142 +1,248 @@
 /**
- * Settings Actions - Neon/Drizzle Version
- * Secure settings management
+ * Settings Server Actions
+ * 
+ * Generic CRUD operations for all settings tables
  */
 
 'use server';
 
 import { db } from '@/db';
-import { settings } from '@/db/schema';
+import {
+  brands,
+  categories,
+  materials,
+  colors,
+  treatments,
+  mountingTypes,
+  banks,
+  insurances,
+} from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { secureAction } from '@/lib/secure-action';
-import { logSuccess, logFailure } from '@/lib/audit-log';
-import { revalidatePath } from 'next/cache';
+import { auth } from '@/auth';
+import { z } from 'zod';
 
-export interface ShopSettings {
-    shopName: string;
-    address?: string;
-    phone?: string;
-    email?: string;
-    logo?: string;
-    taxId?: string;
-    rc?: string;
-    if?: string;
-    ice?: string;
-    footerText?: string;
+// ========================================
+// TYPES
+// ========================================
+
+type SettingTable =
+  | typeof brands
+  | typeof categories
+  | typeof materials
+  | typeof colors
+  | typeof treatments
+  | typeof mountingTypes
+  | typeof banks
+  | typeof insurances;
+
+type SettingType =
+  | 'brands'
+  | 'categories'
+  | 'materials'
+  | 'colors'
+  | 'treatments'
+  | 'mountingTypes'
+  | 'banks'
+  | 'insurances';
+
+const tableMap: Record<SettingType, SettingTable> = {
+  brands,
+  categories,
+  materials,
+  colors,
+  treatments,
+  mountingTypes,
+  banks,
+  insurances,
+};
+
+// ========================================
+// SCHEMAS
+// ========================================
+
+const settingItemSchema = z.object({
+  name: z.string().min(1, 'Le nom est requis'),
+  category: z.string().optional(), // Only for brands
+});
+
+const brandSchema = settingItemSchema.extend({
+  category: z.string().optional(),
+});
+
+type SettingItemInput = z.infer<typeof settingItemSchema>;
+type BrandInput = z.infer<typeof brandSchema>;
+
+// ========================================
+// GENERIC ACTIONS
+// ========================================
+
+/**
+ * Get all items from a settings table
+ */
+
+import { unstable_noStore as noStore } from 'next/cache';
+
+// ...
+
+/**
+ * Get all items from a settings table
+ */
+export async function getSettings(type: SettingType) {
+  noStore(); // Opt out of static caching
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    throw new Error('Non authentifié');
+  }
+
+  const table = tableMap[type];
+  
+  try {
+    const items = await db
+      .select()
+      .from(table)
+      .where(eq(table.userId, session.user.id))
+      .orderBy(table.name);
+
+    return items;
+  } catch (error: any) {
+    console.error(`[getSettings] Error fetching ${type}:`, error);
+    // Log specifics if available
+    if (error.code) console.error('DB Error Code:', error.code);
+    if (error.hint) console.error('DB Error Hint:', error.hint);
+    throw new Error(`Failed to fetch ${type}: ${error.message}`);
+  }
 }
 
 /**
- * Get shop settings
+ * Create a new setting item
  */
-export const getShopSettings = secureAction(async (userId, user) => {
-    try {
-        const result = await db.query.settings.findFirst({
-            where: and(eq(settings.userId, userId), eq(settings.settingKey, 'shop'))
-        });
+export async function createSetting(type: SettingType, data: SettingItemInput) {
+  const session = await auth();
 
-        if (!result) {
-            // Return default settings
-            return {
-                success: true,
-                settings: {
-                    shopName: 'Mon Magasin',
-                    address: '',
-                    phone: '',
-                    email: '',
-                } as ShopSettings
-            };
-        }
+  if (!session?.user?.id) {
+    throw new Error('Non authentifié');
+  }
 
-        await logSuccess(userId, 'READ', 'settings', 'shop');
-        return { success: true, settings: result.value as ShopSettings };
+  const validated = settingItemSchema.parse(data);
+  const table = tableMap[type];
 
-    } catch (error: any) {
-        await logFailure(userId, 'READ', 'settings', error.message);
-        return { success: false, error: 'Erreur récupération paramètres', settings: null };
-    }
-});
+  const [created] = await db
+    .insert(table)
+    .values({
+      userId: session.user.id,
+      ...validated,
+    } as any)
+    .returning();
+
+  console.log(`[createSetting] Created ${type}:`, created);
+  return created;
+}
 
 /**
- * Update shop settings
+ * Update a setting item
  */
-export const updateShopSettings = secureAction(async (userId, user, data: ShopSettings) => {
-    try {
-        // Check if settings exist
-        const existing = await db.query.settings.findFirst({
-            where: and(eq(settings.userId, userId), eq(settings.settingKey, 'shop'))
-        });
+export async function updateSetting(
+  type: SettingType,
+  id: number,
+  data: SettingItemInput
+) {
+  const session = await auth();
 
-        if (existing) {
-            // Update
-            await db.update(settings)
-                .set({
-                    value: data,
-                    updatedAt: new Date()
-                })
-                .where(eq(settings.id, existing.id));
-        } else {
-            // Insert
-            await db.insert(settings).values({
-                userId,
-                settingKey: 'shop',
-                value: data,
-                createdAt: new Date()
-            });
-        }
+  if (!session?.user?.id) {
+    throw new Error('Non authentifié');
+  }
 
-        revalidatePath('/dashboard');
-        revalidatePath('/dashboard/settings');
-        await logSuccess(userId, 'UPDATE', 'settings', 'shop');
-        return { success: true, message: 'Paramètres mis à jour' };
+  const validated = settingItemSchema.parse(data);
+  const table = tableMap[type];
 
-    } catch (error: any) {
-        await logFailure(userId, 'UPDATE', 'settings', error.message);
-        return { success: false, error: 'Erreur mise à jour paramètres' };
-    }
-});
+  const [updated] = await db
+    .update(table)
+    .set({
+      ...validated,
+      updatedAt: new Date(),
+    } as any)
+    .where(
+      and(
+        eq(table.id, id),
+        eq(table.userId, session.user.id) // Security: user can only update their own
+      )
+    )
+    .returning();
+
+  if (!updated) {
+    throw new Error('Item non trouvé ou non autorisé');
+  }
+
+  console.log(`[updateSetting] Updated ${type}:`, updated);
+  return updated;
+}
 
 /**
- * Get any setting by key
+ * Delete a setting item
  */
-export const getSetting = secureAction(async (userId, user, key: string) => {
-    try {
-        const result = await db.query.settings.findFirst({
-            where: and(eq(settings.userId, userId), eq(settings.settingKey, key))
-        });
+export async function deleteSetting(type: SettingType, id: number) {
+  const session = await auth();
 
-        return { success: true, value: result?.value || null };
+  if (!session?.user?.id) {
+    throw new Error('Non authentifié');
+  }
 
-    } catch (error: any) {
-        return { success: false, error: error.message, value: null };
-    }
-});
+  const table = tableMap[type];
+
+  const [deleted] = await db
+    .delete(table)
+    .where(
+      and(
+        eq(table.id, id),
+        eq(table.userId, session.user.id) // Security: user can only delete their own
+      )
+    )
+    .returning();
+
+  if (!deleted) {
+    throw new Error('Item non trouvé ou non autorisé');
+  }
+
+  console.log(`[deleteSetting] Deleted ${type}:`, deleted);
+  return deleted;
+}
+
+// ========================================
+// SPECIFIC HELPERS
+// ========================================
 
 /**
- * Set any setting by key
+ * Get brands (for dropdowns)
  */
-export const setSetting = secureAction(async (userId, user, key: string, value: any) => {
-    try {
-        const existing = await db.query.settings.findFirst({
-            where: and(eq(settings.userId, userId), eq(settings.settingKey, key))
-        });
+export async function getBrands() {
+  return getSettings('brands');
+}
 
-        if (existing) {
-            await db.update(settings)
-                .set({ value, updatedAt: new Date() })
-                .where(eq(settings.id, existing.id));
-        } else {
-            await db.insert(settings).values({
-                userId,
-                settingKey: key,
-                value,
-                createdAt: new Date()
-            });
-        }
+/**
+ * Get categories (for dropdowns)
+ */
+export async function getCategories() {
+  return getSettings('categories');
+}
 
-        revalidatePath('/dashboard');
-        return { success: true, message: 'Paramètre enregistré' };
+/**
+ * Get materials (for dropdowns)
+ */
+export async function getMaterials() {
+  return getSettings('materials');
+}
 
-    } catch (error: any) {
-        return { success: false, error: error.message };
-    }
-});
+/**
+ * Get colors (for dropdowns)
+ */
+export async function getColors() {
+  return getSettings('colors');
+}
+
+/**
+ * Get insurances/mutuelles (for dropdowns)
+ */
+export async function getInsurances() {
+  return getSettings('insurances');
+}

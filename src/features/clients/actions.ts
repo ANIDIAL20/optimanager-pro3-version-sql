@@ -86,8 +86,8 @@ export const deleteClient = createAction(
 export const getClients = createAction(
     [authenticate()],
     async (ctx: any) => {
-        const { userId } = ctx;
-        return await clientRepository.findByUserId(userId);
+        const { userId, user } = ctx;
+        return await clientRepository.findByUserId(userId, user?.role);
     }
 );
 
@@ -97,12 +97,14 @@ export const getClients = createAction(
 export const getClient = createAction(
     [authenticate()],
     async (ctx: any) => {
-        const { userId, input: clientId } = ctx; // Input is just the ID here
+        const { userId, user, input: clientId } = ctx; // Input is just the ID here
+        // Ensure clientId is number
+        const id = typeof clientId === 'string' ? parseInt(clientId) : clientId;
 
-        const client = await clientRepository.findById(clientId);
+        const client = await clientRepository.findById(id);
 
-        if (!client || client.userId !== userId) {
-            throw new Error('Client not found or access denied');
+        if (!client || (client.userId !== userId && user.role !== 'admin')) {
+            throw new Error('Client introuvable ou accès refusé');
         }
 
         return client;

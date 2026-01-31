@@ -24,8 +24,9 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Upload, Image as ImageIcon, X, Check, Loader2 } from 'lucide-react';
-import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, useFirebase } from '@/firebase';
-import { collection, doc, query, orderBy } from 'firebase/firestore';
+// TODO: Migrate settings (brands/categories/materials/colors) to SQL
+// import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, useFirebase } from '@/firebase';
+// import { collection, doc, query, orderBy } from 'firebase/firestore';
 import type { Brand, Material, Category, Color, Product } from '@/lib/types';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
@@ -57,11 +58,60 @@ interface ProductFormProps {
   product?: Product;
 }
 
+
+import { getBrands, getCategories, getMaterials, getColors } from '@/app/actions/settings-actions';
+
+// ... (imports remain)
+
 export function ProductForm({ product }: ProductFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [imagePreview, setImagePreview] = React.useState<string | null>(product?.imageUrl || null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  // Settings State
+  const [brands, setBrands] = React.useState<Brand[]>([]);
+  const [categories, setCategories] = React.useState<Category[]>([]);
+  const [materials, setMaterials] = React.useState<Material[]>([]);
+  const [colors, setColors] = React.useState<Color[]>([]);
+
+  const [isLoadingBrands, setIsLoadingBrands] = React.useState(true);
+  const [isLoadingCategories, setIsLoadingCategories] = React.useState(true);
+  const [isLoadingMaterials, setIsLoadingMaterials] = React.useState(true);
+  const [isLoadingColors, setIsLoadingColors] = React.useState(true);
+
+  React.useEffect(() => {
+    async function loadSettings() {
+      try {
+        const [b, c, m, col] = await Promise.all([
+          getBrands(),
+          getCategories(),
+          getMaterials(),
+          getColors()
+        ]);
+        // Adapt Drizzle types (id: number) to Component types (id: string) if needed
+        // Or just cast them if compatible enough for display.
+        // We convert IDs to string to match Select value expectations
+        setBrands(b.map(x => ({ ...x, id: x.id.toString() } as any)));
+        setCategories(c.map(x => ({ ...x, id: x.id.toString() } as any)));
+        setMaterials(m.map(x => ({ ...x, id: x.id.toString() } as any)));
+        setColors(col.map(x => ({ ...x, id: x.id.toString() } as any)));
+      } catch (err) {
+        console.error("Error loading settings:", err);
+        toast({
+            title: "Erreur de chargement",
+            description: "Impossible de charger les paramètres (marques, catégories...)",
+            variant: "destructive"
+        });
+      } finally {
+        setIsLoadingBrands(false);
+        setIsLoadingCategories(false);
+        setIsLoadingMaterials(false);
+        setIsLoadingColors(false);
+      }
+    }
+    loadSettings();
+  }, []);
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(ProductSchema),
@@ -81,35 +131,6 @@ export function ProductForm({ product }: ProductFormProps) {
       imageHint: '',
     },
   });
-
-  // const firestore = useFirestore(); // Keep for auxiliary queries
-  const firestore = useFirestore();
-  const { user } = useFirebase(); // Used for brands/categories queries
-
-  // Data Queries (Auxiliary data stays on Firebase for now)
-  const marquesQuery = useMemoFirebase(
-    () => (firestore && user ? query(collection(firestore, `stores/${user.uid}/marques`), orderBy('name', 'asc')) : null),
-    [firestore, user]
-  );
-  const { data: brands, isLoading: isLoadingBrands } = useCollection<Brand>(marquesQuery);
-
-  const matieresQuery = useMemoFirebase(
-    () => (firestore && user ? query(collection(firestore, `stores/${user.uid}/matieres`), orderBy('name', 'asc')) : null),
-    [firestore, user]
-  );
-  const { data: materials, isLoading: isLoadingMaterials } = useCollection<Material>(matieresQuery);
-
-  const categoriesQuery = useMemoFirebase(
-    () => (firestore && user ? query(collection(firestore, `stores/${user.uid}/categories`), orderBy('name', 'asc')) : null),
-    [firestore, user]
-  );
-  const { data: categories, isLoading: isLoadingCategories } = useCollection<Category>(categoriesQuery);
-
-  const couleursQuery = useMemoFirebase(
-    () => (firestore && user ? query(collection(firestore, `stores/${user.uid}/couleurs`), orderBy('name', 'asc')) : null),
-    [firestore, user]
-  );
-  const { data: colors, isLoading: isLoadingColors } = useCollection<Color>(couleursQuery);
 
   // Watch for margin calculation
   const watchPrixAchat = form.watch('prixAchat');
@@ -140,28 +161,16 @@ export function ProductForm({ product }: ProductFormProps) {
   };
 
   const onSubmit = async (data: ProductFormValues, stayOnPage?: boolean) => {
-    // Note: Server Actions handle auth, but we check user existence for brands/other hooks context?
-    // Actually secureAction handles auth on server.
-    // We can proceed even if firestore hook is not ready, but we should ensure we are authenticated overall.
-    // The component shouldn't mount if not auth ideally.
-    
     setIsSubmitting(true);
     try {
-        // Map form data to Server Action Input (French fields matched)
-        // Note: brands/categories are fetched from Firebase, so we have IDs.
-        // Server Action expects 'categorieId', 'marqueId' (as defined in our updated interface).
-        
+        // Map form data to Server Action Input
         const payload = {
             ...data,
-            // Ensure numbers are numbers (zod coerce does this but safe to match types)
             prixAchat: data.prixAchat || 0,
-            stockMin: data.stockMin, // Optional
-            matiereId: data.matiereId || undefined, // undefined if empty string
+            stockMin: data.stockMin,
+            matiereId: data.matiereId || undefined,
             couleurId: data.couleurId || undefined,
-            // Pass the names too if possible, for legacy storage if needed?
-            // The new action stores IDs in text fields if names not found, 
-            // but we want to store NAMES if the table expects NAMES for search.
-            // Let's try to lookup the names here.
+            // Lookup names using the IDs (which are now strings in our state)
             categorie: categories?.find(c => c.id === data.categorieId)?.name,
             marque: brands?.find(b => b.id === data.marqueId)?.name,
         };
@@ -169,10 +178,8 @@ export function ProductForm({ product }: ProductFormProps) {
         let result;
 
         if (product) {
-            // Update
             result = await updateProduct(product.id, payload);
         } else {
-            // Create
             result = await createProduct(payload);
         }
 
@@ -201,7 +208,7 @@ export function ProductForm({ product }: ProductFormProps) {
                 setImagePreview(null);
             } else {
                 router.push('/produits');
-                router.refresh(); // Refresh server components (like the list)
+                router.refresh();
             }
         } else {
             throw new Error(result.error);
@@ -364,73 +371,120 @@ export function ProductForm({ product }: ProductFormProps) {
                   )}
                 />
 
+
+                {/* Material with Combobox */}
                 <FormField
                   control={form.control}
                   name="matiereId"
                   render={({ field }) => (
-                    <FormItem>
+                    <FormItem className="flex flex-col">
                       <FormLabel>Matière</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                        disabled={isLoadingMaterials}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="-- Choisir une matière --" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {isLoadingMaterials && (
-                            <SelectItem value="loading" disabled>Chargement...</SelectItem>
-                          )}
-                          {materials?.map((mat) => (
-                            <SelectItem key={mat.id} value={mat.id}>
-                              {mat.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              className={cn("w-full justify-between", !field.value && "text-muted-foreground")}
+                              disabled={isLoadingMaterials}
+                            >
+                              {field.value
+                                ? materials?.find((mat) => mat.id === field.value)?.name
+                                : "Chercher une matière..."}
+                              <Check className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[300px] p-0">
+                          <Command>
+                            <CommandInput placeholder="Chercher une matière..." />
+                            <CommandList>
+                              <CommandEmpty>
+                                {isLoadingMaterials ? 'Chargement...' : "Aucune matière trouvée."}
+                              </CommandEmpty>
+                              <CommandGroup>
+                                {materials?.map((mat) => (
+                                  <CommandItem
+                                    value={mat.name}
+                                    key={mat.id}
+                                    onSelect={() => { form.setValue("matiereId", mat.id); }}
+                                  >
+                                    <Check className={cn("mr-2 h-4 w-4", mat.id === field.value ? "opacity-100" : "opacity-0")} />
+                                    {mat.name}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
 
+                {/* Color with Combobox */}
                 <FormField
                   control={form.control}
                   name="couleurId"
                   render={({ field }) => (
-                    <FormItem className="md:col-span-2">
+                    <FormItem className="md:col-span-2 flex flex-col">
                       <FormLabel>Couleur</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                        disabled={isLoadingColors}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="-- Choisir une couleur --" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {isLoadingColors && (
-                            <SelectItem value="loading" disabled>Chargement...</SelectItem>
-                          )}
-                          {colors?.map((color) => (
-                            <SelectItem key={color.id} value={color.id}>
-                              <div className="flex items-center gap-2">
-                                {color.hexCode && (
-                                  <div
-                                    className="h-4 w-4 rounded-full border"
-                                    style={{ backgroundColor: color.hexCode }}
-                                  />
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              className={cn("w-full justify-between", !field.value && "text-muted-foreground")}
+                              disabled={isLoadingColors}
+                            >
+                              {field.value
+                                ? colors?.find((c) => c.id === field.value)?.name
+                                : "Chercher une couleur..."}
+                              <div className="flex items-center ml-2">
+                                {field.value && colors?.find(c => c.id === field.value)?.hexCode && (
+                                   <div 
+                                      className="h-3 w-3 rounded-full border mr-2" 
+                                      style={{ backgroundColor: colors.find(c => c.id === field.value)?.hexCode }}
+                                   />
                                 )}
-                                <span>{color.name}</span>
+                                <Check className="h-4 w-4 shrink-0 opacity-50" />
                               </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[300px] p-0">
+                          <Command>
+                            <CommandInput placeholder="Chercher une couleur..." />
+                            <CommandList>
+                              <CommandEmpty>
+                                {isLoadingColors ? 'Chargement...' : "Aucune couleur trouvée."}
+                              </CommandEmpty>
+                              <CommandGroup>
+                                {colors?.map((color) => (
+                                  <CommandItem
+                                    value={color.name}
+                                    key={color.id}
+                                    onSelect={() => { form.setValue("couleurId", color.id); }}
+                                  >
+                                    <Check className={cn("mr-2 h-4 w-4", color.id === field.value ? "opacity-100" : "opacity-0")} />
+                                    <div className="flex items-center gap-2">
+                                        {color.hexCode && (
+                                          <div
+                                            className="h-4 w-4 rounded-full border"
+                                            style={{ backgroundColor: color.hexCode }}
+                                          />
+                                        )}
+                                        {color.name}
+                                    </div>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -655,3 +709,4 @@ export function ProductForm({ product }: ProductFormProps) {
     </Form>
   );
 }
+

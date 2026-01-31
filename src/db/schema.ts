@@ -1,4 +1,5 @@
-import { pgTable, serial, text, timestamp, boolean, decimal, integer, json } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, timestamp, boolean, decimal, integer, json, primaryKey, uuid } from 'drizzle-orm/pg-core';
+import type { AdapterAccount } from "next-auth/adapters";
 import { relations } from 'drizzle-orm';
 
 // ========================================
@@ -9,11 +10,26 @@ export const clients = pgTable('clients', {
   firebaseId: text('firebase_id').unique(),
   userId: text('user_id').notNull(), // ⚠️ CRITICAL: Store owner
   
+  // Full name (kept for backwards compatibility)
   fullName: text('full_name').notNull(),
+  
+  // 🆕 Separate name fields
+  prenom: text('prenom'),
+  nom: text('nom'),
+  
+  // Contact info
   email: text('email'),
   phone: text('phone'),
+  phone2: text('phone_2'), // Optional secondary phone
   address: text('address'),
   city: text('city'),
+  
+  // 🆕 Personal info
+  gender: text('gender'), // 'Homme' | 'Femme'
+  cin: text('cin'), // ID card number
+  dateOfBirth: timestamp('date_of_birth'),
+  mutuelle: text('mutuelle'), // Insurance/Mutuelle
+  
   notes: text('notes'),
   
   balance: decimal('balance', { precision: 10, scale: 2 }).default('0'),
@@ -155,6 +171,8 @@ export const supplierOrders = pgTable('supplier_orders', {
   dateReception: timestamp('date_reception'),
   
   notes: text('notes'),
+  dueDate: timestamp('due_date'), // Date d'échéance calculée
+
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
 });
@@ -337,56 +355,230 @@ export const devisRelations = relations(devis, ({ one }) => ({
 }));
 
 // ========================================
-// REMINDERS TABLE (Shop Owner Feature)
+// REMINDERS TABLE (Removed duplicate)
 // ========================================
-export const reminders = pgTable('reminders', {
-  id: serial('id').primaryKey(),
-  userId: text('user_id').notNull(), // 🔒 CRITICAL: Shop Owner ID (data isolation)
+
+
+// ========================================
+// AUTH.JS TABLES
+// ========================================
+
+export const users = pgTable("user", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name"),
+  email: text("email").unique(),
+  emailVerified: timestamp("emailVerified", { mode: "date" }),
+  image: text("image"),
+  password: text("password"),
+  role: text("role").default("user"),
   
-  // Basic Info
-  title: text('title').notNull(),
-  description: text('description'),
-  reminderType: text('reminder_type').notNull(), // 'ONE_TIME', 'RECURRING', 'MANUAL'
-  status: text('status').notNull().default('PENDING'), // 'PENDING', 'COMPLETED', 'DISMISSED', 'EXPIRED'
-  
-  // Timing Configuration
-  targetDate: timestamp('target_date').notNull(), // When the event is due
-  notificationDate: timestamp('notification_date').notNull(), // When to send notification
-  notificationOffsetDays: integer('notification_offset_days'), // Days before target to notify
-  
-  // Recurrence Configuration
-  isRecurring: boolean('is_recurring').notNull().default(false),
-  recurrenceInterval: integer('recurrence_interval'), // e.g., 1, 4, 12
-  recurrenceUnit: text('recurrence_unit'), // 'DAYS', 'WEEKS', 'MONTHS', 'YEARS'
-  parentReminderId: integer('parent_reminder_id'), // Points to original recurring template
-  nextReminderId: integer('next_reminder_id'), // Points to next occurrence (linked list)
-  
-  // Polymorphic Relationship (link to any entity)
-  relatedEntityType: text('related_entity_type'), // 'SUPPLIER', 'CHECK', 'CONTRACT', 'CLIENT', etc.
-  relatedEntityId: text('related_entity_id'), // ID of the related entity
-  
-  // Notification Tracking
-  notificationSent: boolean('notification_sent').notNull().default(false),
-  notificationSentAt: timestamp('notification_sent_at'),
-  notificationChannels: json('notification_channels').$type<string[]>(), // ['EMAIL', 'IN_APP', 'SMS']
-  
-  // Metadata
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-  completedAt: timestamp('completed_at'),
-  dismissedAt: timestamp('dismissed_at'),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
 });
 
-// Reminder Relations (self-referencing for linked list)
-export const remindersRelations = relations(reminders, ({ one }) => ({
-  parent: one(reminders, {
-    fields: [reminders.parentReminderId],
-    references: [reminders.id],
-    relationName: 'reminder_parent',
-  }),
-  next: one(reminders, {
-    fields: [reminders.nextReminderId],
-    references: [reminders.id],
-    relationName: 'reminder_next',
-  }),
-}));
+export const accounts = pgTable(
+  "account",
+  {
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").$type<AdapterAccount["type"]>().notNull(),
+    provider: text("provider").notNull(),
+    providerAccountId: text("providerAccountId").notNull(),
+    refresh_token: text("refresh_token"),
+    access_token: text("access_token"),
+    expires_at: integer("expires_at"),
+    token_type: text("token_type"),
+    scope: text("scope"),
+    id_token: text("id_token"),
+    session_state: text("session_state"),
+  },
+  (account) => ({
+    compoundKey: primaryKey({
+      columns: [account.provider, account.providerAccountId],
+    }),
+  })
+);
+
+export const sessions = pgTable("session", {
+  sessionToken: text("sessionToken").primaryKey(),
+  userId: text("userId")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expires: timestamp("expires", { mode: "date" }).notNull(),
+});
+
+export const verificationTokens = pgTable(
+  "verificationToken",
+  {
+    identifier: text("identifier").notNull(),
+    token: text("token").notNull(),
+    expires: timestamp("expires", { mode: "date" }).notNull(),
+  },
+  (verificationToken) => ({
+    compositePk: primaryKey({
+      columns: [verificationToken.identifier, verificationToken.token],
+    }),
+  })
+);
+
+// ========================================
+// SUPPLIERS TABLE
+// ========================================
+
+
+export const suppliers = pgTable('suppliers', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  
+  // Basic Info
+  name: text('name').notNull(),
+  email: text('email'),
+  phone: text('phone'),
+  address: text('address'),
+  city: text('city'),
+  
+  // Legal & Fiscal
+  ice: text('ice'),
+  if: text('if'),
+  rc: text('rc'),
+  taxId: text('tax_id'),
+  
+  // Financial
+  category: text('category'),
+  paymentTerms: text('payment_terms'), // 'Comptant', '30 jours', etc.
+  paymentMethod: text('payment_method'), // 'Virement', 'Chèque', etc.
+  bank: text('bank'),
+  rib: text('rib'),
+
+  // Metadata
+  notes: text('notes'),
+  status: text('status').default('Actif'),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// ========================================
+// SHOP PROFILES TABLE
+// ========================================
+
+export const shopProfiles = pgTable('shop_profiles', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull().unique(), // One profile per user
+  
+  // Basic info
+  shopName: text('shop_name').notNull(),
+  address: text('address'),
+  phone: text('phone'),
+  
+  // Business info
+  ice: text('ice'), // Identifiant Commun de l'Entreprise (Morocco)
+  rib: text('rib'), // Relevé d'Identité Bancaire
+  
+  // Logo (stored as base64 or URL)
+  logoUrl: text('logo_url'),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+// ========================================
+// SETTINGS TABLES (Generic structure)
+// ========================================
+
+// Brands (Marques)
+export const brands = pgTable('brands', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  category: text('category'), // Premium, Populaire, Française, Autre
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+// Categories (Catégories de produits)
+export const categories = pgTable('categories', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+// Materials (Matières)
+export const materials = pgTable('materials', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  category: text('category'), // Monture, Verre, Lentille
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+// Colors (Couleurs)
+export const colors = pgTable('colors', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+// Treatments (Traitements)
+export const treatments = pgTable('treatments', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+// Mounting Types (Types de montage)
+export const mountingTypes = pgTable('mounting_types', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+// Banks (Banques)
+export const banks = pgTable('banks', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+// Insurances/Mutuelles (Assurances)
+export const insurances = pgTable('insurances', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+// Reminder System (Système de Rappels)
+export const reminders = pgTable('reminders', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(), // Data isolation
+  type: text('type').notNull(), // 'cheque', 'payment', 'stock', 'order', 'appointment', 'maintenance', 'admin'
+  priority: text('priority').notNull().default('normal'), // 'urgent', 'important', 'normal', 'info'
+  title: text('title').notNull(),
+  message: text('message'),
+  status: text('status').notNull().default('pending'), // 'pending', 'read', 'completed', 'ignored'
+  dueDate: timestamp('due_date'),
+  relatedId: integer('related_id'), // Generic FK
+  relatedType: text('related_type'), // Table name for FK
+  metadata: json('metadata'), // Extra data (amount, action link, etc.)
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+

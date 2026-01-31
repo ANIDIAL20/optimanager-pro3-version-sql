@@ -21,8 +21,9 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, CreditCard, History } from 'lucide-react';
-import { useFirestore, useFirebase } from '@/firebase';
-import { doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
+// TODO: Migrate to SQL payment actions
+// import { useFirestore, useFirebase } from '@/firebase';
+// import { doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
@@ -66,27 +67,23 @@ export function PaymentDialog({ order, open, onOpenChange }: PaymentDialogProps)
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [paymentHistory, setPaymentHistory] = React.useState<PaymentHistoryItem[]>([]);
 
-    const firestore = useFirestore();
-    const { user } = useFirebase();
+    // const firestore = useFirestore();
+    // const { user } = useFirebase();
     const { toast } = useToast();
     const router = useRouter();
 
-    // Calculate amounts from history
+    // Calculate amounts from order (not from Firebase)
     const totalAmount = order.totalNet || 0;
-    const totalPaid = React.useMemo(() => {
-        return paymentHistory.reduce((sum, payment) => sum + payment.amount, 0);
-    }, [paymentHistory]);
-    const remainingAmount = totalAmount - totalPaid;
+    const totalPaid = order.totalPaye || 0;
+    const remainingAmount = (order.resteAPayer !== undefined) ? order.resteAPayer : (totalAmount - totalPaid);
 
-    // Fetch payment history when dialog opens
+    /* Firebase version - to be replaced with SQL
     React.useEffect(() => {
         const fetchPaymentHistory = async () => {
             if (!open || !firestore || !user || !order.id) return;
-
             try {
                 const orderRef = doc(firestore, `stores/${user.uid}/sales`, order.id);
                 const orderSnap = await getDoc(orderRef);
-
                 if (orderSnap.exists()) {
                     const data = orderSnap.data();
                     setPaymentHistory(data.paymentHistory || []);
@@ -95,7 +92,6 @@ export function PaymentDialog({ order, open, onOpenChange }: PaymentDialogProps)
                 console.error('Error fetching payment history:', error);
             }
         };
-
         if (open) {
             fetchPaymentHistory();
             setAmount(Math.max(0, remainingAmount).toFixed(2));
@@ -103,10 +99,29 @@ export function PaymentDialog({ order, open, onOpenChange }: PaymentDialogProps)
             setNote('');
         }
     }, [open, firestore, user, order.id, remainingAmount]);
+    */
+
+    // Reset form when dialog opens
+    React.useEffect(() => {
+        if (open) {
+            setAmount(Math.max(0, remainingAmount).toFixed(2));
+            setMethod('cash');
+            setNote('');
+        }
+    }, [open, remainingAmount]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        // TODO: Implement SQL payment action
+        toast({
+            variant: 'destructive',
+            title: 'Migration en cours',
+            description: 'L\'enregistrement des paiements nécessite une migration SQL. Fonctionnalité temporairement désactivée.',
+        });
+        return;
+
+        /* Firebase version - to be replaced
         if (!firestore || !user) {
             toast({
                 variant: 'destructive',
@@ -118,7 +133,6 @@ export function PaymentDialog({ order, open, onOpenChange }: PaymentDialogProps)
 
         const paymentAmount = parseFloat(amount);
 
-        // Validation
         if (isNaN(paymentAmount) || paymentAmount <= 0) {
             toast({
                 variant: 'destructive',
@@ -140,7 +154,6 @@ export function PaymentDialog({ order, open, onOpenChange }: PaymentDialogProps)
         setIsSubmitting(true);
 
         try {
-            // Step A: Create new payment object
             const newPayment: PaymentHistoryItem = {
                 id: `PAY-${Date.now()}`,
                 amount: paymentAmount,
@@ -150,11 +163,9 @@ export function PaymentDialog({ order, open, onOpenChange }: PaymentDialogProps)
                 ...(user.email && { receivedBy: user.email }),
             };
 
-            // Step B: Calculate new totals
             const newTotalPaid = totalPaid + paymentAmount;
             const newRest = totalAmount - newTotalPaid;
 
-            // Step C: Determine new status
             let newStatus: string;
             if (newRest <= 0.5) {
                 newStatus = 'payée';
@@ -164,7 +175,6 @@ export function PaymentDialog({ order, open, onOpenChange }: PaymentDialogProps)
                 newStatus = 'impayée';
             }
 
-            // Step D: Atomic update with arrayUnion
             const orderRef = doc(firestore, `stores/${user.uid}/sales`, order.id);
             await updateDoc(orderRef, {
                 paymentHistory: arrayUnion(newPayment),
@@ -192,6 +202,7 @@ export function PaymentDialog({ order, open, onOpenChange }: PaymentDialogProps)
         } finally {
             setIsSubmitting(false);
         }
+        */
     };
 
     return (

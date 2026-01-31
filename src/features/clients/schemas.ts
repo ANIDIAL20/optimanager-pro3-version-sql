@@ -21,8 +21,15 @@ export const prescriptionSchema = z.object({
 
 export const clientSchema = z.object({
   fullName: z.string().min(2, "Le nom doit contenir au moins 2 caractères"),
+  prenom: z.string().optional(),
+  nom: z.string().optional(),
   phone: z.string().min(10, "Numéro de téléphone invalide"),
+  phone2: z.string().optional(),
   email: z.string().email("Email invalide").optional().or(z.literal('')),
+  gender: z.enum(['Homme', 'Femme']).optional(),
+  cin: z.string().optional(),
+  dateOfBirth: z.string().or(z.date()).optional(),
+  mutuelle: z.string().optional(),
   address: z.string().optional(),
   city: z.string().optional(),
   notes: z.string().optional(),

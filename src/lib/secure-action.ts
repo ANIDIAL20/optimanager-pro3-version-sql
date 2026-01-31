@@ -3,7 +3,8 @@
  * Automatically handles authentication and injects userId
  */
 
-import { getUserId, requireAuth, requireAdmin, type AuthUser } from './auth';
+import { auth } from '@/auth';
+import { type AuthUser, requireAdmin } from './auth';
 
 /**
  * Type definitions for secure actions
@@ -33,14 +34,25 @@ export function secureAction<TArgs extends any[], TReturn>(
 ) {
   return async (...args: TArgs): Promise<TReturn> => {
     try {
-      // Get authenticated user
-      const user = await requireAuth();
-      const userId = user.uid;
+      const session = await auth();
       
-      // Call the handler with userId and user injected
-      return await handler(userId, user, ...args);
+      if (!session?.user?.id) {
+        throw new Error("Authentication required. Please log in.");
+      }
+
+      const user = {
+        uid: session.user.id,
+        email: session.user.email || null,
+        emailVerified: true, // Auth.js handles this differently, assume true for now or check field
+        displayName: session.user.name || null,
+        role: (session.user.role as 'admin' | 'user') || 'user',
+      };
+      
+      return await handler(user.uid, user, ...args);
     } catch (error: any) {
-      console.error('Secure action error:', error);
+      if (!error.message?.includes('Authentication required')) {
+          console.error('Secure action error:', error);
+      }
       throw new Error(error.message || 'Authentication failed');
     }
   };
@@ -67,7 +79,10 @@ export function adminAction<TArgs extends any[], TReturn>(
       // Call the handler with user object
       return await handler(user, ...args);
     } catch (error: any) {
-      console.error('Admin action error:', error);
+      // Only log unexpected errors
+      if (!error.message?.includes('Admin access required') && !error.message?.includes('Authentication required')) {
+          console.error('Admin action error:', error);
+      }
       throw new Error(error.message || 'Admin access required');
     }
   };
@@ -120,7 +135,10 @@ export function secureActionWithResponse<TArgs extends any[], TReturn>(
       
       return successResponse(result);
     } catch (error: any) {
-      console.error('Secure action error:', error);
+      // Only log unexpected errors
+      if (!error.message?.includes('Authentication required')) {
+          console.error('Secure action error:', error);
+      }
       return errorResponse(error.message || 'Operation failed');
     }
   };

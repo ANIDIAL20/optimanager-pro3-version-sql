@@ -130,7 +130,7 @@ export function ClientHeader({ client, clientId }: ClientHeaderProps) {
                         asChild
                         className="gap-2"
                     >
-                        <Link href={`/clients/${clientId}/edit`}>
+                        <Link href={`/dashboard/clients/${clientId}/edit`}>
                             <Edit className="h-4 w-4" />
                             <span className="hidden sm:inline">Modifier</span>
                         </Link>

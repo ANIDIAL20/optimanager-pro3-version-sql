@@ -17,8 +17,9 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover"
-import { useFirestore, useCollection, useMemoFirebase, useFirebase } from "@/firebase"
-import { collection, query, orderBy } from "firebase/firestore"
+// TODO: Migrate mutuelles/assurances to SQL
+// import { useFirestore, useCollection, useMemoFirebase, useFirebase } from "@/firebase"
+// import { collection, query, orderBy } from "firebase/firestore"
 
 interface MutuelleSelectorProps {
     value: string
@@ -28,21 +29,25 @@ interface MutuelleSelectorProps {
 export function MutuelleSelector({ value, onSelect }: MutuelleSelectorProps) {
     const [open, setOpen] = React.useState(false)
     const [inputValue, setInputValue] = React.useState(value || "")
-    const firestore = useFirestore()
-    const { user } = useFirebase()
+    // TODO: Replace with SQL query for mutuelles
+    // const firestore = useFirestore()
+    // const { user } = useFirebase()
+
+    const mutuelles: { id: string; name: string }[] | undefined = undefined;
+    const isLoading = false;
+
+    /* Firebase version
+    const mutuellesQuery = useMemoFirebase(
+        () => (firestore && user ? query(collection(firestore, `stores/${user.uid}/assurances`), orderBy("name")) : null),
+        [firestore, user]
+    )
+    const { data: mutuelles, isLoading } = useCollection<{ id: string; name: string }>(mutuellesQuery)
+    */
 
     // Sync internal input state with prop value
     React.useEffect(() => {
         setInputValue(value || "")
     }, [value])
-
-    // Fetch 'assurances' collection
-    const mutuellesQuery = useMemoFirebase(
-        () => (firestore && user ? query(collection(firestore, `stores/${user.uid}/assurances`), orderBy("name")) : null),
-        [firestore, user]
-    )
-
-    const { data: mutuelles, isLoading } = useCollection<{ id: string; name: string }>(mutuellesQuery)
 
     // Filter items based on current input
     const filteredMutuelles = React.useMemo(() => {

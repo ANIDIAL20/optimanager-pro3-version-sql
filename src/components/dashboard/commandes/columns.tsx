@@ -15,8 +15,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { doc, getDoc, deleteDoc } from 'firebase/firestore';
-import { useFirestore, useFirebase } from '@/firebase';
+// TODO: Migrate to SQL actions for invoice generation and delete
+// import { doc, getDoc, deleteDoc } from 'firebase/firestore';
+// import { useFirestore, useFirebase } from '@/firebase';
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import type { Sale } from "@/lib/types";
@@ -217,17 +218,18 @@ export const columns: ColumnDef<Order>[] = [
     },
 ];
 
-// Separate component for actions to use hooks
 function OrderActions({ order }: { order: Order }) {
     const router = useRouter();
-    const [client, setClient] = React.useState<any>(null);
-    const [shopSettings, setShopSettings] = React.useState<any>(null);
-    const [isLoading, setIsLoading] = React.useState(true);
     const [showPaymentDialog, setShowPaymentDialog] = React.useState(false);
-    const firestore = useFirestore();
-    const { user } = useFirebase();
+    
+    // TODO: Replace with SQL queries
+    // const firestore = useFirestore();
+    // const { user } = useFirebase();
+    const client = null;
+    const shopSettings = null;
+    const isLoading = false;
 
-    // Fetch client and shop settings for invoice
+    /* Firebase version - to be replaced
     React.useEffect(() => {
         const fetchData = async () => {
             if (!firestore || !user || !order.clientId) {
@@ -236,14 +238,12 @@ function OrderActions({ order }: { order: Order }) {
             }
 
             try {
-                // Fetch client
                 const clientRef = doc(firestore, `stores/${user.uid}/clients`, order.clientId);
                 const clientSnap = await getDoc(clientRef);
                 if (clientSnap.exists()) {
                     setClient({ id: clientSnap.id, ...clientSnap.data() });
                 }
 
-                // Fetch shop settings
                 const settingsRef = doc(firestore, `stores/${user.uid}/settings`, 'shop');
                 const settingsSnap = await getDoc(settingsRef);
                 if (settingsSnap.exists()) {
@@ -255,17 +255,19 @@ function OrderActions({ order }: { order: Order }) {
                 setIsLoading(false);
             }
         };
-
         fetchData();
     }, [firestore, user, order.clientId]);
+    */
 
     const handleDelete = async () => {
+        alert('La suppression de ventes nécessite une migration SQL. Fonctionnalité temporairement désactivée.');
+        return;
+        
+        /* Firebase version
         if (!confirm(`Êtes-vous sûr de vouloir supprimer la commande #${order.id.substring(0, 8)} ?`)) {
             return;
         }
-
         if (!firestore || !user) return;
-
         try {
             const orderRef = doc(firestore, `stores/${user.uid}/sales`, order.id);
             await deleteDoc(orderRef);
@@ -273,6 +275,7 @@ function OrderActions({ order }: { order: Order }) {
         } catch (error) {
             console.error('Error deleting order:', error);
         }
+        */
     };
 
     return (

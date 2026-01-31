@@ -25,7 +25,7 @@ export const requireRole = (role: 'admin' | 'user'): Middleware => {
     }
 
     if (ctx.user.role !== role) {
-      throw new Error(`Access denied. Required role: ${role}`);
+      throw new Error(`Accès refusé. Rôle requis : ${role}`);
     }
 
     return next();

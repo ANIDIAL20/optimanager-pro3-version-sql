@@ -1,154 +1,107 @@
+import 'server-only';
+import { auth } from '@/auth';
+import { redirect } from 'next/navigation';
+import { cache } from 'react';
+
 /**
- * Authentication Helper Functions
- * Handles Firebase token verification and user context
+ * Auth user interface matching Auth.js session structure
  */
-
-import { cookies } from 'next/headers';
-import { adminAuth } from './firebaseAdmin';
-
 export interface AuthUser {
-  uid: string;
+  uid: string; // Keeping 'uid' for backward compatibility, maps to 'id'
+  id: string;
   email: string | null;
   emailVerified: boolean;
   displayName: string | null;
-  role?: 'admin' | 'user';
+  name: string | null;
+  image: string | null;
+  role: 'admin' | 'user';
 }
 
 /**
- * Get the current authenticated user from session/cookie
+ * Get the current authenticated user (cached)
  * Returns null if not authenticated
  */
-export async function getCurrentUser(): Promise<AuthUser | null> {
-  try {
-    const cookieStore = await cookies();
-    const session = cookieStore.get('session');
-    
-    if (!session?.value) {
-      // 🔧 DEVELOPMENT MODE: Return demo user for build-time
-      if (process.env.NODE_ENV === 'development') {
-        console.log('⚠️ Dev mode: No session cookie, using demo user');
-        return {
-          uid: 'dev-user-demo',
-          email: 'dev@demo.com',
-          emailVerified: true,
-          displayName: 'Dev User',
-          role: 'user',
-        };
-      }
-      return null;
-    }
-    
-    // Verify the session token with Firebase Admin
-    try {
-      const decodedToken = await adminAuth.verifyIdToken(session.value);
-      
-      // Get user details
-      const userRecord = await adminAuth.getUser(decodedToken.uid);
-      
-      console.log('✅ Session verified for:', userRecord.uid);
-      
-      return {
-        uid: userRecord.uid,
-        email: userRecord.email || null,
-        emailVerified: userRecord.emailVerified,
-        displayName: userRecord.displayName || null,
-        role: (userRecord.customClaims?.role as 'admin' | 'user') || 'user',
-      };
-    } catch (error) {
-      console.error('Error verifying session:', error);
-      
-      // 🔧 DEVELOPMENT MODE: Fallback to demo user on verification error
-      if (process.env.NODE_ENV === 'development') {
-        console.log('⚠️ Dev mode: Session verification failed, using demo user');
-        return {
-          uid: 'dev-user-demo',
-          email: 'dev@demo.com',
-          emailVerified: true,
-          displayName: 'Dev User',
-          role: 'user',
-        };
-      }
-      
-      return null;
-    }
-  } catch (error) {
-    console.error('Error getting current user:', error);
+export const getCurrentUser = cache(async (): Promise<AuthUser | null> => {
+  const session = await auth();
+
+  console.log('🔍 getCurrentUser - Session check:', {
+    hasSession: !!session,
+    hasUser: !!session?.user,
+    userId: session?.user?.id,
+    userEmail: session?.user?.email,
+    userRole: session?.user?.role,
+  });
+
+  if (!session?.user) {
+    console.log('❌ No session or user - returning null');
     return null;
   }
-}
+
+  if (!session.user.id) {
+    console.log('⚠️ WARNING: session.user.id is undefined!', {
+      user: session.user,
+    });
+  }
+
+  return {
+    uid: session.user.id || '', // Backward compatibility
+    id: session.user.id || '',
+    email: session.user.email || null,
+    emailVerified: true, // Auth.js handles email verification differently
+    displayName: session.user.name || null,
+    name: session.user.name || null,
+    image: session.user.image || null,
+    role: (session.user.role as 'admin' | 'user') || 'user',
+  };
+});
 
 /**
- * Require authentication - throws error if not authenticated
- * Use this at the start of protected server actions
+ * Require authentication - redirects to /login if not authenticated
+ * Returns the authenticated user
  */
 export async function requireAuth(): Promise<AuthUser> {
   const user = await getCurrentUser();
-  
+
   if (!user) {
-    throw new Error('Authentication required. Please log in.');
+    redirect('/login');
   }
-  
+
   return user;
 }
 
 /**
- * Require admin role
+ * Alias for requireAuth for backward compatibility
+ */
+export async function requireUser(): Promise<AuthUser> {
+  return requireAuth();
+}
+
+/**
+ * Require admin role - redirects to /dashboard if not admin
+ * Returns the authenticated admin user
  */
 export async function requireAdmin(): Promise<AuthUser> {
   const user = await requireAuth();
+
+  const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
   
-  if (user.role !== 'admin') {
-    throw new Error('Admin access required');
+  if (user.role !== 'admin' && user.email !== ADMIN_EMAIL) {
+    redirect('/dashboard');
   }
-  
+
   return user;
 }
 
 /**
- * Get user ID from authenticated user
- * This is what we'll use to filter database queries
+ * Check if user is admin without redirecting
  */
-export async function getUserId(): Promise<string> {
-  const user = await requireAuth();
-  return user.uid;
-}
-
-/**
- * Verify that a resource belongs to the current user
- * Use before updating/deleting resources
- */
-export async function verifyResourceOwnership(resourceUserId: string): Promise<void> {
-  const currentUserId = await getUserId();
+export async function isAdmin(): Promise<boolean> {
+  const user = await getCurrentUser();
   
-  if (resourceUserId !== currentUserId) {
-    throw new Error('Unauthorized: You do not own this resource');
+  if (!user) {
+    return false;
   }
-}
 
-/**
- * Alternative: Get user from request headers (for API routes)
- */
-export async function getUserFromHeaders(headers: Headers): Promise<AuthUser | null> {
-  try {
-    const authHeader = headers.get('authorization');
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return null;
-    }
-    
-    const token = authHeader.substring(7);
-    const decodedToken = await adminAuth.verifyIdToken(token);
-    const userRecord = await adminAuth.getUser(decodedToken.uid);
-    
-    return {
-      uid: userRecord.uid,
-      email: userRecord.email || null,
-      emailVerified: userRecord.emailVerified,
-      displayName: userRecord.displayName || null,
-      role: (userRecord.customClaims?.role as 'admin' | 'user') || 'user',
-    };
-  } catch (error) {
-    console.error('Error verifying token from headers:', error);
-    return null;
-  }
+  const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+  return user.role === 'admin' || user.email === ADMIN_EMAIL;
 }

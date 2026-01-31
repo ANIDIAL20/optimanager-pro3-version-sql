@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { useFirebase } from '@/firebase';
 import { getClients, deleteClient } from '@/features/clients/actions';
 import { getSales } from '@/features/sales/actions';
 import { type Client } from '@/features/clients/repository';
@@ -59,8 +58,6 @@ interface ExtendedClient {
 }
 
 export default function ClientsPage() {
-    const { user } = useFirebase();
-
     const { toast } = useToast();
 
     const [clients, setClients] = React.useState<ExtendedClient[]>([]);
@@ -78,9 +75,6 @@ export default function ClientsPage() {
     // Load data (Clients + Sales)
     // Load data (Clients + Sales)
     const loadData = React.useCallback(async () => {
-        // Waif for user to be ready on client side (optional but good for UX)
-        if (!user) return;
-
         setIsLoading(true);
         try {
             console.log("🔄 Loading Clients Data (New Arch)...");
@@ -176,7 +170,7 @@ export default function ClientsPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [user, toast]);
+    }, [toast]);
 
     React.useEffect(() => {
         loadData();

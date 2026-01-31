@@ -1,325 +1,440 @@
 'use server';
 
 import { db } from '@/db';
-import { reminders } from '@/db/schema';
-import { secureAction } from '@/lib/secure-action';
-import { eq, and, lte, gte, asc } from 'drizzle-orm';
+
+import { reminders, products, sales, supplierOrders } from '@/db/schema';
+
+import { auth } from '@/auth';
+import { eq, and, desc, lt, gte, or, lte, isNull, gt } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 
-// ========================================
-// TYPES
-// ========================================
-export type ReminderType = 'ONE_TIME' | 'RECURRING' | 'MANUAL';
-export type ReminderStatus = 'PENDING' | 'COMPLETED' | 'DISMISSED' | 'EXPIRED';
-export type RecurrenceUnit = 'DAYS' | 'WEEKS' | 'MONTHS' | 'YEARS';
-export type EntityType = 'SUPPLIER' | 'CHECK' | 'CONTRACT' | 'CLIENT' | 'PRODUCT' | 'SUPPLIER_ORDER';
+// Schema validation for reminders
+const reminderSchema = z.object({
+  type: z.enum(['cheque', 'payment', 'stock', 'order', 'appointment', 'maintenance', 'admin']),
+  priority: z.enum(['urgent', 'important', 'normal', 'info']).default('normal'),
+  title: z.string().min(1, 'Le titre est requis'),
+  message: z.string().optional(),
+  status: z.enum(['pending', 'read', 'completed', 'ignored']).default('pending'),
+  dueDate: z.string().optional().nullable(), // String for form submission, converted to Date
+  relatedId: z.number().optional().nullable(),
+  relatedType: z.string().optional().nullable(),
+  metadata: z.any().optional(),
+});
 
-interface CreateReminderInput {
-  title: string;
-  description?: string;
-  reminderType: ReminderType;
-  targetDate: Date;
-  notificationOffsetDays?: number;
-  isRecurring?: boolean;
-  recurrenceInterval?: number;
-  recurrenceUnit?: RecurrenceUnit;
-  relatedEntityType?: EntityType;
-  relatedEntityId?: string;
-  notificationChannels?: string[];
+export type ReminderInput = z.infer<typeof reminderSchema>;
+
+/**
+ * Get all reminders for the current user
+ */
+export async function getReminders(filters?: {
+  status?: string;
+  priority?: string;
+  type?: string;
+  limit?: number;
+}) {
+  const session = await auth();
+  
+  if (!session?.user?.id) {
+    throw new Error('Non authentifié');
+  }
+
+  let query = db
+    .select()
+    .from(reminders)
+    .where(eq(reminders.userId, session.user.id))
+    .orderBy(desc(reminders.createdAt));
+
+  // Apply filters
+  if (filters?.status && filters.status !== 'all') {
+    // @ts-ignore
+    query = query.where(eq(reminders.status, filters.status));
+  }
+  
+  if (filters?.priority && filters.priority !== 'all') {
+    // @ts-ignore
+    query = query.where(eq(reminders.priority, filters.priority));
+  }
+
+  if (filters?.type && filters.type !== 'all') {
+    // @ts-ignore
+    query = query.where(eq(reminders.type, filters.type));
+  }
+
+  if (filters?.limit) {
+    // @ts-ignore
+    query = query.limit(filters.limit);
+  }
+
+  const data = await query;
+  return data;
 }
 
-// ========================================
-// AUTO-TRIGGER: Create Check Reminder
-// ========================================
-// Called automatically when shop owner creates a Check (payment to supplier)
-export async function createCheckReminder(
-  userId: string,
-  checkData: {
-    checkId: number;
-    checkNumber: string;
-    supplierName: string;
-    dueDate: Date;
-    amount: number;
+/**
+ * Get reminder counts by status
+ */
+export async function getReminderStats() {
+  const session = await auth();
+  
+  if (!session?.user?.id) {
+    throw new Error('Non authentifié');
   }
-) {
-  try {
-    const notificationDate = new Date(checkData.dueDate);
-    notificationDate.setDate(notificationDate.getDate() - 2); // Notify 2 days before
-    
-    const reminder = await db.insert(reminders).values({
-      userId,
-      title: `Chèque #${checkData.checkNumber} à ${checkData.supplierName}`,
-      description: `Montant: ${checkData.amount} MAD - Échéance du chèque`,
-      reminderType: 'ONE_TIME',
-      status: 'PENDING',
-      targetDate: checkData.dueDate,
-      notificationDate,
-      notificationOffsetDays: 2,
-      isRecurring: false,
-      relatedEntityType: 'CHECK',
-      relatedEntityId: checkData.checkId.toString(),
-      notificationChannels: ['IN_APP'],
-      notificationSent: false,
-    }).returning();
-    
-    console.log(`✅ Auto-created reminder for Check #${checkData.checkNumber}`);
-    return { success: true, reminder: reminder[0] };
-  } catch (error) {
-    console.error('Failed to create check reminder:', error);
-    return { success: false, error };
-  }
+
+  const allReminders = await db
+    .select({
+      status: reminders.status,
+      priority: reminders.priority,
+      dueDate: reminders.dueDate,
+    })
+    .from(reminders)
+    .where(eq(reminders.userId, session.user.id));
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const stats = {
+    total: allReminders.length,
+    pending: allReminders.filter(r => r.status === 'pending').length,
+    urgent: allReminders.filter(r => r.priority === 'urgent' && r.status === 'pending').length,
+    today: allReminders.filter(r => {
+      if (!r.dueDate || r.status !== 'pending') return false;
+      const d = new Date(r.dueDate);
+      return d >= today && d < tomorrow;
+    }).length,
+  };
+
+  return stats;
 }
 
-// ========================================
-// CREATE REMINDER (Manual or Recurring)
-// ========================================
-export const createReminder = secureAction(
-  async (userId: string, user: any, input: CreateReminderInput) => {
-    // Calculate notification date
-    const notificationDate = new Date(input.targetDate);
-    if (input.notificationOffsetDays) {
-      notificationDate.setDate(notificationDate.getDate() - input.notificationOffsetDays);
-    }
-    
-    const newReminder = await db.insert(reminders).values({
-      userId,
-      title: input.title,
-      description: input.description,
-      reminderType: input.reminderType,
-      status: 'PENDING',
-      targetDate: input.targetDate,
-      notificationDate,
-      notificationOffsetDays: input.notificationOffsetDays,
-      isRecurring: input.isRecurring || false,
-      recurrenceInterval: input.recurrenceInterval,
-      recurrenceUnit: input.recurrenceUnit,
-      relatedEntityType: input.relatedEntityType,
-      relatedEntityId: input.relatedEntityId,
-      notificationChannels: input.notificationChannels || ['IN_APP'],
-      notificationSent: false,
-    }).returning();
-    
-    revalidatePath('/dashboard');
-    return { success: true, reminder: newReminder[0] };
-  }
-);
-
-// ========================================
-// GET UPCOMING REMINDERS (Shop Owner Dashboard)
-// ========================================
-export const getUpcomingReminders = secureAction(
-  async (userId: string, user: any, limit = 10) => {
-    const today = new Date();
-    const upcoming = await db.query.reminders.findMany({
-      where: and(
-        eq(reminders.userId, userId),
-        eq(reminders.status, 'PENDING'),
-        gte(reminders.targetDate, today)
-      ),
-      orderBy: [asc(reminders.targetDate)],
-      limit,
-    });
-    
-    return upcoming;
-  }
-);
-
-// ========================================
-// GET OVERDUE REMINDERS
-// ========================================
-export const getOverdueReminders = secureAction(
-  async (userId: string, user: any) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // Start of today
-    
-    const overdue = await db.query.reminders.findMany({
-      where: and(
-        eq(reminders.userId, userId),
-        eq(reminders.status, 'PENDING'),
-        lte(reminders.targetDate, today)
-      ),
-      orderBy: [asc(reminders.targetDate)],
-    });
-    
-    return overdue;
-  }
-);
-
-// ========================================
-// UPDATE REMINDER STATUS
-// ========================================
-export const updateReminderStatus = secureAction(
-  async (userId: string, user: any, data: { id: number; status: ReminderStatus }) => {
-    const now = new Date();
-    
-    // Get the reminder first to check if it's recurring
-    const [reminder] = await db.query.reminders.findMany({
-      where: and(
-        eq(reminders.id, data.id),
-        eq(reminders.userId, userId) // Security: Only owner can update
-      ),
-    });
-    
-    if (!reminder) {
-      return { success: false, error: 'Reminder not found' };
-    }
-    
-    // Update status
-    const updated = await db.update(reminders)
-      .set({
-        status: data.status,
-        completedAt: data.status === 'COMPLETED' ? now : undefined,
-        dismissedAt: data.status === 'DISMISSED' ? now : undefined,
-        updatedAt: now,
-      })
-      .where(and(
-        eq(reminders.id, data.id),
-        eq(reminders.userId, userId)
-      ))
-      .returning();
-    
-    // If completed and recurring, create next occurrence
-    if (data.status === 'COMPLETED' && reminder.isRecurring) {
-      await createNextRecurrence(userId, reminder);
-    }
-    
-    revalidatePath('/dashboard');
-    return { success: true, reminder: updated[0] };
-  }
-);
-
-// ========================================
-// CREATE NEXT RECURRENCE (THE CRITICAL FUNCTION)
-// ========================================
-async function createNextRecurrence(userId: string, completedReminder: any) {
-  // Calculate next target date
-  const currentDate = new Date(completedReminder.targetDate);
-  let nextDate = new Date(currentDate);
+/**
+ * Create a new reminder
+ */
+export async function createReminder(data: any) {
+  const session = await auth();
   
-  const interval = completedReminder.recurrenceInterval;
-  const unit = completedReminder.recurrenceUnit;
-  
-  switch (unit) {
-    case 'DAYS':
-      nextDate.setDate(nextDate.getDate() + interval);
-      break;
-      
-    case 'WEEKS':
-      nextDate.setDate(nextDate.getDate() + (interval * 7));
-      break;
-      
-    case 'MONTHS':
-      // Smart month addition (handles edge cases)
-      const currentDay = currentDate.getDate();
-      nextDate.setMonth(nextDate.getMonth() + interval);
-      
-      // Handle month overflow (e.g., Jan 31 + 1 month = Feb 28/29)
-      const daysInNextMonth = new Date(
-        nextDate.getFullYear(),
-        nextDate.getMonth() + 1,
-        0
-      ).getDate();
-      
-      if (currentDay > daysInNextMonth) {
-        nextDate.setDate(daysInNextMonth); // Set to last day of month
-      } else {
-        nextDate.setDate(currentDay); // Keep same day
-      }
-      break;
-      
-    case 'YEARS':
-      nextDate.setFullYear(nextDate.getFullYear() + interval);
-      // Handle leap year edge case (Feb 29 -> Feb 28)
-      if (currentDate.getMonth() === 1 && currentDate.getDate() === 29) {
-        const isLeapYear = (year: number) =>
-          (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-        if (!isLeapYear(nextDate.getFullYear())) {
-          nextDate.setDate(28);
-        }
-      }
-      break;
+  if (!session?.user?.id) {
+    throw new Error('Non authentifié');
   }
+
+  const [newReminder] = await db
+    .insert(reminders)
+    .values({
+      userId: session.user.id,
+      ...data,
+      dueDate: data.dueDate ? new Date(data.dueDate) : null,
+      metadata: data.metadata ? JSON.stringify(data.metadata) : null,
+    } as any)
+    .returning();
+
+  revalidatePath('/dashboard');
+  return newReminder;
+}
+
+/**
+ * Mark a reminder as read
+ */
+export async function markReminderAsRead(id: number) {
+  const session = await auth();
   
-  // Calculate next notification date
-  const nextNotificationDate = new Date(nextDate);
-  if (completedReminder.notificationOffsetDays) {
-    nextNotificationDate.setDate(
-      nextNotificationDate.getDate() - completedReminder.notificationOffsetDays
+  if (!session?.user?.id) {
+    throw new Error('Non authentifié');
+  }
+
+  const [updated] = await db
+    .update(reminders)
+    .set({
+      status: 'read',
+      updatedAt: new Date(),
+    } as any)
+    .where(
+      and(
+        eq(reminders.id, id),
+        eq(reminders.userId, session.user.id)
+      )
+    )
+    .returning();
+
+  revalidatePath('/dashboard');
+  return updated;
+}
+
+/**
+ * Mark a reminder as completed
+ */
+export async function completeReminder(id: number) {
+  const session = await auth();
+  
+  if (!session?.user?.id) {
+    throw new Error('Non authentifié');
+  }
+
+  const [updated] = await db
+    .update(reminders)
+    .set({
+      status: 'completed',
+      updatedAt: new Date(),
+    } as any)
+    .where(
+      and(
+        eq(reminders.id, id),
+        eq(reminders.userId, session.user.id)
+      )
+    )
+    .returning();
+
+  revalidatePath('/dashboard');
+  return updated;
+}
+
+/**
+ * Delete a reminder
+ */
+export async function deleteReminder(id: number) {
+  const session = await auth();
+  
+  if (!session?.user?.id) {
+    throw new Error('Non authentifié');
+  }
+
+  const [deleted] = await db
+    .delete(reminders)
+    .where(
+      and(
+        eq(reminders.id, id),
+        eq(reminders.userId, session.user.id)
+      )
+    )
+    .returning();
+
+  revalidatePath('/dashboard');
+  return deleted;
+}
+
+/**
+ * Core Logic: Check deadlines and generate reminders
+ * This function should be called periodically or on dashboard load
+ */
+export async function checkDeadlines() {
+  const session = await auth();
+  
+  if (!session?.user?.id) {
+    return { success: false, error: 'Non authentifié' };
+  }
+
+  let newRemindersCount = 0;
+
+  // 1. Check Stock Levels
+  // Get products with low stock
+  const lowStockProducts = await db
+    .select()
+    .from(products)
+    .where(
+      and(
+        eq(products.userId, session.user.id),
+        // @ts-ignore
+        lte(products.quantiteStock, products.seuilAlerte)
+      )
     );
+
+  // Check if reminder already exists for each low stock product
+  for (const product of lowStockProducts) {
+    const existingReminder = await db
+      .select()
+      .from(reminders)
+      .where(
+        and(
+          eq(reminders.userId, session.user.id),
+          eq(reminders.type, 'stock'),
+          eq(reminders.relatedId, product.id),
+          eq(reminders.relatedType, 'products'),
+          eq(reminders.status, 'pending')
+        )
+      )
+      .limit(1);
+
+    if (existingReminder.length === 0) {
+      // Create reminder
+      await db.insert(reminders).values({
+        userId: session.user.id,
+        type: 'stock',
+        priority: 'urgent',
+        title: `Rupture de stock: ${product.nom}`,
+        message: `Le stock pour ${product.nom} est passé sous le seuil d'alerte (${product.quantiteStock} / ${product.seuilAlerte}).`,
+        status: 'pending',
+        relatedId: product.id,
+        relatedType: 'products',
+        dueDate: new Date(),
+        metadata: JSON.stringify({ details: `Référence: ${product.reference}` }),
+      } as any);
+      newRemindersCount++;
+    }
+  }
+
+  // 2. Check Unpaid Sales (Debts)
+  // Get unpaid sales
+  const unpaidSales = await db
+    .select()
+    .from(sales)
+    .where(
+      and(
+        eq(sales.userId, session.user.id),
+        // @ts-ignore
+        gt(sales.resteAPayer, 0)
+      )
+    );
+
+  // Check if reminder already exists for each unpaid sale
+  for (const sale of unpaidSales) {
+    const existingReminder = await db
+      .select()
+      .from(reminders)
+      .where(
+        and(
+          eq(reminders.userId, session.user.id),
+          eq(reminders.type, 'payment'),
+          eq(reminders.relatedId, sale.id),
+          eq(reminders.relatedType, 'sales'),
+          eq(reminders.status, 'pending')
+        )
+      )
+      .limit(1);
+
+    if (existingReminder.length === 0) {
+      // Check if it's due (e.g., older than 7 days)
+      const saleDate = sale.date ? new Date(sale.date) : new Date();
+      const diffTime = Math.abs(new Date().getTime() - saleDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+
+      if (diffDays >= 7) {
+        await db.insert(reminders).values({
+          userId: session.user.id,
+          type: 'payment',
+          priority: diffDays > 30 ? 'urgent' : 'important',
+          title: `Paiement en attente: ${sale.clientName}`,
+          message: `Reste à payer: ${sale.resteAPayer} DH pour la vente #${sale.saleNumber || sale.id}.`,
+          status: 'pending',
+          relatedId: sale.id,
+          relatedType: 'sales',
+          dueDate: new Date(), // Due immediately
+          metadata: JSON.stringify({ details: `Vente du ${saleDate.toLocaleDateString()}` }),
+        } as any);
+        newRemindersCount++;
+      }
+    }
+
+  }
+
+  // 3. Check Supplier Payment Deadlines
+  const dueSupplierOrders = await db
+    .select()
+    .from(supplierOrders)
+    .where(
+      and(
+        eq(supplierOrders.userId, session.user.id),
+        // @ts-ignore
+        gt(supplierOrders.resteAPayer, 0)
+      )
+    );
+
+  for (const order of dueSupplierOrders) {
+    if (!order.dueDate) continue;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(order.dueDate);
+    due.setHours(0, 0, 0, 0);
+
+    const diffTime = due.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    let shouldRemind = false;
+    let priority = 'normal';
+    let msg = '';
+
+    if (diffDays < 0) {
+      shouldRemind = true;
+      priority = 'urgent';
+      msg = `FACTURE IMPAYÉE: Commande ${order.fournisseur} en retard de ${Math.abs(diffDays)} jours.`;
+    } else if (diffDays <= 3) {
+      shouldRemind = true;
+      priority = diffDays === 0 ? 'urgent' : 'important';
+      msg = `ÉCHÉANCE PROCHE: Commande ${order.fournisseur} à payer dans ${diffDays} jours.`;
+    }
+
+    if (shouldRemind) {
+      const existingReminder = await db
+        .select()
+        .from(reminders)
+        .where(
+          and(
+            eq(reminders.userId, session.user.id),
+            eq(reminders.type, 'payment'),
+            eq(reminders.relatedId, order.id),
+            eq(reminders.relatedType, 'supplier_orders'),
+            eq(reminders.status, 'pending')
+          )
+        )
+        .limit(1);
+
+      if (existingReminder.length === 0) {
+        await db.insert(reminders).values({
+          userId: session.user.id,
+          type: 'payment',
+          priority: priority,
+          title: `Paiement Fournisseur: ${order.fournisseur}`,
+          message: msg,
+          status: 'pending',
+          relatedId: order.id,
+          relatedType: 'supplier_orders',
+          dueDate: order.dueDate,
+          metadata: JSON.stringify({ 
+             details: `Montant dû: ${order.resteAPayer} DH`,
+             orderId: order.id
+          }),
+        } as any);
+        newRemindersCount++;
+      }
+    }
   }
   
-  // Determine parent ID (if this is parent, use its ID; otherwise inherit)
-  const parentId = completedReminder.parentReminderId || completedReminder.id;
+  if (newRemindersCount > 0) {
+    revalidatePath('/dashboard');
+  }
   
-  // Create next occurrence
-  const newReminder = await db.insert(reminders).values({
-    userId,
-    title: completedReminder.title,
-    description: completedReminder.description,
-    reminderType: completedReminder.reminderType,
-    status: 'PENDING',
-    targetDate: nextDate,
-    notificationDate: nextNotificationDate,
-    notificationOffsetDays: completedReminder.notificationOffsetDays,
-    isRecurring: true,
-    recurrenceInterval: completedReminder.recurrenceInterval,
-    recurrenceUnit: completedReminder.recurrenceUnit,
-    parentReminderId: parentId,
-    relatedEntityType: completedReminder.relatedEntityType,
-    relatedEntityId: completedReminder.relatedEntityId,
-    notificationChannels: completedReminder.notificationChannels,
-    notificationSent: false,
-  }).returning();
-  
-  // Link completed reminder to next one (linked list)
-  await db.update(reminders)
-    .set({ nextReminderId: newReminder[0].id })
-    .where(eq(reminders.id, completedReminder.id));
-  
-  console.log(
-    `🔄 Created next recurrence: Reminder #${newReminder[0].id} scheduled for ${nextDate.toLocaleDateString('fr-FR')}`
-  );
-  
-  return newReminder[0];
+  return { success: true, message: `Vérification terminée. ${newRemindersCount} nouveaux rappels.` };
 }
 
-// ========================================
-// GET ALL REMINDERS (with filters)
-// ========================================
-export const getReminders = secureAction(
-  async (userId: string, user: any, filters?: { status?: ReminderStatus; type?: ReminderType }) => {
-    const conditions = [eq(reminders.userId, userId)];
-    
-    if (filters?.status) {
-      conditions.push(eq(reminders.status, filters.status));
-    }
-    
-    if (filters?.type) {
-      conditions.push(eq(reminders.reminderType, filters.type));
-    }
-    
-    const results = await db.query.reminders.findMany({
-      where: and(...conditions),
-      orderBy: [asc(reminders.targetDate)],
-    });
-    
-    return results;
+/**
+ * Get count of pending/overdue reminders for badge
+ */
+export async function getUnreadReminderCount() {
+  const session = await auth();
+  
+  if (!session?.user?.id) {
+    return 0;
   }
-);
 
-// ========================================
-// DELETE REMINDER
-// ========================================
-export const deleteReminder = secureAction(
-  async (userId: string, user: any, reminderId: number) => {
-    const deleted = await db.delete(reminders)
-      .where(and(
-        eq(reminders.id, reminderId),
-        eq(reminders.userId, userId) // Security: Only owner can delete
-      ))
-      .returning();
-    
-    revalidatePath('/dashboard');
-    return { success: true, deleted: deleted[0] };
+  try {
+    const result = await db
+      .select({
+        count: reminders.id
+      })
+      .from(reminders)
+      .where(
+        and(
+          eq(reminders.userId, session.user.id),
+          eq(reminders.status, 'pending')
+        )
+      );
+
+    return result.length;
+  } catch (error: any) {
+    console.error('❌ REMINDER_QUERY_ERROR:', error);
+    console.error('❌ ERROR_CODE:', error.code);
+    console.error('❌ ERROR_MESSAGE:', error.message);
+    // Return 0 to avoid crashing the UI if it's just a badge count
+    return 0;
   }
-);
+}

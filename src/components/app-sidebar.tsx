@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useUser } from '@/firebase/provider';
+import { useSession } from 'next-auth/react';
 import {
     LayoutDashboard,
     Users,
@@ -39,9 +39,33 @@ import Image from 'next/image';
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const pathname = usePathname();
-    const { user } = useUser();
+    const { data: session } = useSession();
+    const user = session?.user;
     const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
     const isAdmin = user?.email === ADMIN_EMAIL;
+    const [reminderCount, setReminderCount] = React.useState(0);
+
+    React.useEffect(() => {
+        if (!user) return;
+        
+        // Fetch count on load
+        const fetchCount = async () => {
+            try {
+                // Dynamically import to avoid server-action issues in client component if strict
+                const { getUnreadReminderCount } = await import('@/app/actions/reminder-actions');
+                const count = await getUnreadReminderCount();
+                setReminderCount(count);
+            } catch (error) {
+                console.error("Failed to fetch reminders count", error);
+            }
+        };
+
+        fetchCount();
+
+        // Optional: Poll every minute
+        const interval = setInterval(fetchCount, 60000);
+        return () => clearInterval(interval);
+    }, [user, pathname]); // Re-fetch on navigation too
 
     return (
         <Sidebar collapsible="icon" {...props}>
@@ -87,8 +111,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
                     {/* Contacts */}
                     <SidebarMenuItem>
-                        <SidebarMenuButton asChild isActive={pathname === '/clients'} tooltip="Clients">
-                            <Link href="/clients">
+                        <SidebarMenuButton asChild isActive={pathname === '/dashboard/clients'} tooltip="Clients">
+                            <Link href="/dashboard/clients">
                                 <Users />
                                 <span>Clients</span>
                             </Link>
@@ -171,10 +195,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 {/* PARAMETRES */}
                 <SidebarMenu>
                     <SidebarMenuItem>
-                        <SidebarMenuButton asChild isActive={pathname === '/dashboard/reminders'} tooltip="Rappels">
-                            <Link href="/dashboard/reminders">
-                                <Bell />
-                                <span>Rappels</span>
+                        <SidebarMenuButton asChild isActive={pathname === '/dashboard/rappels'} tooltip="Rappels">
+                            <Link href="/dashboard/rappels" className="flex justify-between items-center">
+                                <div className="flex items-center gap-2">
+                                    <Bell />
+                                    <span>Rappels</span>
+                                </div>
+                                {reminderCount > 0 && (
+                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white">
+                                        {reminderCount > 99 ? '99+' : reminderCount}
+                                    </span>
+                                )}
                             </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>

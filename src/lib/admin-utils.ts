@@ -1,32 +1,47 @@
 import 'server-only';
-import { cookies } from 'next/headers';
-import { adminAuth } from './firebaseAdmin';
+import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
-
 import { cache } from 'react';
 
-const SUPER_ADMIN_EMAIL = "ousayehamine3002@gmail.com";
-
-export const verifySuperAdmin = cache(async () => {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get('session')?.value;
-
-    if (!sessionCookie) {
-        redirect('/login');
-    }
-
-    try {
-        // Optimization: checkRevoked = false (faster, no DB round-trip)
-        const decodedClaims = await adminAuth.verifySessionCookie(sessionCookie, false);
-
-        if (decodedClaims.email !== SUPER_ADMIN_EMAIL) {
-            console.error(`Access attempt by unauthorized email: ${decodedClaims.email}`);
-            redirect('/dashboard');
-        }
-
-        return decodedClaims;
-    } catch (error) {
-        console.error("Admin Verification Failed:", error);
-        redirect('/login');
-    }
+/**
+ * Get current user session (cached)
+ * Use this in Server Components and Server Actions
+ */
+export const getCurrentSession = cache(async () => {
+  return await auth();
 });
+
+/**
+ * Require authentication - redirects to /login if not authenticated
+ */
+export async function requireAuth() {
+  const session = await getCurrentSession();
+  
+  if (!session?.user) {
+    redirect('/login');
+  }
+  
+  return session;
+}
+
+/**
+ * Require admin role - redirects to /dashboard if not admin
+ */
+export async function requireAdmin() {
+  const session = await requireAuth();
+  
+  const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+  if (session.user.email !== ADMIN_EMAIL && session.user.role !== 'admin') {
+    redirect('/dashboard');
+  }
+  
+  return session;
+}
+
+/**
+ * Get user ID from session
+ */
+export async function getUserId() {
+  const session = await requireAuth();
+  return session.user.id;
+}

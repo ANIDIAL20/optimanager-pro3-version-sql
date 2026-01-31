@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { useUser } from "@/firebase/provider";
+import { useSession } from "next-auth/react";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./app-sidebar";
 import { Loader2 } from "lucide-react";
 
 export default function AppShell({ children, banner }: { children: React.ReactNode, banner?: any }) {
-    const { user, isUserLoading } = useUser();
+    const { data: session, status } = useSession();
+    const user = session?.user;
+    const isUserLoading = status === "loading";
     const router = useRouter();
     const pathname = usePathname();
     const [isRedirecting, setIsRedirecting] = useState(false);

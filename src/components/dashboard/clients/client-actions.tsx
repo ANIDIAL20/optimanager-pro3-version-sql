@@ -24,7 +24,6 @@ import {
 import Link from "next/link";
 import { toast } from "sonner";
 import { deleteClient } from "@/app/actions/clients-actions";
-import { useFirebase } from "@/firebase";
 import { useRouter } from "next/navigation";
 import { Client } from "./columns";
 
@@ -35,11 +34,9 @@ interface ClientActionsProps {
 export function ClientActions({ client }: ClientActionsProps) {
     const [open, setOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const { user } = useFirebase();
     const router = useRouter();
 
     const handleDelete = async () => {
-        if (!user || !confirm('Êtes-vous sûr de vouloir supprimer ce client ?')) return;
 
         try {
             setIsLoading(true);
@@ -84,20 +81,20 @@ export function ClientActions({ client }: ClientActionsProps) {
                     <DropdownMenuLabel>Actions</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild className="bg-blue-50 text-blue-700 focus:text-blue-700 focus:bg-blue-100 cursor-pointer">
-                        <Link href={`/clients/${client.id}?tab=prescriptions`}>
+                        <Link href={`/dashboard/clients/${client.id}?tab=prescriptions`}>
                             <Calendar className="mr-2 h-4 w-4" />
                             Nouvelle Visite
                         </Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                        <Link href={`/clients/${client.id}?tab=overview`}>
+                        <Link href={`/dashboard/clients/${client.id}?tab=overview`}>
                             <Eye className="mr-2 h-4 w-4" />
                             Voir Dossier
                         </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                        <Link href={`/clients/${client.id}?tab=purchase-history`}>
+                        <Link href={`/dashboard/clients/${client.id}?tab=purchase-history`}>
                             <ShoppingBag className="mr-2 h-4 w-4" />
                             Historique d'achat
                         </Link>

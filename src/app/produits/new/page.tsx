@@ -12,8 +12,8 @@ export default function AddProductPage() {
         <BackButton />
       </div>
       <PageHeader
-        title="Add New Product"
-        description="Fill in the details to add a new product to the catalog."
+        title="Ajouter un Produit"
+        description="Remplissez les détails pour ajouter un nouveau produit au catalogue."
       />
       <ProductForm />
     </div>

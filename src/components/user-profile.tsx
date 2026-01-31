@@ -33,17 +33,15 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 
-import { useUser, useAuth } from "@/firebase/provider";
-import { signOut } from "firebase/auth";
+import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { deleteSession } from "@/actions/auth-actions";
 import { cn } from '@/lib/utils';
 import { usePrivacy } from "@/context/privacy-context";
 
 export function UserProfile() {
     const { isMobile } = useSidebar();
-    const { user } = useUser();
-    const auth = useAuth();
+    const { data: session } = useSession();
+    const user = session?.user;
     const router = useRouter();
     const { isPatientMode, togglePatientMode } = usePrivacy();
 
@@ -61,18 +59,14 @@ export function UserProfile() {
     const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
     const isAdmin = user.email === ADMIN_EMAIL;
 
-    const displayName = user.displayName || "Utilisateur";
-    const initials = (user.displayName || user.email || "U")
+    const displayName = user.name || "Utilisateur";
+    const initials = (user.name || user.email || "U")
         .substring(0, 2)
         .toUpperCase();
 
     const handleLogout = async () => {
         try {
-            if (auth) {
-                await signOut(auth);
-            }
-            await deleteSession();
-            router.push('/login');
+            await signOut({ callbackUrl: '/login' });
         } catch (error) {
             console.error("Erreur logout:", error);
         }
@@ -94,7 +88,7 @@ export function UserProfile() {
                             className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                         >
                             <Avatar className="h-8 w-8 rounded-lg">
-                                <AvatarImage src={user.photoURL || ''} alt={displayName} />
+                                <AvatarImage src={user.image || ''} alt={displayName} />
                                 <AvatarFallback className="rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold text-xs">
                                     {initials}
                                 </AvatarFallback>
@@ -122,7 +116,7 @@ export function UserProfile() {
                         <DropdownMenuLabel className="p-0 font-normal">
                             <div className="flex items-center gap-3 px-2 py-2">
                                 <Avatar className="h-10 w-10 rounded-lg border-2 border-white shadow-md">
-                                    <AvatarImage src={user.photoURL || ''} alt={displayName} />
+                                    <AvatarImage src={user.image || ''} alt={displayName} />
                                     <AvatarFallback className="rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold">
                                         {initials}
                                     </AvatarFallback>

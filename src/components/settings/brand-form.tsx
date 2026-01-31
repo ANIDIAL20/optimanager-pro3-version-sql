@@ -22,8 +22,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { useFirestore, addDocumentNonBlocking, updateDocumentNonBlocking, useFirebase } from '@/firebase';
-import { collection, doc } from 'firebase/firestore';
+// TODO: Migrate brands to SQL - create settings-actions.ts
+// import { useFirestore, addDocumentNonBlocking, updateDocumentNonBlocking, useFirebase } from '@/firebase';
+// import { collection, doc } from 'firebase/firestore';
 import type { Brand, BrandCategory } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
 
@@ -51,13 +52,20 @@ export function BrandForm({ brand, onSuccess }: BrandFormProps) {
   });
 
   const { toast } = useToast();
-  const firestore = useFirestore();
-
-  const { user } = useFirebase();
+  // const firestore = useFirestore();
+  // const { user } = useFirebase();
 
   const onSubmit = async (data: BrandFormValues) => {
-    if (!firestore || !user) return;
+    // TODO: Implement SQL brand actions
+    toast({
+      variant: 'destructive',
+      title: 'Migration en cours',
+      description: 'La gestion des marques nécessite une migration SQL. Fonctionnalité temporairement désactivée.',
+    });
+    return;
 
+    /* Firebase version
+    if (!firestore || !user) return;
     try {
       if (brand) {
         const docRef = doc(firestore, `stores/${user.uid}/marques`, brand.id);
@@ -82,6 +90,7 @@ export function BrandForm({ brand, onSuccess }: BrandFormProps) {
         description: "Une erreur s'est produite. Veuillez réessayer.",
       });
     }
+    */
   };
 
   return (

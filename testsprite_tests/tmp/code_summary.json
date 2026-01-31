@@ -1,0 +1,240 @@
+{
+  "tech_stack": [
+    "TypeScript",
+    "Next.js 16 (App Router)",
+    "React 19",
+    "Next-Auth v5 (Auth.js)",
+    "Drizzle ORM",
+    "PostgreSQL (Neon)",
+    "Tailwind CSS",
+    "Radix UI",
+    "Framer Motion",
+    "React Hook Form",
+    "Zod",
+    "TanStack React Query",
+    "TanStack React Table",
+    "Recharts",
+    "Zustand"
+  ],
+  "features": [
+    {
+      "name": "Authentication System",
+      "description": "Secure authentication using Next-Auth v5 with credentials provider, session management, JWT tokens, and role-based access control (user/admin roles)",
+      "files": [
+        "src/auth.ts",
+        "src/auth.config.ts",
+        "src/middleware.ts",
+        "src/app/login/page.tsx",
+        "src/components/LogoutButton.tsx",
+        "src/components/user-profile.tsx",
+        "src/app/actions/user-actions.ts"
+      ]
+    },
+    {
+      "name": "Client Management",
+      "description": "Complete client (customer) management system with CRUD operations, client profiles, balance tracking, visit history, and prescription management",
+      "files": [
+        "src/features/clients/actions.ts",
+        "src/features/clients/repository.ts",
+        "src/features/clients/schemas.ts",
+        "src/app/actions/clients-actions.ts",
+        "src/app/dashboard/clients/page.tsx",
+        "src/components/clients/client-form.tsx",
+        "src/components/clients/client-list.tsx",
+        "src/components/clients/client-overview.tsx"
+      ]
+    },
+    {
+      "name": "Product Management",
+      "description": "Product catalog management with stock tracking, pricing (purchase/sale/wholesale), categories, brands, suppliers, and low-stock alerts",
+      "files": [
+        "src/features/products/actions.ts",
+        "src/features/products/repository.ts",
+        "src/features/products/schemas.ts",
+        "src/app/actions/products-actions.ts",
+        "src/app/produits/page.tsx",
+        "src/components/products/product-form.tsx",
+        "src/components/products/product-list.tsx"
+      ]
+    },
+    {
+      "name": "Sales Management",
+      "description": "Comprehensive sales module with invoice generation, payment tracking, multiple payment methods, partial payments, and client-linked sales",
+      "files": [
+        "src/features/sales/actions.ts",
+        "src/features/sales/repository.ts",
+        "src/features/sales/schemas.ts",
+        "src/features/sales/services.ts",
+        "src/app/actions/sales-actions.ts",
+        "src/app/dashboard/ventes/page.tsx",
+        "src/components/sales/sale-form.tsx",
+        "src/components/sales/sale-list.tsx"
+      ]
+    },
+    {
+      "name": "Quotations (Devis)",
+      "description": "Quote management system with conversion to sales, status tracking (pending/approved/rejected/converted), and PDF generation",
+      "files": [
+        "src/app/actions/devis-actions.ts",
+        "src/app/dashboard/devis/page.tsx",
+        "src/components/dashboard/commandes/devis-form.tsx",
+        "src/components/dashboard/commandes/devis-list.tsx"
+      ]
+    },
+    {
+      "name": "Supplier Management",
+      "description": "Supplier database with contact information, purchase order tracking, and supplier-product relationships",
+      "files": [
+        "src/app/actions/suppliers-actions.ts",
+        "src/app/suppliers/page.tsx",
+        "src/components/suppliers/supplier-form.tsx",
+        "src/components/suppliers/supplier-list.tsx"
+      ]
+    },
+    {
+      "name": "Supplier Orders",
+      "description": "Purchase order management for tracking orders to suppliers, reception status, and payment tracking",
+      "files": [
+        "src/app/actions/supplier-orders-actions.ts",
+        "src/app/dashboard/supplier-orders/page.tsx",
+        "src/components/dashboard/supplier-orders/supplier-orders-list.tsx"
+      ]
+    },
+    {
+      "name": "Stock Movements",
+      "description": "Inventory tracking system recording all stock movements (sales, purchases, adjustments, returns) with history",
+      "files": [
+        "src/app/actions/stock-movements-actions.ts",
+        "src/components/dashboard/produits/stock-movements.tsx"
+      ]
+    },
+    {
+      "name": "Prescriptions Management",
+      "description": "Optical prescription management for eyeglasses with detailed eye measurements (sphere, cylinder, axis, addition, PD)",
+      "files": [
+        "src/app/actions/prescriptions-actions.ts",
+        "src/components/clients/prescription-form.tsx",
+        "src/components/clients/prescriptions-tab.tsx"
+      ]
+    },
+    {
+      "name": "Contact Lens Prescriptions",
+      "description": "Specialized prescription management for contact lenses with different parameters than eyeglasses",
+      "files": [
+        "src/app/actions/contact-lens-prescriptions-actions.ts",
+        "src/components/clients/contact-lens-prescription-form.tsx"
+      ]
+    },
+    {
+      "name": "Lens Orders",
+      "description": "Order management for prescription lenses (progressive, bifocal, unifocal) with supplier tracking and delivery status",
+      "files": [
+        "src/app/actions/lens-orders-actions.ts",
+        "src/components/dashboard/lens-orders/lens-order-list.tsx"
+      ]
+    },
+    {
+      "name": "Dashboard & Analytics",
+      "description": "Business intelligence dashboard with revenue charts, sales statistics, top products, client insights, and KPIs",
+      "files": [
+        "src/app/actions/dashboard-actions.ts",
+        "src/app/dashboard/page.tsx",
+        "src/components/dashboard/revenue-chart.tsx",
+        "src/components/dashboard/stats-cards.tsx",
+        "src/components/dashboard/recent-sales.tsx"
+      ]
+    },
+    {
+      "name": "Settings Management",
+      "description": "Application configuration for categories, brands, materials, colors, treatments, insurance companies, and banks",
+      "files": [
+        "src/app/actions/settings-actions.ts",
+        "src/app/settings/page.tsx",
+        "src/components/settings/categories-settings.tsx",
+        "src/components/settings/brands-settings.tsx",
+        "src/components/settings/materials-settings.tsx"
+      ]
+    },
+    {
+      "name": "Reminders System",
+      "description": "Smart reminder and notification system with recurring reminders, entity relationships, and multiple notification channels",
+      "files": [
+        "src/app/actions/reminder-actions.ts",
+        "src/app/dashboard/reminders/page.tsx",
+        "src/components/dashboard/reminders/reminder-form.tsx"
+      ]
+    },
+    {
+      "name": "Admin Panel",
+      "description": "Super admin functionality for user management, client account management, subscription plans, and system administration",
+      "files": [
+        "src/app/actions/adminActions.ts",
+        "src/app/actions/clientManagementActions.ts",
+        "src/app/admin/page.tsx",
+        "src/components/admin/admin-dashboard.tsx",
+        "src/lib/admin-utils.ts"
+      ]
+    },
+    {
+      "name": "Point of Sale (POS)",
+      "description": "Quick sale interface for in-store transactions with product search, cart management, and fast checkout",
+      "files": [
+        "src/app/pos/page.tsx",
+        "src/components/dashboard/commandes/pos-cart.tsx",
+        "src/components/dashboard/commandes/pos-product-search.tsx"
+      ]
+    },
+    {
+      "name": "Printing & PDF Generation",
+      "description": "Print and PDF generation for invoices, quotations, prescriptions, and other documents with customizable templates",
+      "files": [
+        "src/app/actions/print-actions.ts",
+        "src/app/print/[type]/[id]/page.tsx",
+        "src/components/printing/invoice-template.tsx"
+      ]
+    },
+    {
+      "name": "UI Component Library",
+      "description": "Comprehensive Radix UI-based component library with buttons, dialogs, forms, tables, cards, and custom components",
+      "files": [
+        "src/components/ui/button.tsx",
+        "src/components/ui/dialog.tsx",
+        "src/components/ui/form.tsx",
+        "src/components/ui/table.tsx",
+        "src/components/ui/card.tsx",
+        "src/components/ui/input.tsx",
+        "src/components/ui/select.tsx"
+      ]
+    },
+    {
+      "name": "Navigation & Layout",
+      "description": "Application shell with sidebar navigation, app header, user profile dropdown, and responsive layout",
+      "files": [
+        "src/components/app-shell.tsx",
+        "src/components/app-sidebar.tsx",
+        "src/components/dashboard/header.tsx",
+        "src/components/page-header.tsx",
+        "src/app/layout.tsx",
+        "src/app/dashboard/layout.tsx"
+      ]
+    },
+    {
+      "name": "Database Layer",
+      "description": "Drizzle ORM with PostgreSQL schema definitions, relations, and database operations for all entities",
+      "files": [
+        "src/db/schema.ts",
+        "src/db/index.ts",
+        "drizzle.config.ts"
+      ]
+    },
+    {
+      "name": "Security & Authorization",
+      "description": "Secure action wrapper, user isolation, role-based access control, and data protection mechanisms",
+      "files": [
+        "src/lib/secure-action.ts",
+        "src/lib/auth.ts",
+        "src/middleware.ts"
+      ]
+    }
+  ]
+}

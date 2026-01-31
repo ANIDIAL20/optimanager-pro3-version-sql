@@ -47,7 +47,7 @@ export const columns: ColumnDef<Client>[] = [
                         </AvatarFallback>
                     </Avatar>
                     <div>
-                        <Link href={`/clients/${client.id}?tab=overview`} className="font-semibold text-slate-900 hover:text-blue-600 transition-colors">
+                        <Link href={`/dashboard/clients/${client.id}?tab=overview`} className="font-semibold text-slate-900 hover:text-blue-600 transition-colors">
                             {client.prenom} {client.nom}
                         </Link>
                         {client.email && (

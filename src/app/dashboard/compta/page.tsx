@@ -1,8 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { useFirebase, useFirestore } from '@/firebase';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+// TODO: Migrate accounting to SQL - fetch from sales-actions.ts
+// import { useFirebase, useFirestore } from '@/firebase';
+// import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -12,15 +13,16 @@ import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { SensitiveData } from '@/components/ui/sensitive-data';
 
 export default function AccountingPage() {
-    const { user } = useFirebase();
-    const firestore = useFirestore();
+    // const { user } = useFirebase();
+    // const firestore = useFirestore();
 
     const [dateRange, setDateRange] = React.useState('thisMonth');
     const [sales, setSales] = React.useState<any[]>([]);
-    const [isLoading, setIsLoading] = React.useState(true);
+    const [isLoading, setIsLoading] = React.useState(false);
     const [isExporting, setIsExporting] = React.useState(false);
 
-    // Helpers for date ranges
+    // TODO: Replace with SQL queries from sales-actions.ts
+    /* Firebase version
     const getStartDate = (range: string) => {
         const now = new Date();
         switch (range) {
@@ -36,7 +38,6 @@ export default function AccountingPage() {
         const fetchData = async () => {
             if (!user || !firestore) return;
             setIsLoading(true);
-
             try {
                 const startDate = getStartDate(dateRange);
                 const salesRef = collection(firestore, `stores/${user.uid}/sales`);
@@ -45,28 +46,22 @@ export default function AccountingPage() {
                     where('date', '>=', startDate.toISOString()),
                     orderBy('date', 'desc')
                 );
-
                 const snapshot = await getDocs(q);
-                const salesData = snapshot.docs.map(doc => {
-                    const data = doc.data();
-                    return {
-                        id: doc.id,
-                        ...data,
-                        // Convert Firebase Timestamp to ISO string for serialization
-                        date: data.date?.toDate ? data.date.toDate().toISOString() : data.date,
-                    };
-                });
+                const salesData = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                    date: doc.data().date?.toDate ? doc.data().date.toDate().toISOString() : doc.data().date,
+                }));
                 setSales(salesData);
-
             } catch (error) {
                 console.error("Error fetching accounting data:", error);
             } finally {
                 setIsLoading(false);
             }
         };
-
         fetchData();
     }, [user, firestore, dateRange]);
+    */
 
     // KPI Calculations
     const totalRevenue = sales.reduce((acc, sale) => acc + (sale.totalTTC || 0), 0);
@@ -87,21 +82,22 @@ export default function AccountingPage() {
             .reverse();
     }, [sales]);
 
-    // Export Handler
+    // Export Handler - Disabled pending SQL migration
     const handleExport = async (type: 'sales' | 'clients' | 'stock') => {
+        alert('Les exports nécessitent une migration SQL. Fonctionnalité temporairement désactivée.');
+        return;
+        
+        /* Firebase version
         if (!user || !firestore) return;
         setIsExporting(true);
-
         try {
             let data: any[] = [];
             let headers: string[] = [];
             let filename = `${type}_export_${format(new Date(), 'yyyy-MM-dd')}.csv`;
-
             if (type === 'sales') {
                 const allSalesSnap = await getDocs(collection(firestore, `stores/${user.uid}/sales`));
                 data = allSalesSnap.docs.map(doc => {
                     const d = doc.data();
-                    // Handle both Firebase Timestamp and ISO string dates
                     const dateValue = d.date?.toDate ? d.date.toDate() : new Date(d.date);
                     return {
                         ID: doc.id,
@@ -140,14 +136,10 @@ export default function AccountingPage() {
                 });
                 headers = ['Référence', 'Nom', 'Prix_Achat', 'Prix_Vente', 'Stock'];
             }
-
-            // Generate CSV
             const csvContent = [
                 headers.join(','),
                 ...data.map(row => headers.map(fieldName => `"${String(row[fieldName]).replace(/"/g, '""')}"`).join(','))
             ].join('\n');
-
-            // Download
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
@@ -156,12 +148,12 @@ export default function AccountingPage() {
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-
         } catch (error) {
             console.error("Export failed:", error);
         } finally {
             setIsExporting(false);
         }
+        */
     };
 
     return (

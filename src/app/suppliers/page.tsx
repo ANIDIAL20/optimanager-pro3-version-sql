@@ -1,74 +1,30 @@
-'use client';
-
 import * as React from 'react';
-import { collection } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase, useFirebase } from '@/firebase';
+import { getSuppliersList } from '@/app/actions/supplier-actions';
+
 import { DataTable } from '@/components/ui/data-table';
-import { columns as supplierColumns, type Supplier } from '@/components/dashboard/fournisseurs/columns';
+import { columns as supplierColumns } from '@/components/dashboard/fournisseurs/columns';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Plus,
-  Search,
   Truck,
-  BookUser,
-  LayoutGrid,
   Eye,
   Glasses
 } from 'lucide-react';
-import { getCategoryIcon } from '@/lib/category-icons';
 import Link from 'next/link';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SuppliersClientView } from './_components/suppliers-client-view';
 
-export default function SuppliersPage() {
-  const firestore = useFirestore();
-  const { user } = useFirebase();
+export default async function SuppliersPage() {
+  // Fetch suppliers on the server
+  const suppliers = await getSuppliersList();
 
-  const [searchTerm, setSearchTerm] = React.useState('');
-  const [activeCategory, setActiveCategory] = React.useState('all');
-
-  const suppliersQuery = useMemoFirebase(
-    () => firestore && user ? collection(firestore, `stores/${user.uid}/suppliers`) : null,
-    [firestore, user]
-  );
-  const { data: suppliers, isLoading } = useCollection<Supplier>(suppliersQuery);
-
-  const stats = React.useMemo(() => {
-    if (!suppliers) return { total: 0, verres: 0, montures: 0 };
-    return {
-      total: suppliers.length,
-      verres: suppliers.filter(s => s.typeProduits?.includes('Verres')).length,
-      montures: suppliers.filter(s => s.typeProduits?.includes('Montures')).length,
-    };
-  }, [suppliers]);
-
-  const filteredSuppliers = React.useMemo(() => {
-    if (!suppliers) return [];
-
-    let filtered = suppliers;
-
-    // Category Filter
-    if (activeCategory !== 'all') {
-      filtered = filtered.filter(s => s.typeProduits && s.typeProduits.includes(activeCategory));
-    }
-
-    // Search Filter
-    if (searchTerm) {
-      const lower = searchTerm.toLowerCase();
-      filtered = filtered.filter(s =>
-        s.nomCommercial?.toLowerCase().includes(lower) ||
-        s.email?.toLowerCase().includes(lower) ||
-        s.telephone?.includes(lower)
-      );
-    }
-
-    return filtered;
-  }, [suppliers, activeCategory, searchTerm]);
-
-
+  // Calculate stats
+  const stats = {
+    total: suppliers.length,
+    verres: suppliers.filter(s => s.category?.includes('Verres') || s.category?.includes('Lenses')).length,
+    montures: suppliers.filter(s => s.category?.includes('Montures') || s.category?.includes('Frames')).length,
+  };
 
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
@@ -124,53 +80,8 @@ export default function SuppliersPage() {
         </SpotlightCard>
       </div>
 
-      {/* Search & Filter Bar */}
-      <SpotlightCard className="p-4">
-        <div className="flex flex-col gap-4">
-          <Tabs value={activeCategory} onValueChange={setActiveCategory} className="w-full">
-            <div className="flex flex-col md:flex-row gap-4 items-center">
-              <div className="relative flex-1 w-full">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Rechercher un fournisseur..."
-                  className="pl-10 bg-white border-slate-200 focus:border-blue-500"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <TabsList className="bg-slate-100 p-1 h-auto w-full justify-start overflow-x-auto flex-nowrap">
-                <TabsTrigger value="all" className="px-3 py-1.5 text-xs sm:text-sm whitespace-nowrap min-w-fit">
-                  <LayoutGrid className="mr-2 h-4 w-4" />
-                  Tout
-                </TabsTrigger>
-                {["Montures", "Verres", "Lentilles", "Produits d'entretien", "Cordons", "Etuis", "Accessoires", "Matériel", "Divers"].map(cat => {
-                  const Icon = getCategoryIcon(cat);
-                  return (
-                    <TabsTrigger key={cat} value={cat} className="px-3 py-1.5 text-xs sm:text-sm whitespace-nowrap min-w-fit">
-                      <Icon className="mr-2 h-4 w-4" />
-                      {cat}
-                    </TabsTrigger>
-                  );
-                })}
-              </TabsList>
-            </div>
-          </Tabs>
-        </div>
-      </SpotlightCard>
-
-      {/* Table */}
-      {isLoading ? (
-        <div className="space-y-3">
-          <Skeleton className="h-12 w-full" />
-          <Skeleton className="h-12 w-full" />
-          <Skeleton className="h-12 w-full" />
-        </div>
-      ) : (
-        <DataTable columns={supplierColumns} data={filteredSuppliers} />
-      )}
+      {/* Client-side search and filtering */}
+      <SuppliersClientView suppliers={suppliers} columns={supplierColumns} />
     </div>
   );
 }

@@ -1,0 +1,65 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e7]:
+      - img "OptiManager" [ref=e9]
+      - generic [ref=e10]:
+        - heading "Bienvenue" [level=1] [ref=e11]
+        - paragraph [ref=e12]: Connectez-vous pour accéder à votre espace
+      - generic [ref=e13]: Email ou mot de passe incorrect.
+      - generic [ref=e14]:
+        - generic [ref=e15]:
+          - text: Email
+          - generic [ref=e16]:
+            - img [ref=e17]
+            - textbox "Email" [ref=e20]:
+              - /placeholder: nom@opticien.com
+              - text: demo@optimanager.com
+        - generic [ref=e21]:
+          - text: Mot de passe
+          - generic [ref=e22]:
+            - img [ref=e23]
+            - textbox "Mot de passe" [ref=e26]:
+              - /placeholder: ••••••••
+              - text: "123456"
+        - button "Se connecter" [ref=e27] [cursor=pointer]:
+          - generic [ref=e29]: Se connecter
+      - generic [ref=e34]: Ou continuer avec
+      - button "Continuer avec Google" [ref=e35] [cursor=pointer]:
+        - img
+        - text: Continuer avec Google
+      - generic [ref=e36]:
+        - img [ref=e37]
+        - generic [ref=e40]: Sécurisé • Conforme aux normes médicales
+    - generic [ref=e44]:
+      - generic [ref=e46]:
+        - generic [ref=e53]: optimanager.ma/dash
+        - generic [ref=e56]:
+          - img [ref=e57]
+          - generic [ref=e62]:
+            - heading "Dashboard" [level=3] [ref=e63]
+            - paragraph [ref=e64]: Vue d'ensemble complète
+      - button "Dashboard" [ref=e72] [cursor=pointer]:
+        - img [ref=e73]
+        - paragraph [ref=e80]: Dashboard
+      - button "Clients" [ref=e82] [cursor=pointer]:
+        - img [ref=e83]
+        - paragraph [ref=e90]: Clients
+      - button "Stock" [ref=e92] [cursor=pointer]:
+        - img [ref=e93]
+        - paragraph [ref=e99]: Stock
+      - button "Commandes" [ref=e101] [cursor=pointer]:
+        - img [ref=e102]
+        - paragraph [ref=e108]: Commandes
+      - button "Statistiques" [ref=e110] [cursor=pointer]:
+        - img [ref=e111]
+        - paragraph [ref=e115]: Statistiques
+  - region "Notifications (F8)":
+    - list
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e121] [cursor=pointer]:
+    - img [ref=e122]
+  - alert [ref=e125]
+```

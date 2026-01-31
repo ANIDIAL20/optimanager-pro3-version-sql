@@ -10,7 +10,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription
 } from '@/components/ui/card';
 import {
   Form,
@@ -29,22 +28,33 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Phone, Mail, MapPin, Globe, Building2, User, CreditCard, Loader2 } from 'lucide-react';
+import { Loader2, Check, ChevronsUpDown } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { useFirestore, useUser, updateDocumentNonBlocking } from '@/firebase';
-import { doc, serverTimestamp } from 'firebase/firestore';
 import type { Supplier } from '@/lib/types';
-import { createCompany } from '@/services/commercial';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { getCategoryIcon } from '@/lib/category-icons';
 
+import { getSettings } from '@/app/actions/settings-actions';
+import { createSupplier, updateSupplier } from '@/app/actions/supplier-actions';
+
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 
 const productTypes = ["Montures", "Verres", "Lentilles", "Produits d'entretien", "Cordons", "Etuis", "Accessoires", "Matériel", "Divers"] as const;
-
-
 
 const SupplierSchema = z.object({
   nomCommercial: z.string().min(2, { message: "Le nom commercial est requis." }),
@@ -78,7 +88,6 @@ interface SupplierFormProps {
 
 export function SupplierForm({ supplier }: SupplierFormProps) {
   const router = useRouter();
-  const { user } = useUser();
   const form = useForm<SupplierFormValues>({
     resolver: zodResolver(SupplierSchema),
     defaultValues: supplier ? {
@@ -108,59 +117,74 @@ export function SupplierForm({ supplier }: SupplierFormProps) {
   });
 
   const { toast } = useToast();
-  const firestore = useFirestore();
+  
+  // Banks State
+  const [banksList, setBanksList] = React.useState<{ id: number; name: string }[]>([]);
+  const [isLoadingBanks, setIsLoadingBanks] = React.useState(true);
+
+  React.useEffect(() => {
+    async function loadBanks() {
+        try {
+            const data = await getSettings('banks');
+            setBanksList(data);
+        } catch (error) {
+            console.error("Failed to fetch banks:", error);
+        } finally {
+            setIsLoadingBanks(false);
+        }
+    }
+    loadBanks();
+  }, []);
+
 
   const onSubmit = async (data: SupplierFormValues) => {
-    if (!firestore || !user) {
-      toast({
-        variant: 'destructive',
-        title: 'Erreur',
-        description: "Vous devez être connecté pour effectuer cette action.",
-      });
-      return;
-    };
-
     try {
+      // Map form values to database schema
+      const payload = {
+        nomCommercial: data.nomCommercial, // Will be mapped to 'name' in action
+        email: data.email,
+        phone: data.telephone,
+        address: data.adresse,
+        city: data.ville,
+        ice: data.ice,
+        if: data.if,
+        rc: data.rc,
+        rib: data.rib,
+        bank: data.banque,
+        paymentTerms: data.delaiPaiement, // Map delaiPaiement -> paymentTerms
+        paymentMethod: data.modePaiement, // Map modePaiement -> paymentMethod
+        typeProduits: data.typeProduits, // Will be joined in action
+        notes: data.notes + (data.raisonSociale ? `\nRaison Sociale: ${data.raisonSociale}` : ''),
+        status: data.statut,
+        // contact info mapped to notes/misc or ignored for now as schema is flat
+        contactNom: data.contactNom,
+        contactEmail: data.contactEmail,
+        contactTelephone: data.contactTelephone,
+      };
+
       if (supplier) {
-        // The collection should be 'suppliers' not 'stores/${user.uid}/suppliers' if it's at the root
-        const docRef = doc(firestore, `stores/${user.uid}/suppliers`, supplier.id);
-        // Filter out undefined values before updating
-        const cleanedData = Object.fromEntries(
-          Object.entries({ ...data, dateModification: serverTimestamp() }).filter(([_, v]) => v !== undefined)
-        );
-        await updateDocumentNonBlocking(docRef, cleanedData);
+        await updateSupplier(supplier.id, payload);
         toast({
           title: 'Fournisseur Modifié',
           description: `Le fournisseur "${data.nomCommercial}" a été mis à jour.`,
         });
-        router.push(`/suppliers/${supplier.id}`);
+        // router.push(`/dashboard/fournisseurs/${supplier.id}`); // Stay or redirect?
+        router.refresh();
       } else {
-        // Filter out undefined values before creating
-        const cleanedData = Object.fromEntries(
-          Object.entries({
-            name: data.nomCommercial,
-            type: 'supplier' as const,
-            phone: data.telephone,
-            email: data.email,
-            if: data.if,
-            ice: data.ice,
-            rc: data.rc,
-            ...data
-          }).filter(([_, v]) => v !== undefined)
-        );
-        await createCompany(firestore, user.uid, cleanedData as any);
+        await createSupplier(payload);
         toast({
           title: 'Fournisseur Ajouté',
           description: `Le fournisseur "${data.nomCommercial}" a été créé.`,
+          variant: "default"
         });
-        router.push('/suppliers');
+        router.push('/dashboard/fournisseurs');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erreur lors de la sauvegarde du fournisseur:", error);
       toast({
         variant: 'destructive',
         title: 'Erreur',
-        description: "Une erreur s'est produite. Veuillez réessayer.",
+        description: `Une erreur s'est produite: ${error.message}`,
       });
     }
   };
@@ -225,9 +249,65 @@ export function SupplierForm({ supplier }: SupplierFormProps) {
             <Card>
               <CardHeader><CardTitle className="font-headline">Informations Bancaires et Commerciales</CardTitle></CardHeader>
               <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField control={form.control} name="banque" render={({ field }) => (
-                  <FormItem><FormLabel>Banque</FormLabel><FormControl><Input placeholder="Nom de la banque" {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
+                <FormField
+                  control={form.control}
+                  name="banque"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Banque</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              className={cn(
+                                "w-full justify-between",
+                                !field.value && "text-muted-foreground"
+                              )}
+                              disabled={isLoadingBanks}
+                            >
+                              {field.value
+                                ? (banksList.find(b => b.name === field.value)?.name || field.value)
+                                : "Sélectionner une banque"}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[200px] p-0">
+                          <Command>
+                            <CommandInput placeholder="Rechercher banque..." />
+                            <CommandList>
+                              <CommandEmpty>Aucune banque trouvée.</CommandEmpty>
+                              <CommandGroup>
+                                {banksList.map((bank) => (
+                                  <CommandItem
+                                    value={bank.name}
+                                    key={bank.id}
+                                    onSelect={() => {
+                                      form.setValue("banque", bank.name);
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        bank.name === field.value
+                                          ? "opacity-100"
+                                          : "opacity-0"
+                                      )}
+                                    />
+                                    {bank.name}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField control={form.control} name="rib" render={({ field }) => (
                   <FormItem><FormLabel>RIB / IBAN</FormLabel><FormControl><Input placeholder="Numéro de compte" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />

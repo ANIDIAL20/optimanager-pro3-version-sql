@@ -11,9 +11,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useAuth } from '@/firebase/provider';
-import { signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -23,14 +21,14 @@ interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({ onMenuClick, breadcrumb = 'Tableau de bord' }: DashboardHeaderProps) {
-    const { user } = useAuth();
+    const { data: session } = useSession();
+    const user = session?.user;
     const router = useRouter();
 
     const handleLogout = async () => {
         try {
-            await signOut(auth);
+            await signOut({ callbackUrl: '/login' });
             toast.success('Déconnexion réussie');
-            router.push('/login');
         } catch (error) {
             console.error('Logout error:', error);
             toast.error('Erreur lors de la déconnexion');
@@ -71,14 +69,14 @@ export function DashboardHeader({ onMenuClick, breadcrumb = 'Tableau de bord' }:
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" className="flex items-center gap-3 px-2 hover:bg-slate-100/60">
                             <Avatar className="w-8 h-8">
-                                <AvatarImage src={user?.photoURL || undefined} alt={user?.displayName || 'User'} />
+                                <AvatarImage src={user?.image || undefined} alt={user?.name || 'User'} />
                                 <AvatarFallback className="bg-gradient-to-br from-blue-600 to-teal-500 text-white text-sm">
-                                    {user?.displayName?.charAt(0) || user?.email?.charAt(0).toUpperCase() || 'U'}
+                                    {user?.name?.charAt(0) || user?.email?.charAt(0).toUpperCase() || 'U'}
                                 </AvatarFallback>
                             </Avatar>
                             <div className="hidden md:block text-left">
                                 <p className="text-sm font-medium text-slate-900">
-                                    {user?.displayName || 'Utilisateur'}
+                                    {user?.name || 'Utilisateur'}
                                 </p>
                                 <p className="text-xs text-slate-500">
                                     {user?.email}
