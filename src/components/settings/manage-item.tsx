@@ -2,15 +2,11 @@
 'use client';
 
 import * as React from 'react';
-import { doc } from 'firebase/firestore';
-import { useFirestore, deleteDocumentNonBlocking, useFirebase } from '@/firebase';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MoreVertical } from 'lucide-react';
+import { MoreVertical, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { useToast } from '@/hooks/use-toast';
 
 interface Item {
   id: string;
@@ -24,32 +20,16 @@ interface ManageItemProps {
   itemName: string;
   onSuccess: () => void;
   FormComponent?: React.FC<any>;
+  onDeleteClick: (item: Item) => void;
 }
 
-const ItemCard: React.FC<ManageItemProps> = ({ item, collectionName, itemName, FormComponent, onSuccess }) => {
+const ItemCard: React.FC<ManageItemProps> = ({ item, collectionName, itemName, FormComponent, onSuccess, onDeleteClick }) => {
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
-  const firestore = useFirestore();
-  const { toast } = useToast();
-
-  const { user } = useFirebase();
 
   const handleSuccess = () => {
     setIsEditDialogOpen(false);
     onSuccess();
   }
-
-  const handleDelete = () => {
-    if (!firestore || !user) return;
-    const docRef = doc(firestore, `stores/${user.uid}/${collectionName}`, item.id);
-    deleteDocumentNonBlocking(docRef);
-    toast({
-      title: `${itemName} supprimé(e)`,
-      description: `L'élément "${item.name}" a été supprimé.`,
-    });
-    setIsDeleteDialogOpen(false);
-    onSuccess();
-  };
 
   const FormDialog = FormComponent ? (
     <FormComponent item={item} onSuccess={handleSuccess} />
@@ -63,19 +43,36 @@ const ItemCard: React.FC<ManageItemProps> = ({ item, collectionName, itemName, F
 
         {item.category && <p className="text-xs text-muted-foreground">{item.category}</p>}
         {item.type && <p className="text-xs text-muted-foreground">{item.type}</p>}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100">
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setIsEditDialogOpen(true)}>Modifier</DropdownMenuItem>
-            <DropdownMenuItem className="text-destructive" onClick={() => setIsDeleteDialogOpen(true)}>Supprimer</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        
+        {/* Action Buttons Container */}
+        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100">
+          {/* Delete Button - Standalone to avoid dropdown race condition */}
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50"
+            onClick={() => onDeleteClick(item)}
+          >
+            <Trash2 size={18} />
+          </Button>
+
+          {/* Edit Dropdown Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-6 w-6">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)}>
+                Modifier
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </Card>
 
+      {/* Edit Dialog */}
       <Dialog modal={false} open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent
           onInteractOutside={(e) => {
@@ -89,26 +86,6 @@ const ItemCard: React.FC<ManageItemProps> = ({ item, collectionName, itemName, F
           {FormDialog}
         </DialogContent>
       </Dialog>
-
-
-      {/* @ts-ignore - modal prop exists but not in types */}
-      <AlertDialog modal={false} open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent
-          onOpenAutoFocus={(e) => e.preventDefault()}
-          onCloseAutoFocus={(e) => e.preventDefault()}
-        >
-          <AlertDialogHeader>
-            <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Cette action est irréversible. L'élément "{item.name}" sera définitivement supprimé.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">Supprimer</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 };
