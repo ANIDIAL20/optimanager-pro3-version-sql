@@ -12,6 +12,7 @@ import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/logo';
 import { SensitiveData } from '@/components/ui/sensitive-data';
+import { formatCurrencyToWords } from '@/lib/format-number-to-words';
 
 interface SaleWithDetails extends Sale {
   details: OrderDetail[];
@@ -154,6 +155,16 @@ export function Invoice({ sale, client }: InvoiceProps) {
               <span><SensitiveData value={sale.resteAPayer || 0} type="currency" className="text-red-600" /></span>
             </div>
           </div>
+        </section>
+
+        {/* Amount in Words - Moroccan Invoice Standard */}
+        <section className="mt-6 p-4 bg-slate-50 border border-slate-200 rounded-md">
+          <p className="text-sm text-gray-600 mb-2">
+            Arrêté la présente facture à la somme de :
+          </p>
+          <p className="text-base font-bold uppercase tracking-wide text-gray-900">
+            {formatCurrencyToWords(sale.totalNet || 0)}
+          </p>
         </section>
 
         <footer className="text-center text-xs text-gray-400 mt-12 pt-4 border-t">

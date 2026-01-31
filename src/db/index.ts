@@ -1,11 +1,7 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
-import ws from 'ws';
+import { neon } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/neon-http';
 import * as schema from './schema';
 import * as dotenv from 'dotenv';
-
-// Configure WebSocket for Node environment
-neonConfig.webSocketConstructor = ws;
 
 // ✅ Hna kan-ferdo 3lih y9ra .env.local 9bel ay 7aja
 dotenv.config({ path: ".env.local" });
@@ -14,5 +10,5 @@ if (!process.env.DATABASE_URL) {
   throw new Error("❌ DATABASE_URL mafih walou! T2akked anna .env.local fih lien d Neon.");
 }
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-export const db = drizzle(pool, { schema });
+const sql = neon(process.env.DATABASE_URL);
+export const db = drizzle(sql, { schema });
