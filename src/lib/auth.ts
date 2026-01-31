@@ -4,17 +4,8 @@ import { redirect } from 'next/navigation';
 import { cache } from 'react';
 
 /**
-<<<<<<< HEAD
  * Auth user interface matching Auth.js session structure
  */
-=======
- * Authentication Helper Functions
- * Integrates Auth.js with Server Actions
- */
-
-import { auth } from '@/auth';
-
->>>>>>> 559e7bd8821221a48328624aaaf210a571f4d425
 export interface AuthUser {
   uid: string; // Keeping 'uid' for backward compatibility, maps to 'id'
   id: string;
@@ -27,7 +18,6 @@ export interface AuthUser {
 }
 
 /**
-<<<<<<< HEAD
  * Get the current authenticated user (cached)
  * Returns null if not authenticated
  */
@@ -44,29 +34,6 @@ export const getCurrentUser = cache(async (): Promise<AuthUser | null> => {
 
   if (!session?.user) {
     console.log('❌ No session or user - returning null');
-=======
- * Get the current authenticated user from Auth.js
- * Returns null if not authenticated
- */
-export async function getCurrentUser(): Promise<AuthUser | null> {
-  try {
-    const session = await auth();
-    
-    if (!session || !session.user) {
-      return null;
-    }
-    
-    // Map Auth.js user to our AuthUser interface
-    return {
-      uid: session.user.id,
-      email: session.user.email || null,
-      emailVerified: !!session.user.emailVerified,
-      displayName: session.user.name || null,
-      role: session.user.role,
-    };
-  } catch (error) {
-    console.error('Error getting current user:', error);
->>>>>>> 559e7bd8821221a48328624aaaf210a571f4d425
     return null;
   }
 
@@ -134,10 +101,7 @@ export async function isAdmin(): Promise<boolean> {
   if (!user) {
     return false;
   }
-<<<<<<< HEAD
 
   const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
   return user.role === 'admin' || user.email === ADMIN_EMAIL;
-=======
->>>>>>> 559e7bd8821221a48328624aaaf210a571f4d425
 }
