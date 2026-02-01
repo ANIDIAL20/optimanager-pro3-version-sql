@@ -162,19 +162,96 @@ export function ContactLensPrescriptionForm({ clientId }: ContactLensPrescriptio
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <FormField control={form.control} name="date" render={({ field }) => (
-                <FormItem className="flex flex-col"><FormLabel>Date de la mesure</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={'outline'} className={cn('pl-3 text-left font-normal', !field.value && 'text-muted-foreground')}>{field.value ? (format(field.value, 'dd/MM/yyyy')) : (<span>jj/mm/aaaa</span>)}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => date > new Date() || date < new Date('1900-01-01')} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="lensType" render={({ field }) => (
-                <FormItem><FormLabel>Type de Lentilles</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="-- Choisir un type --" /></SelectTrigger></FormControl><SelectContent><SelectItem value="Souple journalière">Souple journalière</SelectItem><SelectItem value="Souple mensuelle">Souple mensuelle</SelectItem><SelectItem value="Rigide">Rigide</SelectItem><SelectItem value="Torique">Torique</SelectItem><SelectItem value="Multifocale">Multifocale</SelectItem></SelectContent></Select><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="prescripteur" render={({ field }) => (
-                <FormItem><FormLabel>Prescripteur</FormLabel><FormControl><Input placeholder="e.g., Dr. Martin" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="lensBrand" render={({ field }) => (
-                <FormItem><FormLabel>Marque des lentilles</FormLabel><FormControl><Input placeholder="e.g., Acuvue" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <FormField 
+                control={form.control} 
+                name="date" 
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date de la mesure</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button 
+                            variant={'outline'} 
+                            className={cn(
+                              'w-full h-10 justify-start text-left font-normal', 
+                              !field.value && 'text-muted-foreground'
+                            )}
+                          >
+                            {field.value ? (
+                              format(field.value, 'dd/MM/yyyy')
+                            ) : (
+                              <span>JJ/MM/AAAA</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar 
+                          mode="single" 
+                          selected={field.value} 
+                          onSelect={field.onChange} 
+                          disabled={(date) => date > new Date() || date < new Date('1900-01-01')} 
+                          initialFocus 
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField 
+                control={form.control} 
+                name="lensType" 
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Type de Lentilles</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="-- Choisir un type --" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Souple journalière">Souple journalière</SelectItem>
+                        <SelectItem value="Souple mensuelle">Souple mensuelle</SelectItem>
+                        <SelectItem value="Rigide">Rigide</SelectItem>
+                        <SelectItem value="Torique">Torique</SelectItem>
+                        <SelectItem value="Multifocale">Multifocale</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField 
+                control={form.control} 
+                name="prescripteur" 
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Prescripteur</FormLabel>
+                    <FormControl>
+                      <Input placeholder="ex. Dr. Martin" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField 
+                control={form.control} 
+                name="lensBrand" 
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Marque des lentilles</FormLabel>
+                    <FormControl>
+                      <Input placeholder="ex. Acuvue" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
@@ -238,7 +315,7 @@ export function ContactLensPrescriptionForm({ clientId }: ContactLensPrescriptio
                   <FormItem><FormLabel>Durée de port</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="-- Choisir --" /></SelectTrigger></FormControl><SelectContent><SelectItem value="Journalière">Journalière</SelectItem><SelectItem value="Hebdomadaire">Hebdomadaire</SelectItem><SelectItem value="Mensuelle">Mensuelle</SelectItem></SelectContent></Select><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="dateExpiration" render={({ field }) => (
-                  <FormItem className="flex flex-col"><FormLabel>Date d'expiration</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={'outline'} className={cn('pl-3 text-left font-normal', !field.value && 'text-muted-foreground')}>{field.value ? (format(field.value, 'dd/MM/yyyy')) : (<span>jj/mm/aaaa</span>)}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>
+                  <FormItem><FormLabel>Date d'expiration</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={'outline'} className={cn('w-full h-10 justify-start text-left font-normal', !field.value && 'text-muted-foreground')}>{field.value ? (format(field.value, 'dd/MM/yyyy')) : (<span>JJ/MM/AAAA</span>)}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>
                 )} />
               </div>
             </div>

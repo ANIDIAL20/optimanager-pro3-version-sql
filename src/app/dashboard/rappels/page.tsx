@@ -1,17 +1,14 @@
 import { Metadata } from 'next';
 import { ReminderList } from '@/components/reminders/reminder-list';
 import { ReminderStats } from '@/components/reminders/reminder-stats';
-import { Separator } from '@/components/ui/separator';
-import { Button } from '@/components/ui/button';
-import { Plus } from 'lucide-react';
+import { Bell } from 'lucide-react';
 import { checkDeadlines } from '@/app/actions/reminder-actions';
+import { CreateReminderDialog } from '@/components/reminders/create-reminder-dialog';
 
 export const metadata: Metadata = {
   title: 'Rappels & Notifications | OptiManager Pro',
   description: 'Gérez vos rappels, échéances et notifications.',
 };
-
-import { CreateReminderDialog } from '@/components/reminders/create-reminder-dialog';
 
 export default async function RemindersPage() {
   // Trigger deadline check on page load (server-side)
@@ -19,23 +16,26 @@ export default async function RemindersPage() {
   await checkDeadlines();
 
   return (
-    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header - Matches Clients page exactly */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Rappels & Notifications</h2>
-          <p className="text-muted-foreground">
+          <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-2">
+            <Bell className="h-8 w-8" />
+            Rappels & Notifications
+          </h1>
+          <p className="text-slate-600 mt-1">
             Suivi intelligent de vos tâches, échéances et alertes.
           </p>
         </div>
-        <div className="flex items-center space-x-2">
-           <CreateReminderDialog />
-        </div>
+
+        <CreateReminderDialog />
       </div>
       
+      {/* Stats Cards */}
       <ReminderStats />
       
-      <Separator className="my-4" />
-      
+      {/* Reminder List */}
       <ReminderList />
     </div>
   );

@@ -1,6 +1,6 @@
-
 'use client';
 
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -22,11 +22,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-// TODO: Migrate brands to SQL - create settings-actions.ts
-// import { useFirestore, addDocumentNonBlocking, updateDocumentNonBlocking, useFirebase } from '@/firebase';
-// import { collection, doc } from 'firebase/firestore';
 import type { Brand, BrandCategory } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
+import { createSetting, updateSetting } from '@/app/actions/settings-actions';
 
 const brandCategories = ['Premium', 'Populaire', 'Française', 'Autre'] as const;
 
@@ -43,6 +41,7 @@ interface BrandFormProps {
 }
 
 export function BrandForm({ brand, onSuccess }: BrandFormProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const form = useForm<BrandFormValues>({
     resolver: zodResolver(BrandSchema),
     defaultValues: {
@@ -52,45 +51,37 @@ export function BrandForm({ brand, onSuccess }: BrandFormProps) {
   });
 
   const { toast } = useToast();
-  // const firestore = useFirestore();
-  // const { user } = useFirebase();
 
   const onSubmit = async (data: BrandFormValues) => {
-    // TODO: Implement SQL brand actions
-    toast({
-      variant: 'destructive',
-      title: 'Migration en cours',
-      description: 'La gestion des marques nécessite une migration SQL. Fonctionnalité temporairement désactivée.',
-    });
-    return;
-
-    /* Firebase version
-    if (!firestore || !user) return;
+    setIsSubmitting(true);
     try {
       if (brand) {
-        const docRef = doc(firestore, `stores/${user.uid}/marques`, brand.id);
-        await updateDocumentNonBlocking(docRef, data);
+        // Update existing brand
+        const brandId = typeof brand.id === 'string' ? parseInt(brand.id) : brand.id;
+        await updateSetting('brands', brandId, data);
         toast({
           title: 'Marque modifiée',
           description: `La marque "${data.name}" a été mise à jour.`,
         });
       } else {
-        const colRef = collection(firestore, `stores/${user.uid}/marques`);
-        await addDocumentNonBlocking(colRef, data);
+        // Create new brand
+        await createSetting('brands', data);
         toast({
           title: 'Marque ajoutée',
           description: `La marque "${data.name}" a été créée.`,
         });
       }
       onSuccess();
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Error saving brand:', error);
       toast({
         variant: 'destructive',
         title: 'Erreur',
-        description: "Une erreur s'est produite. Veuillez réessayer.",
+        description: error.message || "Une erreur s'est produite. Veuillez réessayer.",
       });
+    } finally {
+      setIsSubmitting(false);
     }
-    */
   };
 
   return (
@@ -133,8 +124,8 @@ export function BrandForm({ brand, onSuccess }: BrandFormProps) {
             </FormItem>
           )}
         />
-        <Button type="submit" disabled={form.formState.isSubmitting} className="w-full">
-          {form.formState.isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+        <Button type="submit" disabled={isSubmitting} className="w-full">
+          {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           {brand ? 'Enregistrer les modifications' : 'Ajouter la marque'}
         </Button>
       </form>

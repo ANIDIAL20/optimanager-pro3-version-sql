@@ -1,11 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { useFirestore, useCollection, useMemoFirebase, useFirebase } from '@/firebase';
-import { collection, doc, query, orderBy, writeBatch, getDocs } from 'firebase/firestore';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Loader2, AlertCircle, Database } from 'lucide-react';
+import { PlusCircle, Loader2, AlertCircle, Database, RefreshCw } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ManageItem } from './manage-item';
@@ -14,7 +12,7 @@ import { GenericItemForm } from './generic-item-form';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { deleteDocumentNonBlocking } from '@/firebase';
+import { getSettings, deleteSetting, createSetting } from '@/app/actions/settings-actions';
 
 interface ManageGenericProps {
   collectionName: string;
@@ -25,6 +23,25 @@ interface ManageGenericProps {
   seedData?: { name: string, [key: string]: any }[];
   seedButtonText?: string;
 }
+
+// Map collection names to setting types
+const collectionToTypeMap: Record<string, string> = {
+  'brands': 'brands',
+  'categories': 'categories',
+  'materials': 'materials',
+  'colors': 'colors',
+  'treatments': 'treatments',
+  'mountingTypes': 'mountingTypes',
+  'banks': 'banks',
+  'insurances': 'insurances',
+  'marques': 'brands',
+  'matieres': 'materials',
+  'couleurs': 'colors',
+  'traitements': 'treatments',
+  'typesMontage': 'mountingTypes',
+  'banques': 'banks',
+  'mutuelles': 'insurances',
+};
 
 export function ManageGeneric({
   collectionName,
@@ -38,71 +55,92 @@ export function ManageGeneric({
   const [isAddDialogOpen, setIsAddDialogOpen] = React.useState(false);
   const [isSeeding, setIsSeeding] = React.useState(false);
   const [itemToDelete, setItemToDelete] = React.useState<SettingsItem | null>(null);
-  const firestore = useFirestore();
+  const [items, setItems] = React.useState<SettingsItem[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
   const { toast } = useToast();
 
-  const { user } = useFirebase();
+  // Map collection name to setting type
+  const settingType = collectionToTypeMap[collectionName] || collectionName;
 
-  const itemsQuery = useMemoFirebase(
-    () => firestore && user ? query(collection(firestore, `stores/${user.uid}/${collectionName}`), orderBy('name', 'asc')) : null,
-    [firestore, collectionName, user]
-  );
+  // Fetch items
+  const fetchItems = React.useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await getSettings(settingType as any);
+      setItems(data as SettingsItem[]);
+    } catch (err: any) {
+      console.error('Error fetching settings:', err);
+      setError(err.message || 'Erreur de chargement');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [settingType]);
 
-  const { data: items, isLoading, error, refetch } = useCollection<SettingsItem>(itemsQuery);
+  // Initial load
+  React.useEffect(() => {
+    fetchItems();
+  }, [fetchItems]);
 
   const handleSuccess = () => {
     setIsAddDialogOpen(false);
-    refetch();
+    fetchItems();
   }
 
-  const handleDelete = () => {
-    if (!firestore || !user || !itemToDelete) return;
-    const docRef = doc(firestore, `stores/${user.uid}/${collectionName}`, itemToDelete.id);
-    deleteDocumentNonBlocking(docRef);
-    toast({
-      title: `${itemName} supprimé(e)`,
-      description: `L'élément "${itemToDelete.name}" a été supprimé.`,
-    });
-    setItemToDelete(null);
-    refetch();
+  const handleDelete = async () => {
+    if (!itemToDelete) return;
+    
+    try {
+      const itemId = typeof itemToDelete.id === 'string' ? parseInt(itemToDelete.id) : itemToDelete.id;
+      await deleteSetting(settingType as any, itemId);
+      toast({
+        title: `${itemName} supprimé(e)`,
+        description: `L'élément "${itemToDelete.name}" a été supprimé.`,
+      });
+      setItemToDelete(null);
+      fetchItems();
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erreur',
+        description: error.message || 'Impossible de supprimer cet élément.',
+      });
+    }
   };
 
   const handleSeedDatabase = async () => {
-    if (!firestore || !seedData || !user) return;
+    if (!seedData) return;
 
     setIsSeeding(true);
     let addedCount = 0;
     try {
-      const ref = collection(firestore, `stores/${user.uid}/${collectionName}`);
-      const q = query(ref);
-      const querySnapshot = await getDocs(q);
-      const existingItems = new Set(querySnapshot.docs.map(doc => doc.data().name.toLowerCase().trim()));
+      // Fetch existing items
+      const existingItems = new Set(items.map(item => item.name.toLowerCase().trim()));
 
-      const batch = writeBatch(firestore);
+      // Filter items to add
       const itemsToAdd = seedData.filter(item => !existingItems.has(item.name.toLowerCase().trim()));
 
       if (itemsToAdd.length === 0) {
         toast({
           title: 'Base de données à jour',
-          description: `Aucun nouvel élément à importer pour ${itemName}. ${querySnapshot.size} éléments existaient déjà.`,
+          description: `Aucun nouvel élément à importer pour ${itemName}. ${items.length} éléments existaient déjà.`,
         });
         setIsSeeding(false);
         return;
       }
 
-      itemsToAdd.forEach(item => {
-        const docRef = doc(ref);
-        batch.set(docRef, item);
+      // Add new items
+      for (const item of itemsToAdd) {
+        await createSetting(settingType as any, item);
         addedCount++;
-      });
-
-      await batch.commit();
+      }
 
       toast({
         title: 'Importation réussie',
-        description: `${addedCount} nouveaux éléments ont été ajoutés. ${querySnapshot.size} éléments existaient déjà. Total : ${querySnapshot.size + addedCount}`,
+        description: `${addedCount} nouveaux éléments ont été ajoutés. ${items.length} éléments existaient déjà. Total : ${items.length + addedCount}`,
       });
-      refetch();
+      fetchItems();
     } catch (e: any) {
       toast({
         variant: 'destructive',
@@ -121,7 +159,11 @@ export function ManageGeneric({
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Erreur de Connexion</AlertTitle>
         <AlertDescription>
-          Impossible de charger les données pour "{itemName}".
+          Impossible de charger les données pour "{itemName}". {error}
+          <Button variant="outline" size="sm" onClick={fetchItems} className="mt-2">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Réessayer
+          </Button>
         </AlertDescription>
       </Alert>
     );
@@ -154,7 +196,7 @@ export function ManageGeneric({
                   collectionName={collectionName} 
                   itemName={itemName} 
                   FormComponent={FormComponent} 
-                  onSuccess={refetch}
+                  onSuccess={fetchItems}
                   onDeleteClick={setItemToDelete}
                 />
               ))}

@@ -103,7 +103,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     <SidebarMenuItem>
                         <SidebarMenuButton asChild isActive={pathname === '/dashboard'} tooltip="Tableau de bord">
                             <Link href="/dashboard">
-                                <LayoutDashboard />
+                                <LayoutDashboard className="size-5" strokeWidth={1.5} />
                                 <span>Tableau de bord</span>
                             </Link>
                         </SidebarMenuButton>
@@ -113,7 +113,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     <SidebarMenuItem>
                         <SidebarMenuButton asChild isActive={pathname === '/dashboard/clients'} tooltip="Clients">
                             <Link href="/dashboard/clients">
-                                <Users />
+                                <Users className="size-5" strokeWidth={1.5} />
                                 <span>Clients</span>
                             </Link>
                         </SidebarMenuButton>
@@ -122,7 +122,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     <SidebarMenuItem>
                         <SidebarMenuButton asChild isActive={pathname.startsWith('/suppliers')} tooltip="Fournisseurs">
                             <Link href="/suppliers">
-                                <Truck />
+                                <Truck className="size-5" strokeWidth={1.5} />
                                 <span>Fournisseurs</span>
                             </Link>
                         </SidebarMenuButton>
@@ -138,7 +138,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                             <SidebarMenuItem>
                                 <SidebarMenuButton asChild isActive={pathname === '/produits'} tooltip="Stock & Produits">
                                     <Link href="/produits">
-                                        <Package />
+                                        <Package className="size-5" strokeWidth={1.5} />
                                         <span>Stock & Produits</span>
                                     </Link>
                                 </SidebarMenuButton>
@@ -157,7 +157,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                             <SidebarMenuItem>
                                 <SidebarMenuButton asChild isActive={pathname === '/dashboard/devis'} tooltip="Devis">
                                     <Link href="/dashboard/devis">
-                                        <FileText />
+                                        <FileText className="size-5" strokeWidth={1.5} />
                                         <span>Devis</span>
                                     </Link>
                                 </SidebarMenuButton>
@@ -166,7 +166,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                             <SidebarMenuItem>
                                 <SidebarMenuButton asChild isActive={pathname === '/dashboard/ventes'} tooltip="Ventes">
                                     <Link href="/dashboard/ventes">
-                                        <Receipt />
+                                        <Receipt className="size-5" strokeWidth={1.5} />
                                         <span>Ventes</span>
                                     </Link>
                                 </SidebarMenuButton>
@@ -183,7 +183,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                             <SidebarMenuItem>
                                 <SidebarMenuButton asChild isActive={pathname === '/dashboard/compta'} tooltip="Exports & Rapports">
                                     <Link href="/dashboard/compta">
-                                        <FileSpreadsheet />
+                                        <FileSpreadsheet className="size-5" strokeWidth={1.5} />
                                         <span>Exports & Rapports</span>
                                     </Link>
                                 </SidebarMenuButton>
@@ -196,13 +196,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <SidebarMenu>
                     <SidebarMenuItem>
                         <SidebarMenuButton asChild isActive={pathname === '/dashboard/rappels'} tooltip="Rappels">
-                            <Link href="/dashboard/rappels" className="flex justify-between items-center">
-                                <div className="flex items-center gap-2">
-                                    <Bell />
-                                    <span>Rappels</span>
-                                </div>
+                            <Link href="/dashboard/rappels" className="relative">
+                                <Bell className="size-5" strokeWidth={1.5} />
+                                <span>Rappels</span>
                                 {reminderCount > 0 && (
-                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white">
+                                    <span className="absolute right-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white">
                                         {reminderCount > 99 ? '99+' : reminderCount}
                                     </span>
                                 )}
@@ -213,7 +211,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     <SidebarMenuItem>
                         <SidebarMenuButton asChild isActive={pathname === '/dashboard/parametres'} tooltip="Paramètres">
                             <Link href="/dashboard/parametres">
-                                <Settings />
+                                <Settings className="size-5" strokeWidth={1.5} />
                                 <span>Paramètres</span>
                             </Link>
                         </SidebarMenuButton>
@@ -229,7 +227,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                 className="mt-auto"
                             >
                                 <Link href="/admin">
-                                    <ShieldCheck />
+                                    <ShieldCheck className="size-5" strokeWidth={1.5} />
                                     <span>Super Admin</span>
                                 </Link>
                             </SidebarMenuButton>

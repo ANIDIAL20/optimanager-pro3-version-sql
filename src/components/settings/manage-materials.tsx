@@ -1,48 +1,71 @@
-
 'use client';
 
 import * as React from 'react';
 import type { Material } from '@/lib/types';
-import { collection, query, orderBy, getDocs, writeBatch, doc } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase, useFirebase } from '@/firebase';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, AlertCircle, Database, Loader2 } from 'lucide-react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  PlusCircle,
+  AlertCircle,
+  Database,
+  Loader2,
+  RefreshCw,
+} from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { MaterialForm } from './material-form';
 import { seedMaterials } from '@/lib/materials-seed';
 import { ManageItem } from './manage-item';
+import { getSettings, createSetting } from '@/app/actions/settings-actions';
 
 
 export function ManageMaterials() {
   const [isAddDialogOpen, setIsAddDialogOpen] = React.useState(false);
   const [isSeeding, setIsSeeding] = React.useState(false);
-  const firestore = useFirestore();
+  const [materials, setMaterials] = React.useState<Material[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
   const { toast } = useToast();
 
-  const { user } = useFirebase();
+  const fetchMaterials = React.useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await getSettings('materials');
+      setMaterials(data as Material[]);
+    } catch (err: any) {
+      console.error('Error fetching materials:', err);
+      setError(err.message || 'Erreur de chargement');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-  const matieresQuery = useMemoFirebase(
-    () => (firestore && user ? query(collection(firestore, `stores/${user.uid}/matieres`), orderBy('name', 'asc')) : null),
-    [firestore, user]
-  );
-  const { data: materials, isLoading, error, refetch } = useCollection<Material>(matieresQuery);
+  React.useEffect(() => {
+    fetchMaterials();
+  }, [fetchMaterials]);
 
   const handleSeedDatabase = async () => {
-    if (!firestore || !user) return;
-
     setIsSeeding(true);
     let addedCount = 0;
     try {
-      const matieresRef = collection(firestore, `stores/${user.uid}/matieres`);
-      const q = query(matieresRef);
-      const querySnapshot = await getDocs(q);
-      const existingMaterials = new Set(querySnapshot.docs.map(doc => doc.data().name.toLowerCase().trim()));
-
-      const batch = writeBatch(firestore);
+      const existingMaterials = new Set(materials.map(m => m.name.toLowerCase().trim()));
       const materialsToAdd = seedMaterials.filter(material => !existingMaterials.has(material.name.toLowerCase().trim()));
 
       if (materialsToAdd.length === 0) {
@@ -54,19 +77,16 @@ export function ManageMaterials() {
         return;
       }
 
-      materialsToAdd.forEach(material => {
-        const docRef = doc(matieresRef);
-        batch.set(docRef, { name: material.name, type: material.type });
+      for (const material of materialsToAdd) {
+        await createSetting('materials', { name: material.name, type: material.type } as any);
         addedCount++;
-      });
-
-      await batch.commit();
+      }
 
       toast({
         title: 'Importation réussie',
         description: `${addedCount} nouvelles matières ont été ajoutées.`,
       });
-      refetch(); // Refetch the collection data
+      fetchMaterials();
     } catch (e: any) {
       toast({
         variant: 'destructive',
@@ -80,7 +100,7 @@ export function ManageMaterials() {
 
   const handleSuccess = () => {
     setIsAddDialogOpen(false);
-    refetch();
+    fetchMaterials();
   }
 
   const groupedMaterials = React.useMemo(() => {
@@ -92,6 +112,30 @@ export function ManageMaterials() {
       return acc;
     }, {} as Record<string, Material[]>);
   }, [materials]);
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-headline">Gérer les Matières</CardTitle>
+          <CardDescription>Ajoutez, modifiez ou supprimez des matières de votre système.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Erreur de connexion</AlertTitle>
+            <AlertDescription>
+              Impossible de charger les matières. {error}
+              <Button variant="outline" size="sm" onClick={fetchMaterials} className="mt-2">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Réessayer
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -109,17 +153,7 @@ export function ManageMaterials() {
           </div>
         )}
 
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Erreur de connexion</AlertTitle>
-            <AlertDescription>
-              Impossible de charger les matières depuis Firestore. Vérifiez vos règles de sécurité ou votre connexion.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {!isLoading && !error && (
+        {!isLoading && (
           <>
             {materials && materials.length === 0 ? (
               <div className="text-center text-muted-foreground py-12">
@@ -132,7 +166,7 @@ export function ManageMaterials() {
                   <h2 className="text-xl font-headline font-semibold mb-4">{type} ({groupedMaterials[type].length})</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                     {groupedMaterials[type].map((material) => (
-                      <ManageItem key={material.id} item={material} collectionName="matieres" itemName="Matière" FormComponent={MaterialForm} onSuccess={refetch} />
+                      <ManageItem key={material.id} item={material} collectionName="matieres" itemName="Matière" FormComponent={MaterialForm} onSuccess={fetchMaterials} />
                     ))}
                   </div>
                 </div>

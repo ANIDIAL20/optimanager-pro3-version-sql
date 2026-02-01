@@ -8,17 +8,40 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Search, Plus, Minus, Trash2, Loader2, ShoppingCart, Package, Glasses, Eye, Box, Disc, SprayCan, Link as LinkIcon, Briefcase, Puzzle, Wrench } from 'lucide-react';
-import { useFirestore, useFirebase } from '@/firebase';
-import { writeBatch, doc as firestoreDoc, increment, serverTimestamp, collection, getDocs } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import type { Client, Product } from '@/lib/types';
 import { SensitiveData } from '@/components/ui/sensitive-data';
 import { cn } from '@/lib/utils';
+
+// Server Actions
+import { getProducts } from '@/app/actions/products-actions';
+import { getCategories } from '@/app/actions/products-actions';
+import { createSale } from '@/app/actions/sales-actions';
+
+interface Client {
+    id: string;
+    nom: string;
+    prenom: string;
+}
 
 interface ClientPOSTabProps {
     client: Client;
     clientId: string;
+}
+
+interface Product {
+    id: string;
+    nomProduit: string;
+    reference?: string;
+    categorie?: string;
+    categorieId?: string;
+    prixVente: number;
+    quantiteStock: number;
+}
+
+interface Category {
+    id: number;
+    name: string;
 }
 
 interface CartItem {
@@ -46,40 +69,31 @@ const getCategoryIconByName = (name: string = '') => {
 export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
     const [cartItems, setCartItems] = React.useState<CartItem[]>([]);
     const [products, setProducts] = React.useState<Product[]>([]);
-    const [categories, setCategories] = React.useState<{ id: string, name: string }[]>([]);
+    const [categories, setCategories] = React.useState<Category[]>([]);
     const [searchQuery, setSearchQuery] = React.useState('');
     const [activeCategory, setActiveCategory] = React.useState('all');
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [isLoading, setIsLoading] = React.useState(true);
 
-    const firestore = useFirestore();
-    const { user } = useFirebase();
     const { toast } = useToast();
     const router = useRouter();
 
     // Load products and categories
     React.useEffect(() => {
-        if (!firestore || !user) return;
-
         const loadData = async () => {
             setIsLoading(true);
             try {
                 // Products
-                const productsRef = collection(firestore, `stores/${user.uid}/products`);
-                const snapshot = await getDocs(productsRef);
-                const loadedProducts = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                } as Product));
-                setProducts(loadedProducts);
+                const productsResult = await getProducts();
+                if (productsResult.success && productsResult.data) {
+                    setProducts(productsResult.data as any);
+                }
 
                 // Categories
-                const categoriesRef = collection(firestore, `stores/${user.uid}/categories`);
-                const catSnapshot = await getDocs(categoriesRef);
-                setCategories(catSnapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                } as { id: string, name: string })));
+                const categoriesResult = await getCategories();
+                if (categoriesResult.success && categoriesResult.data) {
+                    setCategories(categoriesResult.data as any);
+                }
 
             } catch (error) {
                 console.error('Error loading data:', error);
@@ -94,7 +108,7 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
         };
 
         loadData();
-    }, [firestore, user]);
+    }, []);
 
     // Filter products
     const filteredProducts = React.useMemo(() => {
@@ -103,7 +117,7 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
         // Filter by category
         if (activeCategory !== 'all') {
             // ID match or fallback to name match
-            filtered = filtered.filter(p => p.categorieId === activeCategory || p.categorie === activeCategory);
+            filtered = filtered.filter(p => p.categorieId === activeCategory || p.categorieId === parseInt(activeCategory) || p.categorie === activeCategory);
         }
 
         // Filter by search
@@ -180,64 +194,39 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
             return;
         }
 
-        if (!firestore || !user) return;
-
         setIsSubmitting(true);
 
         try {
-            const batch = writeBatch(firestore);
-
-            const orderData = {
-                clientId: client.id,
-                clientNom: client.nom,
-                clientPrenom: client.prenom,
+            const saleData = {
+                clientId: clientId,
                 items: cartItems.map(item => ({
-                    productId: item.product.id,
-                    nomProduit: item.product.nomProduit,
-                    reference: item.product.reference,
-                    prixVente: item.product.prixVente,
+                    productRef: item.product.id,
+                    productName: item.product.nomProduit,
                     quantity: item.quantity,
+                    unitPrice: item.product.prixVente,
                     total: item.product.prixVente * item.quantity,
                 })),
-                totalNet: total,
-                totalPaye: 0,
-                resteAPayer: total,
-                type: 'commande',
-                status: 'impayée',
-                date: new Date().toISOString(),
-                createdAt: serverTimestamp(),
-                userId: user.uid,
-                paymentHistory: [],
+                paymentMethod: 'cash',
+                notes: `Vente POS pour ${client.prenom} ${client.nom}`
             };
 
-            const salesRef = collection(firestore, `stores/${user.uid}/sales`);
-            const newSaleRef = firestoreDoc(salesRef);
-            batch.set(newSaleRef, orderData);
+            const result = await createSale(saleData);
 
-            const clientRef = firestoreDoc(firestore, `stores/${user.uid}/clients`, client.id);
-            batch.update(clientRef, {
-                lastVisit: serverTimestamp(),
-                totalSpent: increment(total),
-                ordersCount: increment(1),
-                totalDebt: increment(total),
-            });
-
-            cartItems.forEach(item => {
-                const productRef = firestoreDoc(firestore, `stores/${user.uid}/products`, item.product.id);
-                batch.update(productRef, {
-                    quantiteStock: increment(-item.quantity)
+            if (result.success) {
+                toast({
+                    title: 'Vente enregistrée !',
+                    description: `Commande créée avec succès.`,
                 });
-            });
 
-            await batch.commit();
-
-            toast({
-                title: 'Vente enregistrée !',
-                description: `Commande #${newSaleRef.id.substring(0, 8)} créée.`,
-            });
-
-            setCartItems([]);
-            router.refresh();
+                setCartItems([]);
+                router.refresh();
+            } else {
+                toast({
+                    variant: 'destructive',
+                    title: 'Erreur',
+                    description: result.error || 'Impossible de créer la commande.',
+                });
+            }
 
         } catch (error) {
             console.error('Error:', error);

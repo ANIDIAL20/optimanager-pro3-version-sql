@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle, Clock, Trash2, AlertCircle, Info, Bell, DollarSign, Box, ShoppingBag, Calendar } from 'lucide-react';
@@ -32,12 +32,32 @@ export function ReminderCard({ reminder, onUpdate }: ReminderCardProps) {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
-  // Priority config
-  const priorityConfig: Record<string, { color: string; icon: any; label: string }> = {
-    urgent: { color: 'bg-red-100 text-red-800 border-red-200', icon: AlertCircle, label: 'Urgent' },
-    important: { color: 'bg-orange-100 text-orange-800 border-orange-200', icon: Bell, label: 'Important' },
-    normal: { color: 'bg-blue-100 text-blue-800 border-blue-200', icon: Info, label: 'Normal' },
-    info: { color: 'bg-gray-100 text-gray-800 border-gray-200', icon: Info, label: 'Info' },
+  // Priority config with SpotlightCard colors
+  const priorityConfig: Record<string, { color: string; spotlightColor: string; icon: any; label: string }> = {
+    urgent: { 
+      color: 'bg-red-100 text-red-800 border-red-200', 
+      spotlightColor: 'rgba(239, 68, 68, 0.2)',
+      icon: AlertCircle, 
+      label: 'Urgent' 
+    },
+    important: { 
+      color: 'bg-orange-100 text-orange-800 border-orange-200', 
+      spotlightColor: 'rgba(245, 158, 11, 0.2)',
+      icon: Bell, 
+      label: 'Important' 
+    },
+    normal: { 
+      color: 'bg-blue-100 text-blue-800 border-blue-200', 
+      spotlightColor: 'rgba(59, 130, 246, 0.15)',
+      icon: Info, 
+      label: 'Normal' 
+    },
+    info: { 
+      color: 'bg-gray-100 text-gray-800 border-gray-200', 
+      spotlightColor: 'rgba(100, 116, 139, 0.1)',
+      icon: Info, 
+      label: 'Info' 
+    },
   };
 
   // Type icons
@@ -81,16 +101,16 @@ export function ReminderCard({ reminder, onUpdate }: ReminderCardProps) {
     };
 
   return (
-    <Card className={cn("border-l-4 transition-all hover:shadow-md", {
-      'border-l-red-500': reminder.priority === 'urgent',
-      'border-l-orange-500': reminder.priority === 'important',
-      'border-l-blue-500': reminder.priority === 'normal',
-      'border-l-gray-500': reminder.priority === 'info',
-      'opacity-60': reminder.status === 'completed',
-    })}>
-      <CardHeader className="pb-2">
+    <SpotlightCard 
+      className={cn("p-6 transition-all", {
+        'opacity-60': reminder.status === 'completed',
+      })}
+      spotlightColor={config.spotlightColor}
+    >
+      {/* Header */}
+      <div className="space-y-4">
         <div className="flex justify-between items-start">
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
             <Badge variant="outline" className={cn("flex gap-1 items-center", config.color)}>
               <config.icon className="h-3 w-3" />
               {config.label}
@@ -103,41 +123,56 @@ export function ReminderCard({ reminder, onUpdate }: ReminderCardProps) {
           {reminder.dueDate && (
             <div className={cn("text-xs font-medium flex items-center", {
               'text-red-500': new Date(reminder.dueDate) < new Date() && reminder.status !== 'completed',
-              'text-gray-500': new Date(reminder.dueDate) >= new Date() || reminder.status === 'completed'
+              'text-slate-500': new Date(reminder.dueDate) >= new Date() || reminder.status === 'completed'
             })}>
               <Clock className="h-3 w-3 mr-1" />
               {format(new Date(reminder.dueDate), 'dd/MM/yyyy', { locale: fr })}
             </div>
           )}
         </div>
-        <CardTitle className="text-base mt-2">{reminder.title}</CardTitle>
-      </CardHeader>
-      
-      <CardContent className="pb-2 text-sm text-gray-600">
-        <p>{reminder.message}</p>
+
+        {/* Title */}
+        <h3 className="text-base font-bold text-slate-900">{reminder.title}</h3>
+
+        {/* Message */}
+        <p className="text-sm text-slate-600">{reminder.message}</p>
+
+        {/* Metadata */}
         {reminder.metadata && (
-          <div className="mt-2 text-xs bg-gray-50 p-2 rounded">
-             {/* Simple metadata display for MVP */}
-             <pre className="whitespace-pre-wrap font-sans">
+          <div className="text-xs bg-slate-50 p-2 rounded border border-slate-100">
+             <pre className="whitespace-pre-wrap font-sans text-slate-600">
                {typeof reminder.metadata === 'string' 
                   ? (JSON.parse(reminder.metadata).details || '')
                   : (reminder.metadata.details || '')}
              </pre>
           </div>
         )}
-      </CardContent>
 
-      <CardFooter className="pt-2 flex justify-end gap-2">
-        {reminder.status !== 'completed' && (
-          <Button size="sm" variant="outline" className="h-8 border-green-200 text-green-700 hover:bg-green-50 hover:text-green-800" onClick={handleComplete} disabled={isLoading}>
-            <CheckCircle className="h-3.5 w-3.5 mr-1" />
-            Terminer
+        {/* Actions */}
+        <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+          {reminder.status !== 'completed' && (
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="h-8 border-green-200 text-green-700 hover:bg-green-50 hover:text-green-800" 
+              onClick={handleComplete} 
+              disabled={isLoading}
+            >
+              <CheckCircle className="h-3.5 w-3.5 mr-1" />
+              Terminer
+            </Button>
+          )}
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            className="h-8 text-slate-400 hover:text-red-500" 
+            onClick={handleDelete} 
+            disabled={isLoading}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
           </Button>
-        )}
-        <Button size="sm" variant="ghost" className="h-8 text-gray-400 hover:text-red-500" onClick={handleDelete} disabled={isLoading}>
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      </CardFooter>
-    </Card>
+        </div>
+      </div>
+    </SpotlightCard>
   );
 }

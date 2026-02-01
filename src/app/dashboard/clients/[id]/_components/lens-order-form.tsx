@@ -30,13 +30,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, useFirebase } from '@/firebase';
-import { collection, query, where, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
-import type { Prescription, Supplier, Traitement } from '@/lib/types';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2 } from 'lucide-react';
+
+// Server Actions
+import { getPrescriptions } from '@/app/actions/prescriptions-actions';
+import { getSuppliersList } from '@/app/actions/supplier-actions';
+import { getSettings } from '@/app/actions/settings-actions';
+import { createLensOrder, type LensOrderInput } from '@/app/actions/lens-orders-actions';
 
 const LensOrderSchema = z.object({
   prescriptionId: z.string().min(1, 'Veuillez sélectionner une prescription.'),
@@ -52,6 +55,23 @@ interface LensOrderFormProps {
   clientId: string;
 }
 
+interface Prescription {
+  id: string;
+  date: string;
+  doctorName?: string;
+  data: any;
+}
+
+interface Supplier {
+  id: number;
+  nomCommercial: string;
+}
+
+interface Treatment {
+  id: number;
+  name: string;
+}
+
 export function LensOrderForm({ clientId }: LensOrderFormProps) {
   const form = useForm<LensOrderFormValues>({
     resolver: zodResolver(LensOrderSchema),
@@ -64,36 +84,73 @@ export function LensOrderForm({ clientId }: LensOrderFormProps) {
     },
   });
 
-  const firestore = useFirestore();
-  const { user } = useFirebase();
   const { toast } = useToast();
 
-  // Fetch client's prescriptions
-  const prescriptionsQuery = useMemoFirebase(
-    () =>
-      firestore && user
-        ? query(collection(firestore, `stores/${user.uid}/clients/${clientId}/prescriptions`), orderBy('date', 'desc'))
-        : null,
-    [firestore, user, clientId]
-  );
-  const { data: prescriptions, isLoading: isLoadingPrescriptions } = useCollection<Prescription>(prescriptionsQuery);
+  // State
+  const [prescriptions, setPrescriptions] = React.useState<Prescription[]>([]);
+  const [suppliers, setSuppliers] = React.useState<Supplier[]>([]);
+  const [treatments, setTreatments] = React.useState<Treatment[]>([]);
+  const [isLoadingPrescriptions, setIsLoadingPrescriptions] = React.useState(false);
+  const [isLoadingSuppliers, setIsLoadingSuppliers] = React.useState(false);
+  const [isLoadingTreatments, setIsLoadingTreatments] = React.useState(false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-  // Fetch lens suppliers
-  const suppliersQuery = useMemoFirebase(
-    () =>
-      firestore && user
-        ? query(collection(firestore, `stores/${user.uid}/suppliers`), where('typeProduits', 'array-contains', 'Verres'))
-        : null,
-    [firestore, user]
-  );
-  const { data: suppliers, isLoading: isLoadingSuppliers } = useCollection<Supplier>(suppliersQuery);
+  // Fetch prescriptions
+  React.useEffect(() => {
+    const loadPrescriptions = async () => {
+      setIsLoadingPrescriptions(true);
+      try {
+        const result = await getPrescriptions(clientId);
+        if (result.success && result.data) {
+          setPrescriptions(result.data as any);
+        }
+      } catch (error) {
+        console.error('Error loading prescriptions:', error);
+      } finally {
+        setIsLoadingPrescriptions(false);
+      }
+    };
 
-  // Fetch lens treatments
-  const treatmentsQuery = useMemoFirebase(
-    () => (firestore && user ? query(collection(firestore, `stores/${user.uid}/traitements`), orderBy('name', 'asc')) : null),
-    [firestore, user]
-  );
-  const { data: treatments, isLoading: isLoadingTreatments } = useCollection<Traitement>(treatmentsQuery);
+    loadPrescriptions();
+  }, [clientId]);
+
+  // Fetch suppliers
+  React.useEffect(() => {
+    const loadSuppliers = async () => {
+      setIsLoadingSuppliers(true);
+      try {
+        const result = await getSuppliersList();
+        if (result.success && result.data) {
+          setSuppliers(result.data as any);
+        }
+      } catch (error) {
+        console.error('Error loading suppliers:', error);
+      } finally {
+        setIsLoadingSuppliers(false);
+      }
+    };
+
+    loadSuppliers();
+  }, []);
+
+  // Fetch treatments
+  React.useEffect(() => {
+    const loadTreatments = async () => {
+      setIsLoadingTreatments(true);
+      try {
+        const result = await getSettings('treatments');
+        if (result.success && result.data) {
+          setTreatments(result.data as any);
+        }
+      } catch (error) {
+        console.error('Error loading treatments:', error);
+      } finally {
+        setIsLoadingTreatments(false);
+      }
+    };
+
+    loadTreatments();
+  }, []);
 
   const selectedPrescriptionId = form.watch('prescriptionId');
   const selectedPrescription = React.useMemo(
@@ -102,8 +159,6 @@ export function LensOrderForm({ clientId }: LensOrderFormProps) {
   );
 
   const onSubmit = async (data: LensOrderFormValues) => {
-    if (!firestore) return;
-
     const fullSelectedPrescription = prescriptions?.find(p => p.id === data.prescriptionId);
 
     if (!fullSelectedPrescription) {
@@ -115,34 +170,41 @@ export function LensOrderForm({ clientId }: LensOrderFormProps) {
       return;
     }
 
+    setIsSubmitting(true);
     try {
-      const orderData = {
-        ...data,
-        clientId,
-        orderDate: new Date().toISOString(),
-        status: 'Draft' as const,
-        correction: {
-          odSphere: fullSelectedPrescription.odSphere || '',
-          odCylindre: fullSelectedPrescription.odCylindre || '',
-          odAxe: fullSelectedPrescription.odAxe || '',
-          odAddition: fullSelectedPrescription.odAddition || '',
-          ogSphere: fullSelectedPrescription.ogSphere || '',
-          ogCylindre: fullSelectedPrescription.ogCylindre || '',
-          ogAxe: fullSelectedPrescription.ogAxe || '',
-          ogAddition: fullSelectedPrescription.ogAddition || '',
-          ecartPupillaire: fullSelectedPrescription.ecartPupillaire || '',
-          hauteurMontage: fullSelectedPrescription.hauteurMontage || ''
-        }
+      const supplier = suppliers.find(s => s.id.toString() === data.supplierId);
+      
+      const orderInput: LensOrderInput = {
+        clientId: parseInt(clientId),
+        prescriptionId: parseInt(data.prescriptionId),
+        orderType: 'unifocal',
+        lensType: data.lensType,
+        treatment: data.treatments?.join(', ') || null,
+        supplierName: supplier?.nomCommercial || 'Unknown',
+        rightEye: fullSelectedPrescription.data?.od || null,
+        leftEye: fullSelectedPrescription.data?.og || null,
+        unitPrice: 0,
+        quantity: 1,
+        totalPrice: 0,
+        status: 'pending',
+        notes: data.notes
       };
-      if (!user) return;
-      const lensOrdersRef = collection(firestore, `stores/${user.uid}/clients/${clientId}/lens_orders`);
-      await addDocumentNonBlocking(lensOrdersRef, orderData); // Changed ordersRef to lensOrdersRef
 
-      toast({
-        title: 'Commande de verres créée',
-        description: 'La nouvelle commande a été enregistrée en tant que brouillon.',
-      });
-      form.reset();
+      const result = await createLensOrder(orderInput);
+
+      if (result.success) {
+        toast({
+          title: 'Commande de verres créée',
+          description: 'La nouvelle commande a été enregistrée en tant que brouillon.',
+        });
+        form.reset();
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Erreur',
+          description: result.error || "Une erreur s'est produite lors de la création de la commande.",
+        });
+      }
     } catch (error) {
       console.error("Order creation error:", error);
       toast({
@@ -150,6 +212,8 @@ export function LensOrderForm({ clientId }: LensOrderFormProps) {
         title: 'Erreur',
         description: "Une erreur s'est produite lors de la création de la commande.",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -310,8 +374,8 @@ export function LensOrderForm({ clientId }: LensOrderFormProps) {
               )}
             />
 
-            <Button type="submit" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" disabled={isSubmitting || form.formState.isSubmitting}>
+              {(isSubmitting || form.formState.isSubmitting) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Créer la Commande
             </Button>
           </form>

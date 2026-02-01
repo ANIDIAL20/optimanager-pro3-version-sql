@@ -38,7 +38,7 @@ export default function NewClientPage() {
                     title: '✅ Succès',
                     description: 'Client créé avec succès',
                 });
-                router.push(`/dashboard/clients/${result.id}`); 
+                router.push('/dashboard/clients'); 
             } else {
                 toast({
                     title: '❌ Erreur',

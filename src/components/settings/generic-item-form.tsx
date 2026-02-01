@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useForm } from 'react-hook-form';
@@ -15,9 +14,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { useFirestore, addDocumentNonBlocking, updateDocumentNonBlocking, useFirebase } from '@/firebase';
-import { collection, doc } from 'firebase/firestore';
+import { createSetting, updateSetting } from '@/app/actions/settings-actions';
 import { Loader2 } from 'lucide-react';
+import { useState } from 'react';
 
 const GenericItemSchema = z.object({
   name: z.string().min(2, { message: 'Le nom doit contenir au moins 2 caractères.' }),
@@ -25,50 +24,74 @@ const GenericItemSchema = z.object({
 
 type FormValues = z.infer<typeof GenericItemSchema>;
 
+// Map collection names to setting types
+const collectionToTypeMap: Record<string, string> = {
+  'brands': 'brands',
+  'categories': 'categories',
+  'materials': 'materials',
+  'colors': 'colors',
+  'treatments': 'treatments',
+  'mountingTypes': 'mountingTypes',
+  'banks': 'banks',
+  'insurances': 'insurances',
+  'marques': 'brands',
+  'categories': 'categories',
+  'matieres': 'materials',
+  'couleurs': 'colors',
+  'traitements': 'treatments',
+  'typesMontage': 'mountingTypes',
+  'banques': 'banks',
+  'mutuelles': 'insurances',
+};
+
 interface GenericItemFormProps {
-  item?: { id: string, name: string };
+  item?: { id: string | number, name: string };
   collectionName: string;
   itemName: string;
   onSuccess: () => void;
 }
 
 export function GenericItemForm({ item, collectionName, itemName, onSuccess }: GenericItemFormProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const form = useForm<FormValues>({
     resolver: zodResolver(GenericItemSchema),
     defaultValues: { name: item?.name || '' },
   });
 
   const { toast } = useToast();
-  const firestore = useFirestore();
-
-  const { user } = useFirebase();
 
   const onSubmit = async (data: FormValues) => {
-    if (!firestore || !user) return;
-
+    setIsSubmitting(true);
     try {
+      // Map collection name to setting type
+      const settingType = collectionToTypeMap[collectionName] || collectionName;
+
       if (item) {
-        const docRef = doc(firestore, `stores/${user.uid}/${collectionName}`, item.id);
-        await updateDocumentNonBlocking(docRef, data);
+        // Update existing item
+        const itemId = typeof item.id === 'string' ? parseInt(item.id) : item.id;
+        await updateSetting(settingType as any, itemId, data);
         toast({
           title: `${itemName} modifié(e)`,
           description: `L'élément "${data.name}" a été mis à jour.`,
         });
       } else {
-        const colRef = collection(firestore, `stores/${user.uid}/${collectionName}`);
-        await addDocumentNonBlocking(colRef, data);
+        // Create new item
+        await createSetting(settingType as any, data);
         toast({
           title: `${itemName} ajouté(e)`,
           description: `L'élément "${data.name}" a été créé.`,
         });
       }
       onSuccess();
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Error saving setting:', error);
       toast({
         variant: 'destructive',
         title: 'Erreur',
-        description: "Une erreur s'est produite.",
+        description: error.message || "Une erreur s'est produite.",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -88,8 +111,8 @@ export function GenericItemForm({ item, collectionName, itemName, onSuccess }: G
             </FormItem>
           )}
         />
-        <Button type="submit" disabled={form.formState.isSubmitting} className="w-full">
-          {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        <Button type="submit" disabled={isSubmitting} className="w-full">
+          {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {item ? 'Enregistrer' : `Ajouter`}
         </Button>
       </form>

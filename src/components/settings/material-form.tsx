@@ -1,6 +1,6 @@
-
 'use client';
 
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -15,8 +15,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { useFirestore, addDocumentNonBlocking, updateDocumentNonBlocking, useFirebase } from '@/firebase';
-import { collection, doc } from 'firebase/firestore';
 import type { Material } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
 import {
@@ -26,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { createSetting, updateSetting } from '@/app/actions/settings-actions';
 
 const MaterialSchema = z.object({
   name: z.string().min(2, { message: 'Le nom doit contenir au moins 2 caractères.' }),
@@ -40,6 +39,7 @@ interface MaterialFormProps {
 }
 
 export function MaterialForm({ material, onSuccess }: MaterialFormProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const form = useForm<MaterialFormValues>({
     resolver: zodResolver(MaterialSchema),
     defaultValues: {
@@ -49,36 +49,34 @@ export function MaterialForm({ material, onSuccess }: MaterialFormProps) {
   });
 
   const { toast } = useToast();
-  const firestore = useFirestore();
-
-  const { user } = useFirebase();
 
   const onSubmit = async (data: MaterialFormValues) => {
-    if (!firestore || !user) return;
-
+    setIsSubmitting(true);
     try {
       if (material) {
-        const docRef = doc(firestore, `stores/${user.uid}/matieres`, material.id);
-        await updateDocumentNonBlocking(docRef, data);
+        const materialId = typeof material.id === 'string' ? parseInt(material.id) : material.id;
+        await updateSetting('materials', materialId, data as any);
         toast({
-          title: 'Matière modifiée',
+          title: '! modifiée',
           description: `La matière "${data.name}" a été mise à jour.`,
         });
       } else {
-        const colRef = collection(firestore, `stores/${user.uid}/matieres`);
-        await addDocumentNonBlocking(colRef, data);
+        await createSetting('materials', data as any);
         toast({
           title: 'Matière ajoutée',
           description: `La matière "${data.name}" a été créée.`,
         });
       }
       onSuccess();
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Error saving material:', error);
       toast({
         variant: 'destructive',
         title: 'Erreur',
-        description: "Une erreur s'est produite. Veuillez réessayer.",
+        description: error.message || "Une erreur s'est produite. Veuillez réessayer.",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -120,8 +118,8 @@ export function MaterialForm({ material, onSuccess }: MaterialFormProps) {
             </FormItem>
           )}
         />
-        <Button type="submit" disabled={form.formState.isSubmitting} className="w-full">
-          {form.formState.isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+        <Button type="submit" disabled={isSubmitting} className="w-full">
+          {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           {material ? 'Enregistrer les modifications' : 'Ajouter la matière'}
         </Button>
       </form>
