@@ -1,29 +1,39 @@
-
 'use client';
 
 import * as React from 'react';
-import { useFirestore, useCollection, useMemoFirebase, useFirebase } from '@/firebase';
-import { collection } from 'firebase/firestore';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Loader2, AlertCircle } from 'lucide-react';
+import { PlusCircle, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ManageItem } from './manage-item';
 import type { Category } from '@/lib/types';
-import { GenericItemForm } from './generic-item-form';
+import { GenericItemForm } from '@/generic-item-form';
+import { getSettings } from '@/app/actions/settings-actions';
 
 
 export function ManageCategories() {
-  const { user } = useFirebase();
-  const firestore = useFirestore();
+  const [categories, setCategories] = React.useState<Category[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const categoriesQuery = useMemoFirebase(
-    () => firestore && user ? collection(firestore, `stores/${user.uid}/categories`) : null,
-    [firestore, user]
-  );
+  const fetchCategories = React.useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await getSettings('categories');
+      setCategories(data as Category[]);
+    } catch (err: any) {
+      console.error('Error fetching categories:', err);
+      setError(err.message || 'Erreur de chargement');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-  const { data: categories, isLoading, error } = useCollection<Category>(categoriesQuery);
+  React.useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
 
   if (error) {
     return (
@@ -31,7 +41,11 @@ export function ManageCategories() {
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Erreur de Connexion</AlertTitle>
         <AlertDescription>
-          Impossible de charger les catégories.
+          Impossible de charger les catégories. {error}
+          <Button variant="outline" size="sm" onClick={fetchCategories} className="mt-2">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Réessayer
+          </Button>
         </AlertDescription>
       </Alert>
     );
@@ -53,9 +67,9 @@ export function ManageCategories() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {categories?.map(item => (
-              <ManageItem key={item.id} item={item} collectionName="categories" itemName="Catégorie" FormComponent={GenericItemForm} onSuccess={() => { }} />
+              <ManageItem key={item.id} item={item} collectionName="categories" itemName="Catégorie" FormComponent={GenericItemForm} onSuccess={fetchCategories} />
             ))}
-            <DialogItemAdd collectionName="categories" itemName="Catégorie" FormComponent={GenericItemForm} />
+            <DialogItemAdd collectionName="categories" itemName="Catégorie" FormComponent={GenericItemForm} onSuccess={fetchCategories} />
           </div>
         )}
       </CardContent>
@@ -63,8 +77,14 @@ export function ManageCategories() {
   );
 }
 
-const DialogItemAdd = ({ collectionName, itemName, FormComponent }: { collectionName: string, itemName: string, FormComponent: React.FC<any> }) => {
-  const [isOpen, setIsOpen] = React.useState(false);
+const DialogItemAdd = ({ collectionName, itemName, FormComponent, onSuccess }: { collectionName: string, itemName: string, FormComponent: React.FC<any>, onSuccess: () => void }) => {
+const [isOpen, setIsOpen] = React.useState(false);
+  
+  const handleSuccess = () => {
+    setIsOpen(false);
+    onSuccess();
+  };
+
   return (
     <Card className="border-dashed border-2 hover:border-primary transition-colors hover:text-primary flex items-center justify-center">
       <button onClick={() => setIsOpen(true)} className="w-full h-full text-sm font-semibold text-muted-foreground hover:text-primary">
@@ -77,7 +97,7 @@ const DialogItemAdd = ({ collectionName, itemName, FormComponent }: { collection
         collectionName={collectionName}
         itemName={itemName}
         FormComponent={FormComponent}
-        onSuccess={() => { }}
+        onSuccess={handleSuccess}
       />
     </Card>
   );

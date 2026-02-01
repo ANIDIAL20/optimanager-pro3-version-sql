@@ -36,7 +36,6 @@ import {
     FormLabel,
     FormMessage,
 } from '@/components/ui/form';
-import { useFirebase } from '@/firebase';
 import { updateClient, getClient } from '@/app/actions/clients-actions';
 import { useToast } from '@/hooks/use-toast';
 import { BackButton } from '@/components/ui/back-button';

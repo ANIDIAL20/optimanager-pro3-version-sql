@@ -163,12 +163,12 @@ export function PrescriptionForm({ clientId }: PrescriptionFormProps) {
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <FormField
                 control={form.control}
                 name="date"
                 render={({ field }) => (
-                  <FormItem className="flex flex-col">
+                  <FormItem>
                     <FormLabel>Date de la mesure</FormLabel>
                     <Popover>
                       <PopoverTrigger asChild>
@@ -176,14 +176,14 @@ export function PrescriptionForm({ clientId }: PrescriptionFormProps) {
                           <Button
                             variant={'outline'}
                             className={cn(
-                              'pl-3 text-left font-normal',
+                              'w-full h-10 justify-start text-left font-normal',
                               !field.value && 'text-muted-foreground'
                             )}
                           >
                             {field.value ? (
                               format(field.value, 'dd/MM/yyyy')
                             ) : (
-                              <span>jj/mm/aaaa</span>
+                              <span>JJ/MM/AAAA</span>
                             )}
                             <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                           </Button>
@@ -234,7 +234,7 @@ export function PrescriptionForm({ clientId }: PrescriptionFormProps) {
                   <FormItem>
                     <FormLabel>Prescripteur</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Dr. Martin" {...field} />
+                      <Input placeholder="ex. Dr. Martin" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

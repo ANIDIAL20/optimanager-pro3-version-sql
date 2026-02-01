@@ -80,10 +80,10 @@ export default function DashboardClient({ user }: DashboardClientProps) {
         <div className="space-y-6">
             {/* Header */}
             <div>
-                <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+                <h1 className="text-3xl font-bold tracking-tight text-foreground">
                     Tableau de Bord
                 </h1>
-                <p className="text-slate-500 mt-1">
+                <p className="text-muted-foreground mt-1">
                     Vue d'ensemble de votre boutique
                 </p>
             </div>
@@ -96,10 +96,10 @@ export default function DashboardClient({ user }: DashboardClientProps) {
                     <SpotlightCard className="h-full p-6 cursor-pointer" spotlightColor="rgba(16, 185, 129, 0.2)">
                         <div className="flex items-start justify-between mb-4">
                             <div>
-                                <p className="text-sm font-medium text-slate-600 mb-2">
+                                <p className="text-sm font-medium text-muted-foreground mb-2">
                                     Chiffre d'Affaires Global
                                 </p>
-                                <h2 className="text-4xl font-bold tracking-tight text-slate-900 group-hover:text-emerald-700 transition-colors">
+                                <h2 className="text-4xl font-bold tracking-tight text-foreground group-hover:text-emerald-700 transition-colors">
                                     <SensitiveData value={data?.globalRevenue || 0} type="currency" currency="DH" />
                                 </h2>
                             </div>
@@ -120,14 +120,14 @@ export default function DashboardClient({ user }: DashboardClientProps) {
                 <Link href="/dashboard/ventes" className="block group">
                     <SpotlightCard className="h-full p-6 cursor-pointer" spotlightColor="rgba(59, 130, 246, 0.2)">
                         <div className="flex items-start justify-between mb-4">
-                            <p className="text-sm font-medium text-slate-600">
+                            <p className="text-sm font-medium text-muted-foreground">
                                 Ventes du Jour
                             </p>
                             <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center shadow-md">
                                 <ShoppingCart className="h-5 w-5 text-white" />
                             </div>
                         </div>
-                        <h3 className="text-3xl font-bold tracking-tight text-slate-900 group-hover:text-blue-700 transition-colors">
+                        <h3 className="text-3xl font-bold tracking-tight text-foreground group-hover:text-blue-700 transition-colors">
                             {data?.todaySalesCount || 0}
                         </h3>
                         <p className="text-xs text-slate-500 mt-1">
@@ -164,7 +164,7 @@ export default function DashboardClient({ user }: DashboardClientProps) {
                     <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-2">
                             <AlertTriangle className="h-5 w-5 text-red-600" />
-                            <h3 className="text-sm font-bold text-slate-900 border-b border-transparent">
+                            <h3 className="text-sm font-bold text-foreground border-b border-transparent">
                                 Stock Critique / Rupture
                             </h3>
                         </div>
@@ -220,7 +220,7 @@ export default function DashboardClient({ user }: DashboardClientProps) {
                             <div className="h-8 w-8 rounded-lg bg-indigo-50 flex items-center justify-center">
                                 <ShoppingBag className="h-4 w-4 text-indigo-600" />
                             </div>
-                            <h3 className="text-lg font-bold text-slate-900">
+                            <h3 className="text-lg font-bold text-foreground">
                                 Dernières Ventes
                             </h3>
                         </div>
@@ -292,7 +292,7 @@ export default function DashboardClient({ user }: DashboardClientProps) {
                         <div className="h-8 w-8 rounded-lg bg-purple-50 flex items-center justify-center">
                             <Bell className="h-4 w-4 text-purple-600" />
                         </div>
-                        <h3 className="text-lg font-bold text-slate-900">
+                        <h3 className="text-lg font-bold text-foreground">
                             Accès Rapide
                         </h3>
                     </div>
@@ -352,11 +352,11 @@ function DashboardSkeleton() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="lg:col-span-2 bg-white rounded-xl p-6 border border-slate-100 shadow-sm">
+                <div className="lg:col-span-2 bg-card rounded-xl p-6 border shadow-sm">
                     <Skeleton className="h-6 w-32 mb-4" />
                     <Skeleton className="h-10 w-48" />
                 </div>
-                <div className="bg-white rounded-xl p-6 border border-slate-100 shadow-sm">
+                <div className="bg-card rounded-xl p-6 border shadow-sm">
                     <Skeleton className="h-6 w-24 mb-4" />
                     <Skeleton className="h-10 w-24" />
                 </div>
@@ -368,7 +368,7 @@ function DashboardSkeleton() {
                     <Skeleton className="h-6 w-32 mb-4" />
                     <Skeleton className="h-8 w-16" />
                 </div>
-                <div className="lg:col-span-2 bg-white rounded-xl p-6 border border-slate-100 shadow-sm">
+                <div className="lg:col-span-2 bg-card rounded-xl p-6 border shadow-sm">
                     <Skeleton className="h-6 w-40 mb-4" />
                     <div className="space-y-4">
                         {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}

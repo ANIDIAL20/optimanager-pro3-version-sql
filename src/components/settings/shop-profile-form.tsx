@@ -104,6 +104,21 @@ export function ShopProfileForm() {
             return;
         }
 
+        // Validate required fields before upload
+        const currentValues = form.getValues();
+        if (!currentValues.shopName || currentValues.shopName.length < 2) {
+            toast({
+                variant: 'destructive',
+                title: 'Champ requis manquant',
+                description: 'Veuillez d\'abord entrer le nom de votre boutique (minimum 2 caractères).',
+            });
+            // Reset file input
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+            return;
+        }
+
         setIsUploading(true);
 
         try {
@@ -125,7 +140,7 @@ export function ShopProfileForm() {
 
             // Save via server action
             await upsertShopProfile({
-                ...form.getValues(),
+                ...currentValues,
                 logoUrl: base64String,
             });
 

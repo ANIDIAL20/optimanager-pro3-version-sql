@@ -41,8 +41,6 @@ export function StockUpdateDialog({
     const [reason, setReason] = React.useState<string>('');
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const { toast } = useToast();
-    const firestore = useFirestore();
-    const { user } = useFirebase();
 
     // Reset form when dialog opens/closes
     React.useEffect(() => {
@@ -53,11 +51,13 @@ export function StockUpdateDialog({
         }
     }, [open]);
 
+    // Normalize product stock field (handle both old and new formats)
+    const currentStock = React.useMemo(() => {
+        return Number((product as any).quantiteStock ?? (product as any).stock ?? 0);
+    }, [product]);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        // Server action handles auth/user check internally, but we can check if needed.
-        // if (!firestore || !user) ...
         
         const qty = parseInt(quantity);
         if (isNaN(qty) || qty <= 0) {
@@ -79,11 +79,11 @@ export function StockUpdateDialog({
         }
 
         // Check if removing stock would result in negative quantity
-        if (movementType === 'out' && product.quantiteStock < qty) {
+        if (movementType === 'out' && currentStock < qty) {
             toast({
                 variant: 'destructive',
                 title: 'Stock insuffisant',
-                description: `Vous ne pouvez pas retirer ${qty} unités. Stock actuel: ${product.quantiteStock}`,
+                description: `Vous ne pouvez pas retirer ${qty} unités. Stock actuel: ${currentStock}`,
             });
             return;
         }
@@ -97,7 +97,7 @@ export function StockUpdateDialog({
             );
 
             if (result.success) {
-                const newStock = result.newStock ?? (movementType === 'in' ? product.quantiteStock + qty : product.quantiteStock - qty);
+                const newStock = result.newStock ?? (movementType === 'in' ? currentStock + qty : currentStock - qty);
 
                 toast({
                     title: '✅ Stock mis à jour',
@@ -138,11 +138,11 @@ export function StockUpdateDialog({
     const newStock = React.useMemo(() => {
         const qty = parseInt(quantity) || 0;
         if (movementType === 'in') {
-            return product.quantiteStock + qty;
+            return currentStock + qty;
         } else {
-            return product.quantiteStock - qty;
+            return currentStock - qty;
         }
-    }, [quantity, movementType, product.quantiteStock]);
+    }, [quantity, movementType, currentStock]);
 
     const stockStatus = newStock < 3 ? 'critical' : newStock < 10 ? 'low' : 'good';
 
@@ -165,7 +165,7 @@ export function StockUpdateDialog({
                         <p className="text-sm text-slate-600 mb-1">Stock Actuel</p>
                         <div className="flex items-baseline gap-2">
                             <span className="text-4xl font-bold text-slate-900">
-                                {product.quantiteStock}
+                                {currentStock}
                             </span>
                             <span className="text-slate-500">unités</span>
                         </div>
@@ -221,7 +221,7 @@ export function StockUpdateDialog({
                                     id="quantity-out"
                                     type="number"
                                     min="1"
-                                    max={product.quantiteStock}
+                                    max={currentStock}
                                     placeholder="Ex: 10"
                                     value={quantity}
                                     onChange={(e) => setQuantity(e.target.value)}

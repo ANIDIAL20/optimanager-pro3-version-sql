@@ -5,8 +5,9 @@ import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { Badge } from '@/components/ui/badge';
 import { Phone, Mail, MapPin, DollarSign, Eye, Glasses, StickyNote, Pencil, Check, X, Loader2 } from 'lucide-react';
 import type { Client } from '@/lib/types';
-import { useFirestore, useCollection, useMemoFirebase, useFirebase } from '@/firebase';
-import { collection, query, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
+// Temporary: Firebase features disabled
+// import { useFirestore, useCollection, useMemoFirebase, useFirebase } from '@/firebase';
+// import { collection, query, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
 import { SensitiveData } from '@/components/ui/sensitive-data';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -30,10 +31,9 @@ type Prescription = {
 };
 
 export function ClientOverview({ client, clientId }: ClientOverviewProps) {
-    const firestore = useFirestore();
-    const { user } = useFirebase();
     const { toast } = useToast();
 
+    // Temporary: Disabled Firebase-dependent features
     // Notes Editing State
     const [isEditingNotes, setIsEditingNotes] = React.useState(false);
     const [notesContent, setNotesContent] = React.useState(client.notes || '');
@@ -46,19 +46,8 @@ export function ClientOverview({ client, clientId }: ClientOverviewProps) {
         }
     }, [client.notes, isEditingNotes]);
 
-    // Fetch latest prescription
-    const prescriptionQuery = useMemoFirebase(
-        () => firestore && user
-            ? query(
-                collection(firestore, `stores/${user.uid}/clients/${clientId}/prescriptions`),
-                orderBy('date', 'desc'),
-                limit(1)
-            )
-            : null,
-        [firestore, user, clientId]
-    );
-    const { data: prescriptions } = useCollection<Prescription>(prescriptionQuery);
-    const latestPrescription = prescriptions?.[0];
+    // Prescription fetching disabled - needs migration to Server Actions
+    const latestPrescription = null; // Temporarily disabled
 
     // Mock financial data - replace with actual data from your schema
     const totalSpent = client.totalSpent || 0;
@@ -76,22 +65,13 @@ export function ClientOverview({ client, clientId }: ClientOverviewProps) {
     // Let's check `client` type definition if unsure? 
     // For now I'll use `client.totalDebt` as "Reste à payer" seems to be the context.
 
+    // Notes saving disabled - needs migration to Server Actions
     const handleSaveNotes = async () => {
-        if (!firestore || !user) return;
-        setIsSavingNotes(true);
-        try {
-            const clientRef = doc(firestore, `stores/${user.uid}/clients/${clientId}`);
-            await updateDoc(clientRef, {
-                notes: notesContent
-            });
-            setIsEditingNotes(false);
-            toast({ title: "Notes mises à jour", description: "La note a été sauvegardée." });
-        } catch (error) {
-            console.error("Error saving notes:", error);
-            toast({ title: "Erreur", description: "Impossible de sauvegarder la note.", variant: "destructive" });
-        } finally {
-            setIsSavingNotes(false);
-        }
+        toast({ 
+            title: "Fonctionnalité Temporairement Désactivée", 
+            description: "La modification des notes sera bientôt disponible.",
+            variant: "destructive" 
+        });
     };
 
     return (

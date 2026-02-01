@@ -2,31 +2,49 @@
 
 import * as React from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { doc, getDoc } from 'firebase/firestore';
-import { useFirestore, useFirebase } from '@/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowLeft, Edit, Package, TrendingUp, DollarSign, Layers, Pencil } from 'lucide-react';
 import Link from 'next/link';
-import type { Product } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { StockUpdateDialog } from '@/components/dashboard/produits/stock-update-dialog';
 import { BackButton } from '@/components/ui/back-button';
+import { getProduct } from '@/app/actions/products-actions';
+
+interface Product {
+    id: string;
+    name?: string;
+    nomProduit?: string;
+    reference: string;
+    category?: string;
+    categorie?: string;
+    categorieId?: string;
+    brand?: string;
+    marque?: string;
+    marqueId?: string;
+    purchasePrice?: string | number;
+    prixAchat?: number;
+    salePrice?: string | number;
+    prixVente?: number;
+    stock?: number;
+    quantiteStock?: number;
+    minStock?: number;
+    stockMin?: number;
+    seuilAlerte?: number;
+    description?: string;
+    isActive: boolean;
+}
 
 export default function ProductDetailsPage() {
     const params = useParams();
     const router = useRouter();
     const searchParams = useSearchParams();
     const productId = params.id as string;
-    const firestore = useFirestore();
-    const { user } = useFirebase();
 
     const [product, setProduct] = React.useState<Product | null>(null);
-    const [brand, setBrand] = React.useState<string>('');
-    const [category, setCategory] = React.useState<string>('');
     const [isLoading, setIsLoading] = React.useState(true);
     const [error, setError] = React.useState<string | null>(null);
     const [showStockDialog, setShowStockDialog] = React.useState(false);
@@ -42,36 +60,16 @@ export default function ProductDetailsPage() {
     }, [searchParams, product, productId, router]);
 
     const fetchProduct = React.useCallback(async () => {
-        if (!firestore || !user || !productId) return;
+        if (!productId) return;
 
         try {
             setIsLoading(true);
-            const productRef = doc(firestore, `stores/${user.uid}/products`, productId);
-            const productSnap = await getDoc(productRef);
+            const result = await getProduct(productId);
 
-            if (productSnap.exists()) {
-                const productData = { id: productSnap.id, ...productSnap.data() } as Product;
-                setProduct(productData);
-
-                // Fetch brand name if marqueId exists
-                if (productData.marqueId) {
-                    const brandRef = doc(firestore, `stores/${user.uid}/marques`, productData.marqueId);
-                    const brandSnap = await getDoc(brandRef);
-                    if (brandSnap.exists()) {
-                        setBrand(brandSnap.data().name);
-                    }
-                }
-
-                // Fetch category name if categor ieId exists
-                if (productData.categorieId) {
-                    const categoryRef = doc(firestore, `stores/${user.uid}/categories`, productData.categorieId);
-                    const categorySnap = await getDoc(categoryRef);
-                    if (categorySnap.exists()) {
-                        setCategory(categorySnap.data().name);
-                    }
-                }
+            if (result.success && result.data) {
+                setProduct(result.data as Product);
             } else {
-                setError('Produit non trouvé');
+                setError(result.error || 'Produit non trouvé');
             }
         } catch (err) {
             console.error('Error fetching product:', err);
@@ -79,7 +77,7 @@ export default function ProductDetailsPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [firestore, user, productId]);
+    }, [productId]);
 
     React.useEffect(() => {
         fetchProduct();
@@ -104,7 +102,16 @@ export default function ProductDetailsPage() {
         );
     }
 
-    const stockStatus = product.quantiteStock < 3 ? 'critical' : product.quantiteStock < 10 ? 'low' : 'good';
+    // Normalize product fields to handle both old and new formats
+    const productName = product.nomProduit || product.name || '';
+    const prixVente = Number(product.prixVente || product.salePrice || 0);
+    const prixAchat = Number(product.prixAchat || product.purchasePrice || 0);
+    const quantiteStock = product.quantiteStock ?? product.stock ?? 0;
+    const stockMin = product.stockMin || product.minStock || product.seuilAlerte || 0;
+    const brandName = product.marque || product.brand || product.marqueId || '-';
+    const categoryName = product.categorie || product.category || product.categorieId || '-';
+
+    const stockStatus = quantiteStock < 3 ? 'critical' : quantiteStock < 10 ? 'low' : 'good';
 
     return (
         <div className="flex flex-1 flex-col gap-6">
@@ -116,7 +123,7 @@ export default function ProductDetailsPage() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-900">{product.nomProduit}</h1>
+                    <h1 className="text-3xl font-bold text-slate-900">{productName}</h1>
                     <p className="text-slate-600 mt-1">Référence: {product.reference}</p>
                 </div>
                 <Button asChild>
@@ -137,7 +144,7 @@ export default function ProductDetailsPage() {
                                 <DollarSign className="h-4 w-4 text-white" />
                             </div>
                         </div>
-                        <h3 className="text-2xl font-bold text-slate-900">{product.prixVente.toFixed(2)} MAD</h3>
+                        <h3 className="text-2xl font-bold text-slate-900">{prixVente.toFixed(2)} MAD</h3>
                     </div>
                 </SpotlightCard>
 
@@ -149,10 +156,12 @@ export default function ProductDetailsPage() {
                                 <TrendingUp className="h-4 w-4 text-white" />
                             </div>
                         </div>
-                        <h3 className="text-2xl font-bold text-slate-900">{product.prixAchat.toFixed(2)} MAD</h3>
-                        <p className="text-xs text-emerald-600">
-                            Marge: {((product.prixVente - product.prixAchat) / product.prixAchat * 100).toFixed(0)}%
-                        </p>
+                        <h3 className="text-2xl font-bold text-slate-900">{prixAchat.toFixed(2)} MAD</h3>
+                        {prixAchat > 0 && (
+                            <p className="text-xs text-emerald-600">
+                                Marge: {((prixVente - prixAchat) / prixAchat * 100).toFixed(0)}%
+                            </p>
+                        )}
                     </div>
                 </SpotlightCard>
 
@@ -184,10 +193,10 @@ export default function ProductDetailsPage() {
                             "text-2xl font-bold",
                             stockStatus === 'critical' ? "text-red-600" : "text-slate-900"
                         )}>
-                            {product.quantiteStock}
+                            {quantiteStock}
                         </h3>
-                        {product.stockMin && (
-                            <p className="text-xs text-slate-500">Min: {product.stockMin}</p>
+                        {stockMin > 0 && (
+                            <p className="text-xs text-slate-500">Min: {stockMin}</p>
                         )}
                     </div>
                 </SpotlightCard>
@@ -201,7 +210,7 @@ export default function ProductDetailsPage() {
                             </div>
                         </div>
                         <h3 className="text-2xl font-bold text-slate-900">
-                            {(product.prixVente * product.quantiteStock).toFixed(2)} MAD
+                            {(prixVente * quantiteStock).toFixed(2)} MAD
                         </h3>
                     </div>
                 </SpotlightCard>
@@ -222,15 +231,15 @@ export default function ProductDetailsPage() {
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-slate-600">Nom du Produit</p>
-                                <p className="text-lg font-semibold text-slate-900">{product.nomProduit}</p>
+                                <p className="text-lg font-semibold text-slate-900">{productName}</p>
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-slate-600">Marque</p>
-                                <p className="text-lg font-semibold text-slate-900">{brand || product.marqueId || '-'}</p>
+                                <p className="text-lg font-semibold text-slate-900">{brandName}</p>
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-slate-600">Catégorie</p>
-                                <p className="text-lg font-semibold text-slate-900">{category || product.categorieId || '-'}</p>
+                                <p className="text-lg font-semibold text-slate-900">{categoryName}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -245,11 +254,11 @@ export default function ProductDetailsPage() {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <p className="text-sm font-medium text-slate-600">Prix d'Achat</p>
-                                <p className="text-lg font-semibold text-slate-900">{product.prixAchat.toFixed(2)} MAD</p>
+                                <p className="text-lg font-semibold text-slate-900">{prixAchat.toFixed(2)} MAD</p>
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-slate-600">Prix de Vente</p>
-                                <p className="text-lg font-semibold text-slate-900">{product.prixVente.toFixed(2)} MAD</p>
+                                <p className="text-lg font-semibold text-slate-900">{prixVente.toFixed(2)} MAD</p>
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-slate-600">Quantité en Stock</p>
@@ -258,7 +267,7 @@ export default function ProductDetailsPage() {
                                         "text-lg font-semibold",
                                         stockStatus === 'critical' ? 'text-red-600' : stockStatus === 'low' ? 'text-orange-600' : 'text-green-600'
                                     )}>
-                                        {product.quantiteStock}
+                                        {quantiteStock}
                                     </p>
                                     {stockStatus === 'critical' && (
                                         <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
@@ -278,7 +287,7 @@ export default function ProductDetailsPage() {
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-slate-600">Stock Minimum</p>
-                                <p className="text-lg font-semibold text-slate-900">{product.stockMin || '-'}</p>
+                                <p className="text-lg font-semibold text-slate-900">{stockMin || '-'}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -299,7 +308,7 @@ export default function ProductDetailsPage() {
 
             {/* Stock Update Dialog */}
             <StockUpdateDialog
-                product={product}
+                product={product as any}
                 open={showStockDialog}
                 onOpenChange={setShowStockDialog}
                 onStockUpdated={fetchProduct}

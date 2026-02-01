@@ -38,10 +38,9 @@ import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
-// Firebase & Actions
-import { useFirestore, useFirebase } from '@/firebase';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+// Server Actions
 import { receiveLensOrder } from '@/app/actions/lens-orders-actions';
+import { getSuppliersList } from '@/app/actions/supplier-actions';
 
 // Schema
 const formSchema = z.object({
@@ -66,8 +65,6 @@ export function ReceiveLensModal({ open, onOpenChange, saleId }: ReceiveLensModa
     const [isLoadingSuppliers, setIsLoadingSuppliers] = React.useState(false);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-    const { user } = useFirebase();
-    const firestore = useFirestore();
     const { toast } = useToast();
 
     const form = useForm<FormValues>({
@@ -80,23 +77,27 @@ export function ReceiveLensModal({ open, onOpenChange, saleId }: ReceiveLensModa
         },
     });
 
-    // Fetch Suppliers
+    // Fetch Suppliers using Server Action
     React.useEffect(() => {
-        if (!open || !user || !firestore) return;
+        if (!open) return;
 
         const loadSuppliers = async () => {
             setIsLoadingSuppliers(true);
             try {
-                const q = query(
-                    collection(firestore, `stores/${user.uid}/suppliers`),
-                    orderBy('nomCommercial')
-                );
-                const snapshot = await getDocs(q);
-                const list = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    nomCommercial: doc.data().nomCommercial || 'Sans Nom',
-                }));
-                setSuppliers(list);
+                const result = await getSuppliersList();
+                if (result.success && result.data) {
+                    const list = result.data.map(supplier => ({
+                        id: supplier.id!.toString(),
+                        nomCommercial: supplier.nomCommercial || 'Sans Nom',
+                    }));
+                    setSuppliers(list);
+                } else {
+                    toast({
+                        title: "Erreur",
+                        description: "Impossible de charger les fournisseurs",
+                        variant: "destructive",
+                    });
+                }
             } catch (error) {
                 console.error("Error loading suppliers:", error);
                 toast({
@@ -110,18 +111,16 @@ export function ReceiveLensModal({ open, onOpenChange, saleId }: ReceiveLensModa
         };
 
         loadSuppliers();
-    }, [open, user, firestore, toast]);
+    }, [open, toast]);
 
     // Submit Handler
     const onSubmit = async (values: FormValues) => {
-        if (!user) return;
-
         setIsSubmitting(true);
         try {
             const selectedSupplier = suppliers.find(s => s.id === values.supplierId);
             const supplierName = selectedSupplier?.nomCommercial || "Fournisseur Inconnu";
 
-            const result = await receiveLensOrder(user.uid, saleId, {
+            const result = await receiveLensOrder(saleId, {
                 supplierId: values.supplierId,
                 supplierName: supplierName,
                 buyingPrice: values.buyingPrice,

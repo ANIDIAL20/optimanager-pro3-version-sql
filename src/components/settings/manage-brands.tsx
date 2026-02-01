@@ -1,22 +1,7 @@
-
 'use client';
 
 import * as React from 'react';
 import type { Brand, BrandCategory } from '@/lib/types';
-import {
-  collection,
-  doc,
-  query,
-  orderBy,
-  writeBatch,
-  getDocs,
-} from 'firebase/firestore';
-import {
-  useFirestore,
-  useCollection,
-  useMemoFirebase,
-  useFirebase
-} from '@/firebase';
 import {
   Card,
   CardContent,
@@ -31,6 +16,7 @@ import {
   AlertCircle,
   Database,
   Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import {
   Dialog,
@@ -46,42 +32,46 @@ import { useToast } from '@/hooks/use-toast';
 import { BrandForm } from './brand-form';
 import { seedBrands } from '@/lib/brands-seed';
 import { ManageItem } from './manage-item';
+import { getSettings, createSetting } from '@/app/actions/settings-actions';
 
 
 export function ManageBrands() {
   const [isAddDialogOpen, setIsAddDialogOpen] = React.useState(false);
   const [isSeeding, setIsSeeding] = React.useState(false);
-  const firestore = useFirestore();
+  const [brands, setBrands] = React.useState<Brand[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
   const { toast } = useToast();
 
-  const { user } = useFirebase();
+  // Fetch brands
+  const fetchBrands = React.useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await getSettings('brands');
+      setBrands(data as Brand[]);
+    } catch (err: any) {
+      console.error('Error fetching brands:', err);
+      setError(err.message || 'Erreur de chargement');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-  const marquesQuery = useMemoFirebase(
-    () => (firestore && user ? query(collection(firestore, `stores/${user.uid}/marques`), orderBy('name', 'asc')) : null),
-    [firestore, user]
-  );
-  const { data: brands, isLoading, error, refetch } = useCollection<Brand>(marquesQuery);
+  // Initial load
+  React.useEffect(() => {
+    fetchBrands();
+  }, [fetchBrands]);
 
   const handleSeedDatabase = async () => {
-    if (!firestore || !user) {
-      toast({
-        variant: 'destructive',
-        title: 'Erreur',
-        description: 'Impossible de se connecter à la base de données ou utilisateur non identifié.',
-      });
-      return;
-    }
-
     setIsSeeding(true);
     let addedCount = 0;
 
     try {
-      const marquesRef = collection(firestore, `stores/${user.uid}/marques`);
-      const q = query(marquesRef);
-      const querySnapshot = await getDocs(q);
-      const existingBrands = new Set(querySnapshot.docs.map(doc => doc.data().name.toLowerCase().trim()));
+      // Get existing brands
+      const existingBrands = new Set(brands.map(brand => brand.name.toLowerCase().trim()));
 
-      const batch = writeBatch(firestore);
+      // Filter brands to add
       const brandsToAdd = seedBrands.filter(brand => !existingBrands.has(brand.name.toLowerCase().trim()));
 
       if (brandsToAdd.length === 0) {
@@ -93,19 +83,17 @@ export function ManageBrands() {
         return;
       }
 
-      brandsToAdd.forEach(brand => {
-        const docRef = doc(marquesRef);
-        batch.set(docRef, { name: brand.name, category: brand.category });
+      // Add new brands
+      for (const brand of brandsToAdd) {
+        await createSetting('brands', { name: brand.name, category: brand.category });
         addedCount++;
-      });
-
-      await batch.commit();
+      }
 
       toast({
         title: 'Importation réussie',
         description: `${addedCount} nouvelles marques ont été ajoutées.`,
       });
-      refetch();
+      fetchBrands();
     } catch (e: any) {
       toast({
         variant: 'destructive',
@@ -119,7 +107,7 @@ export function ManageBrands() {
 
   const handleSuccess = () => {
     setIsAddDialogOpen(false);
-    refetch();
+    fetchBrands();
   }
 
   const groupedBrands = React.useMemo(() => {
@@ -144,6 +132,32 @@ export function ManageBrands() {
     return indexA - indexB;
   });
 
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-headline">Gérer les Marques</CardTitle>
+          <CardDescription>
+            Ajoutez, modifiez ou supprimez des marques de votre système.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Erreur de connexion</AlertTitle>
+            <AlertDescription>
+              Impossible de charger les marques. {error}
+              <Button variant="outline" size="sm" onClick={fetchBrands} className="mt-2">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Réessayer
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -166,17 +180,7 @@ export function ManageBrands() {
           </div>
         )}
 
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Erreur de connexion</AlertTitle>
-            <AlertDescription>
-              Impossible de charger les marques depuis Firestore. Vérifiez vos
-              règles de sécurité ou votre connexion.
-            </AlertDescription>
-          </Alert>
-        )}
-        {!isLoading && !error && (
+        {!isLoading && (
           <>
             {brands && brands.length === 0 && (
               <div className="text-center text-muted-foreground py-12">
@@ -194,7 +198,7 @@ export function ManageBrands() {
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                   {groupedBrands[category].map((brand) => (
-                    <ManageItem key={brand.id} item={brand} collectionName="marques" itemName="Marque" FormComponent={BrandForm} onSuccess={refetch} />
+                    <ManageItem key={brand.id} item={brand} collectionName="marques" itemName="Marque" FormComponent={BrandForm} onSuccess={fetchBrands} />
                   ))}
                 </div>
               </div>
