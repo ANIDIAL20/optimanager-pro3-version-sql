@@ -21,9 +21,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, CreditCard, History } from 'lucide-react';
-// TODO: Migrate to SQL payment actions
-// import { useFirestore, useFirebase } from '@/firebase';
-// import { doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
+import { addPayment } from '@/app/actions/sales-actions';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
@@ -35,16 +33,10 @@ interface PaymentDialogProps {
     order: Sale;
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    onPaymentSuccess?: () => void;
 }
 
-interface PaymentHistoryItem {
-    id: string;
-    amount: number;
-    date: string;
-    method: string;
-    note?: string;
-    receivedBy?: string;
-}
+// ... existing code ...
 
 const PAYMENT_METHODS = [
     { value: 'cash', label: 'Espèces' },
@@ -60,46 +52,27 @@ const METHOD_LABELS: Record<string, string> = {
     transfer: 'Virement',
 };
 
-export function PaymentDialog({ order, open, onOpenChange }: PaymentDialogProps) {
+export function PaymentDialog({ order, open, onOpenChange, onPaymentSuccess }: PaymentDialogProps) {
     const [amount, setAmount] = React.useState<string>('');
     const [method, setMethod] = React.useState<string>('cash');
     const [note, setNote] = React.useState<string>('');
     const [isSubmitting, setIsSubmitting] = React.useState(false);
-    const [paymentHistory, setPaymentHistory] = React.useState<PaymentHistoryItem[]>([]);
+    const [paymentHistory, setPaymentHistory] = React.useState<any[]>(order.paymentHistory || []);
 
-    // const firestore = useFirestore();
-    // const { user } = useFirebase();
     const { toast } = useToast();
     const router = useRouter();
 
-    // Calculate amounts from order (not from Firebase)
-    const totalAmount = order.totalNet || 0;
+    // Calculate amounts from order
+    const totalAmount = order.totalNet || order.totalTTC || 0;
     const totalPaid = order.totalPaye || 0;
     const remainingAmount = (order.resteAPayer !== undefined) ? order.resteAPayer : (totalAmount - totalPaid);
 
-    /* Firebase version - to be replaced with SQL
+    // Update payment history when order changes
     React.useEffect(() => {
-        const fetchPaymentHistory = async () => {
-            if (!open || !firestore || !user || !order.id) return;
-            try {
-                const orderRef = doc(firestore, `stores/${user.uid}/sales`, order.id);
-                const orderSnap = await getDoc(orderRef);
-                if (orderSnap.exists()) {
-                    const data = orderSnap.data();
-                    setPaymentHistory(data.paymentHistory || []);
-                }
-            } catch (error) {
-                console.error('Error fetching payment history:', error);
-            }
-        };
-        if (open) {
-            fetchPaymentHistory();
-            setAmount(Math.max(0, remainingAmount).toFixed(2));
-            setMethod('cash');
-            setNote('');
+        if (order.paymentHistory) {
+            setPaymentHistory(order.paymentHistory);
         }
-    }, [open, firestore, user, order.id, remainingAmount]);
-    */
+    }, [order.paymentHistory]);
 
     // Reset form when dialog opens
     React.useEffect(() => {
@@ -107,29 +80,25 @@ export function PaymentDialog({ order, open, onOpenChange }: PaymentDialogProps)
             setAmount(Math.max(0, remainingAmount).toFixed(2));
             setMethod('cash');
             setNote('');
+        } else {
+             // Force cleanup of body styles when dialog closes
+             // This fixes the "stuck overlay" / "invisible barrier" issue
+             setTimeout(() => {
+                 document.body.style.pointerEvents = '';
+                 // We don't want to reset overflow if another modal is open, 
+                 // but for this specific "stuck" case, it's usually safe to ensure it's not 'hidden' if this is the only one.
+                 // Ideally Radix handles this, but we are patching a bug.
+                 if (document.body.style.pointerEvents === 'none') {
+                     document.body.style.pointerEvents = '';
+                 }
+             }, 100);
         }
     }, [open, remainingAmount]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // TODO: Implement SQL payment action
-        toast({
-            variant: 'destructive',
-            title: 'Migration en cours',
-            description: 'L\'enregistrement des paiements nécessite une migration SQL. Fonctionnalité temporairement désactivée.',
-        });
-        return;
-
-        /* Firebase version - to be replaced
-        if (!firestore || !user) {
-            toast({
-                variant: 'destructive',
-                title: 'Erreur',
-                description: 'Service non disponible',
-            });
-            return;
-        }
+        if (!order.id) return;
 
         const paymentAmount = parseFloat(amount);
 
@@ -142,7 +111,7 @@ export function PaymentDialog({ order, open, onOpenChange }: PaymentDialogProps)
             return;
         }
 
-        if (paymentAmount > remainingAmount + 0.5) {
+        if (paymentAmount > remainingAmount + 0.5) { // Tolerance 0.5 DH
             toast({
                 variant: 'destructive',
                 title: 'Montant trop élevé',
@@ -154,55 +123,40 @@ export function PaymentDialog({ order, open, onOpenChange }: PaymentDialogProps)
         setIsSubmitting(true);
 
         try {
-            const newPayment: PaymentHistoryItem = {
-                id: `PAY-${Date.now()}`,
-                amount: paymentAmount,
-                date: new Date().toISOString(),
-                method: method,
-                ...(note && { note }),
-                ...(user.email && { receivedBy: user.email }),
-            };
+             // Use Server Action
+             const result = await addPayment(order.id, {
+                 amount: paymentAmount,
+                 method,
+                 note
+             });
 
-            const newTotalPaid = totalPaid + paymentAmount;
-            const newRest = totalAmount - newTotalPaid;
+             if (result.success) {
+                 toast({
+                     title: '✅ Paiement enregistré',
+                     description: `${paymentAmount.toFixed(2)} MAD ajouté avec succès.`,
+                 });
 
-            let newStatus: string;
-            if (newRest <= 0.5) {
-                newStatus = 'payée';
-            } else if (newTotalPaid > 0) {
-                newStatus = 'partiel';
-            } else {
-                newStatus = 'impayée';
-            }
-
-            const orderRef = doc(firestore, `stores/${user.uid}/sales`, order.id);
-            await updateDoc(orderRef, {
-                paymentHistory: arrayUnion(newPayment),
-                totalPaye: newTotalPaid,
-                resteAPayer: Math.max(0, newRest),
-                status: newStatus,
-                lastPaymentDate: newPayment.date,
-            });
-
-            toast({
-                title: '✅ Paiement enregistré',
-                description: `${paymentAmount.toFixed(2)} MAD ajouté. ${newRest <= 0.5 ? 'Commande payée!' : `Reste: ${newRest.toFixed(2)} MAD`}`,
-            });
-
-            onOpenChange(false);
-            router.refresh();
+                 onOpenChange(false);
+                 router.refresh();
+                 if (onPaymentSuccess) onPaymentSuccess();
+             } else {
+                 toast({
+                     variant: 'destructive',
+                     title: 'Erreur',
+                     description: result.error || 'Impossible d\'enregistrer le paiement',
+                 });
+             }
 
         } catch (error: any) {
             console.error('Payment error:', error);
             toast({
                 variant: 'destructive',
                 title: 'Erreur',
-                description: 'Impossible d\'enregistrer le paiement',
+                description: 'Une erreur inattendue est survenue',
             });
         } finally {
             setIsSubmitting(false);
         }
-        */
     };
 
     return (

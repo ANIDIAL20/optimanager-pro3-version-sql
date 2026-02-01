@@ -135,7 +135,7 @@ export const getClient = secureAction(async (userId, user, clientId: string) => 
             ),
             with: {
                 prescriptions: {
-                    orderBy: desc(prescriptions.date), // 👈 Order prescriptions by date
+                    orderBy: (prescriptions, { desc }) => [desc(prescriptions.date)], // 👈 Use callback syntax
                 },
             },
         });
@@ -167,6 +167,7 @@ export const getClient = secureAction(async (userId, user, clientId: string) => 
 
     } catch (error: any) {
         console.error('💥 Error fetching client:', error);
+        console.error('💥 Stack:', error.stack);
         await logFailure(userId, 'READ', 'clients', error.message, clientId);
         return {
             success: false,
@@ -478,7 +479,7 @@ export const getClientSnapshot = secureAction(async (userId, user, clientId: str
 
         // Calculate total debt from sales
         const totalDebt = recentSales.reduce((sum, s) => {
-            const remaining = parseFloat(s.remainingAmount || '0');
+            const remaining = parseFloat((s as any).resteAPayer || '0'); // 👈 Fixed field name
             return sum + remaining;
         }, 0);
 

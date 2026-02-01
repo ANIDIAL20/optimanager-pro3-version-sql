@@ -1,8 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useFirestore, useCollection, useMemoFirebase, useFirebase } from '@/firebase';
-import { collection, query, orderBy, where } from 'firebase/firestore';
+import { getClientSales } from '@/app/actions/sales-actions';
 import type { Sale } from '@/lib/types';
 import {
   Card,
@@ -31,32 +30,42 @@ interface SaleListProps {
 }
 
 const getPaymentStatusBadge = (resteAPayer: number) => {
-  if (resteAPayer <= 0) {
-    return <Badge variant="default" className="bg-green-100 text-green-800">Payé</Badge>;
+  if (resteAPayer <= 0.01) {
+    return <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-200">Payé</Badge>;
   }
   return <Badge variant="destructive">Non Payé</Badge>;
 };
 
 export function SaleList({ clientId }: SaleListProps) {
-  const firestore = useFirestore();
-  const { user } = useFirebase();
-  const salesQuery = useMemoFirebase(
-    () =>
-      firestore && user
-        ? query(
-          collection(firestore, `stores/${user.uid}/sales`),
-          where('clientId', '==', clientId),
-          orderBy('date', 'desc')
-        )
-        : null,
-    [firestore, user, clientId]
-  );
+  const [sales, setSales] = React.useState<any[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const {
-    data: sales,
-    isLoading,
-    error,
-  } = useCollection<Sale>(salesQuery);
+  React.useEffect(() => {
+    let isMounted = true;
+
+    const fetchSales = async () => {
+      setIsLoading(true);
+      try {
+        const res = await getClientSales(clientId);
+        if (isMounted) {
+            if (res.success && res.sales) {
+                setSales(res.sales);
+            } else {
+                setError(res.error || "Erreur de chargement");
+            }
+        }
+      } catch (err: any) {
+        if (isMounted) setError(err.message);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    fetchSales();
+
+    return () => { isMounted = false; };
+  }, [clientId]);
 
   return (
     <Card>
@@ -79,7 +88,7 @@ export function SaleList({ clientId }: SaleListProps) {
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Erreur</AlertTitle>
             <AlertDescription>
-              Impossible de charger l'historique des ventes.
+              {error}
             </AlertDescription>
           </Alert>
         )}
@@ -102,17 +111,21 @@ export function SaleList({ clientId }: SaleListProps) {
             <TableBody>
               {sales.map((sale) => (
                 <TableRow key={sale.id}>
-                  <TableCell>{format(new Date(sale.date), 'dd/MM/yyyy HH:mm')}</TableCell>
                   <TableCell>
-                    <SensitiveData value={sale.totalNet || 0} type="currency" />
+                      {sale.date ? format(new Date(sale.date), 'dd/MM/yyyy HH:mm') : (
+                          sale.createdAt ? format(new Date(sale.createdAt), 'dd/MM/yyyy HH:mm') : '-'
+                      )}
                   </TableCell>
                   <TableCell>
-                    <SensitiveData value={sale.totalPaye || 0} type="currency" />
+                    <SensitiveData value={Number(sale.totalNet || sale.totalTTC || 0)} type="currency" />
+                  </TableCell>
+                  <TableCell>
+                    <SensitiveData value={Number(sale.totalPaye || 0)} type="currency" />
                   </TableCell>
                   <TableCell className="font-medium text-destructive">
-                    <SensitiveData value={sale.resteAPayer || 0} type="currency" className="text-destructive" />
+                    <SensitiveData value={Number(sale.resteAPayer || 0)} type="currency" className="text-destructive" />
                   </TableCell>
-                  <TableCell>{getPaymentStatusBadge(sale.resteAPayer || 0)}</TableCell>
+                  <TableCell>{getPaymentStatusBadge(Number(sale.resteAPayer || 0))}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
