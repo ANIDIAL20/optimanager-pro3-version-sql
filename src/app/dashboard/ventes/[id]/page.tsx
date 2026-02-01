@@ -2,8 +2,6 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { useFirestore, useFirebase } from '@/firebase'; // Keeping for Settings
-import { doc, getDoc } from 'firebase/firestore'; // Keeping for Settings
 import { Client, Sale } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,12 +20,11 @@ import { PaymentDialog } from '@/components/dashboard/commandes/payment-dialog';
 // Server Actions
 import { getSale } from '@/app/actions/sales-actions';
 import { getClient } from '@/app/actions/clients-actions';
+import { getShopProfile } from '@/app/actions/shop-actions';
 
 export default function SaleDetailsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = React.use(params);
     const router = useRouter();
-    const { user } = useFirebase();
-    const firestore = useFirestore(); // For settings only
     const { toast } = useToast();
     const [sale, setSale] = React.useState<Sale | null>(null);
     const [client, setClient] = React.useState<Client | null>(null);
@@ -35,20 +32,17 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
     const [isLoading, setIsLoading] = React.useState(true);
     const [showReturnDialog, setShowReturnDialog] = React.useState(false);
     const [showPaymentDialog, setShowPaymentDialog] = React.useState(false);
+    const [refreshTrigger, setRefreshTrigger] = React.useState(0);
+
+    const handleRefresh = React.useCallback(() => {
+        setRefreshTrigger(prev => prev + 1);
+        router.refresh();
+    }, [router]);
 
     React.useEffect(() => {
         let isMounted = true;
 
         const fetchSaleDetails = async () => {
-             // For settings fetch
-            if (!user || !firestore) {
-                // Wait for user/firestore for settings, but we can start fetching Sale/Client immediately?
-                // Actually server actions don't need user context (handled by secureAction via Clerk/User logic mostly, but we pass nothing).
-                // Wait, secureAction checks auth. If client-side has auth cookie it works.
-                // But we usually rely on "user" from hook if we need ID.
-                // The SecureAction uses `auth()` from `next-server`, so it doesn't need `user` from Firebase Context.
-            }
-
             try {
                 // 1. Fetch Sale
                 const saleRes = await getSale(id);
@@ -111,14 +105,10 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
                     }
                 }
 
-                // 3. Fetch Shop Settings (Legacy Firebase)
-                // TODO: Migrate Settings to Postgres
-                if (user && firestore) {
-                    const settingsRef = doc(firestore, `stores/${user.uid}/settings/shop`);
-                    const settingsSnap = await getDoc(settingsRef);
-                    if (settingsSnap.exists()) {
-                        setShopSettings(settingsSnap.data());
-                    }
+                // 3. Fetch Shop Settings (SQL)
+                const settings = await getShopProfile();
+                if (isMounted && settings) {
+                    setShopSettings(settings);
                 }
 
             } catch (error) {
@@ -136,7 +126,7 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
         fetchSaleDetails();
         
         return () => { isMounted = false; };
-    }, [id, router, toast, user, firestore]);
+    }, [id, router, toast, refreshTrigger]);
 
     if (isLoading) {
         return (
@@ -197,11 +187,13 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
                                 sale={sale}
                                 open={showReturnDialog}
                                 onOpenChange={setShowReturnDialog}
+                                onReturnSuccess={handleRefresh}
                             />
                             <PaymentDialog
                                 order={sale}
                                 open={showPaymentDialog}
                                 onOpenChange={setShowPaymentDialog}
+                                onPaymentSuccess={handleRefresh}
                             />
                         </>
                     )}

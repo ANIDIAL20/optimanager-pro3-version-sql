@@ -9,7 +9,6 @@ import { Label } from '@/components/ui/label';
 import { Loader2, RotateCcw, AlertCircle } from 'lucide-react';
 import { processReturn } from '@/app/actions/sales-actions';
 import { Sale, SaleItem } from '@/lib/types';
-import { useFirebase } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 
@@ -17,10 +16,10 @@ interface ReturnItemsDialogProps {
     sale: Sale;
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    onReturnSuccess?: () => void;
 }
 
-export function ReturnItemsDialog({ sale, open, onOpenChange }: ReturnItemsDialogProps) {
-    const { user } = useFirebase();
+export function ReturnItemsDialog({ sale, open, onOpenChange, onReturnSuccess }: ReturnItemsDialogProps) {
     const { toast } = useToast();
     const router = useRouter();
     const [isLoading, setIsLoading] = React.useState(false);
@@ -47,7 +46,7 @@ export function ReturnItemsDialog({ sale, open, onOpenChange }: ReturnItemsDialo
     };
 
     const handleSubmit = async () => {
-        if (!user || !sale.id) return;
+        if (!sale.id) return;
 
         setIsLoading(true);
         try {
@@ -67,15 +66,17 @@ export function ReturnItemsDialog({ sale, open, onOpenChange }: ReturnItemsDialo
                 return;
             }
 
-            const result = await processReturn(user.uid, sale.id, itemsToReturn);
+            // Remove user.uid argument as secureAction handles it
+            const result = await processReturn(sale.id, itemsToReturn);
 
             if (result.success) {
                 toast({
                     title: "✅ Retours effectués",
-                    description: "Stock mis jour et remboursement enregistré."
+                    description: "Stock mis à jour et remboursement enregistré."
                 });
                 onOpenChange(false);
                 router.refresh();
+                if (onReturnSuccess) onReturnSuccess();
             } else {
                 toast({
                     title: "Erreur",

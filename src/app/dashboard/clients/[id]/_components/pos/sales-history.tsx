@@ -1,8 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useFirestore, useCollection, useMemoFirebase, useFirebase } from '@/firebase';
-import { collection, query, where, orderBy, limit } from 'firebase/firestore';
+import { getClientSales } from '@/app/actions/sales-actions';
 import type { Sale } from '@/lib/types'; // Assuming Sale type exists and fits, if not we define local
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -22,22 +21,35 @@ interface SalesHistoryProps {
 }
 
 export function SalesHistory({ clientId }: SalesHistoryProps) {
-    const firestore = useFirestore();
-    const { user } = useFirebase();
+    const [sales, setSales] = React.useState<any[]>([]);
+    const [isLoading, setIsLoading] = React.useState(true);
+    const [error, setError] = React.useState<string | null>(null);
 
-    const salesQuery = useMemoFirebase(
-        () => {
-            if (!firestore || !user) return null;
-            return query(
-                collection(firestore, `stores/${user.uid}/sales`),
-                where('clientId', '==', clientId),
-                // orderBy('date', 'desc'), 
-            );
-        },
-        [firestore, user, clientId]
-    );
+    React.useEffect(() => {
+        let isMounted = true;
+        
+        async function fetchSales() {
+            setIsLoading(true);
+            try {
+                const res = await getClientSales(clientId);
+                if (isMounted) {
+                    if (res.success && res.sales) {
+                        setSales(res.sales);
+                    } else {
+                        setError(res.error || "Erreur inconnue");
+                    }
+                }
+            } catch (err: any) {
+                if (isMounted) setError(err.message);
+            } finally {
+                if (isMounted) setIsLoading(false);
+            }
+        }
 
-    const { data: sales, isLoading, error } = useCollection<any>(salesQuery); // Using any to be safe on types initially
+        fetchSales();
+
+        return () => { isMounted = false };
+    }, [clientId]);
 
     if (isLoading) {
         return (
@@ -50,17 +62,10 @@ export function SalesHistory({ clientId }: SalesHistoryProps) {
     }
 
     if (error) {
-        return <div className="text-destructive p-4">Erreur de chargement de l'historique : {error.message}</div>;
+        return <div className="text-destructive p-4">Erreur de chargement de l'historique : {error}</div>;
     }
 
-    // Sort cliend-side to avoid "Index Required" errors during dev
-    const sortedSales = sales?.sort((a, b) => {
-        const dateA = a.date ? new Date(a.date).getTime() : 0;
-        const dateB = b.date ? new Date(b.date).getTime() : 0;
-        return dateB - dateA;
-    }) || [];
-
-    if (sortedSales.length === 0) {
+    if (sales.length === 0) {
         return <div className="text-muted-foreground p-4 text-center">Aucune vente enregistrée.</div>;
     }
 
@@ -77,18 +82,20 @@ export function SalesHistory({ clientId }: SalesHistoryProps) {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {sortedSales.map((sale) => (
+                    {sales.map((sale) => (
                         <TableRow key={sale.id}>
                             <TableCell className="font-medium">
-                                {sale.date ? format(new Date(sale.date), 'dd MMM yyyy HH:mm', { locale: fr }) : '-'}
+                                {sale.date ? format(new Date(sale.date), 'dd MMM yyyy HH:mm', { locale: fr }) : (
+                                    sale.createdAt ? format(new Date(sale.createdAt), 'dd MMM yyyy HH:mm', { locale: fr }) : '-'
+                                )}
                             </TableCell>
-                            <TableCell className="text-right">{Number(sale.totalNet || 0).toFixed(2)}</TableCell>
+                            <TableCell className="text-right">{Number(sale.totalNet || sale.totalTTC || 0).toFixed(2)}</TableCell>
                             <TableCell className="text-right">{Number(sale.totalPaye || 0).toFixed(2)}</TableCell>
                             <TableCell className="text-right font-bold text-destructive">
                                 {Number(sale.resteAPayer || 0).toFixed(2)}
                             </TableCell>
                             <TableCell className="text-center">
-                                {(sale.resteAPayer || 0) <= 0.01 ? (
+                                {(Number(sale.resteAPayer || 0)) <= 0.01 ? (
                                     <Badge className="bg-green-600">Payé</Badge>
                                 ) : (
                                     <Badge variant="destructive">Impayé</Badge>

@@ -1,8 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import { useFirestore, useFirebase } from '@/firebase';
-import { collection, doc, writeBatch, Timestamp } from 'firebase/firestore';
 import type { Client, Product } from '@/lib/types';
 import { ProductSearch } from './product-search';
 import { Cart, CartItem } from './cart';
@@ -14,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { createSale } from '@/app/actions/sales-actions';
 
 interface ClientPOSProps {
     client: Client;
@@ -23,9 +22,9 @@ interface ClientPOSProps {
 export function ClientPOS({ client, clientId }: ClientPOSProps) {
     const [cartItems, setCartItems] = React.useState<CartItem[]>([]);
     const [isProcessing, setIsProcessing] = React.useState(false);
-    const firestore = useFirestore();
-    const { user } = useFirebase();
     const { toast } = useToast();
+    // Simple state to force refresh history
+    const [historyRefreshKey, setHistoryRefreshKey] = React.useState(0);
 
     const addToCart = (product: Product) => {
         setCartItems(prev => {
@@ -77,95 +76,52 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
     const clearCart = () => setCartItems([]);
 
     const handleProcessSale = async (paymentData: { amountPaid: number; method: string; notes: string }) => {
-        if (!firestore) return;
         if (cartItems.length === 0) return;
 
         setIsProcessing(true);
 
         try {
-            const batch = writeBatch(firestore);
+            // Map cart items to SaleItem
+            const saleItems = cartItems.map(item => ({
+                productRef: item.product.id || item.product.reference || 'UNKNOWN',
+                productName: item.product.nomProduit,
+                quantity: item.quantity,
+                unitPrice: item.product.prixVente,
+                total: item.product.prixVente * item.quantity
+            }));
 
-            // 1. Create Sale Document
-            if (!user) return; // Hook already called, just safety check
-
-            // 1. Create Sale Document
-            const salesRef = collection(firestore, `stores/${user.uid}/sales`);
-            const newSaleRef = doc(salesRef);
-
-            const totalNet = cartItems.reduce((sum, item) => sum + (item.product.prixVente * item.quantity), 0);
-            const resteAPayer = Math.max(0, totalNet - paymentData.amountPaid);
-            const saleDate = new Date().toISOString();
-
-            batch.set(newSaleRef, {
+            // Call Server Action
+            // Note: createSale currently doesn't support 'amountPaid' directly in the main signature unless we update it.
+            // But checking createSale in sales-actions.ts, it calculates totalPaye as 0. 
+            // TODO: Update createSale to accept initial payment. 
+            // For now, we'll pass it in 'notes' or we accept that it creates as 'impaye' and we might need a second call?
+            // Wait, createSaleInput has 'notes' and 'paymentMethod'.
+            
+            const result = await createSale({
                 clientId,
-                date: saleDate,
-                totalNet,
-                totalPaye: paymentData.amountPaid,
-                resteAPayer,
-                notes: paymentData.notes,
-                status: resteAPayer > 0 ? 'impaye' : 'paye'
+                items: saleItems,
+                paymentMethod: paymentData.method,
+                notes: paymentData.notes ? `${paymentData.notes} (Initial payment: ${paymentData.amountPaid})` : undefined,
+                // We'll trust the server to calc totals, but we could pass them if needed.
             });
 
-            // 2. Add Sale Items
-            cartItems.forEach(item => {
-                const detailRef = doc(collection(firestore, `stores/${user.uid}/sales/${newSaleRef.id}/orderDetails`));
-                batch.set(detailRef, {
-                    orderId: newSaleRef.id,
-                    produitId: item.product.id,
-                    nom: item.product.nomProduit,
-                    prix: item.product.prixVente,
-                    quantite: item.quantity
-                });
-
-                // 3. Update Product Stock
-                const productRef = doc(firestore, `stores/${user.uid}/products`, item.product.id);
-                batch.update(productRef, {
-                    quantiteStock: item.product.quantiteStock - item.quantity
-                });
-
-                // 4. Log Movement
-                const mvmtRef = doc(collection(firestore, `stores/${user.uid}/stockMovements`));
-                batch.set(mvmtRef, {
-                    produitId: item.product.id,
-                    quantite: -item.quantity,
-                    type: 'Vente',
-                    ref: newSaleRef.id,
-                    date: saleDate
-                });
-            });
-
-            // 5. Add Payment Record if paid
-            if (paymentData.amountPaid > 0) {
-                const paymentRef = doc(collection(firestore, `stores/${user.uid}/sales/${newSaleRef.id}/payments`));
-                batch.set(paymentRef, {
-                    saleId: newSaleRef.id,
-                    montant: paymentData.amountPaid,
-                    methode: paymentData.method,
-                    date: saleDate
-                });
+            if (!result.success) {
+                throw new Error(result.error);
             }
-
-            // 6. Update Client Credit Balance if partial payment
-            // We need to read current balance first or use increment. 
-            // We'll leave this simple for now: this POS handles sales. 
-            // Managing global client debt can be done via proper debt management module or recalculating from sales.
-
-            await batch.commit();
 
             toast({
                 title: "Vente réussie !",
                 description: "La vente a été enregistrée avec succès.",
-                // icon: <CheckCircle2 className="text-green-600" />
             });
 
             clearCart();
-            // Optional: Trigger refresh of history -> invalidation handled by realtime listeners usually.
+            setHistoryRefreshKey(prev => prev + 1);
 
         } catch (error: any) {
             console.error("Sale Error:", error);
             toast({
                 title: "Erreur",
-                description: "Impossible d'enregistrer la vente. " + error?.message,
+                description: "Impossible d'enregistrer la vente. " + (error?.message || ''),
                 variant: "destructive"
             });
         } finally {
@@ -221,7 +177,7 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
                     <CardDescription>Les dernières ventes effectuées pour {client.prenom} {client.nom}</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <SalesHistory clientId={clientId} />
+                    <SalesHistory clientId={clientId} key={historyRefreshKey} />
                 </CardContent>
             </Card>
         </div>

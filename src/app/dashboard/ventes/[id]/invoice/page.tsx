@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { useFirebase } from '@/firebase';
 import { Button } from '@/components/ui/button';
 import { Loader2, Printer, ArrowLeft } from 'lucide-react';
 import { getPrintData } from '@/app/actions/print-actions';
@@ -18,7 +17,6 @@ interface InvoicePageProps {
 export default function InvoicePage({ params }: InvoicePageProps) {
     const { id } = React.use(params);
     const router = useRouter();
-    const { user } = useFirebase();
     const { toast } = useToast();
 
     const [data, setData] = React.useState<any>(null);
@@ -26,7 +24,7 @@ export default function InvoicePage({ params }: InvoicePageProps) {
 
     React.useEffect(() => {
         const fetchData = async () => {
-            if (!user || !id) return;
+            if (!id) return;
 
             // ✅ FIX: secureAction injects userId automatically
             const result = await getPrintData(id, 'facture');
@@ -45,7 +43,7 @@ export default function InvoicePage({ params }: InvoicePageProps) {
         };
 
         fetchData();
-    }, [user, id, router, toast]);
+    }, [id, router, toast]);
 
     const handlePrint = () => {
         window.print();

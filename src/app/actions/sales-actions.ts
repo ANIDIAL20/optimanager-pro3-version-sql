@@ -165,7 +165,7 @@ export const getSale = secureAction(async (userId, user, saleId: string) => {
  * Create a new sale with stock management
  */
 export const createSale = secureAction(async (userId, user, data: CreateSaleInput) => {
-    console.log(`📝 Creating sale`);
+    console.log(`📝 Creating sale for user ${userId}`, JSON.stringify(data, null, 2));
 
     try {
         if (!data.items || data.items.length === 0) {
@@ -184,11 +184,16 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
 
             if (data.clientId) {
                 clientIdNum = parseInt(data.clientId);
+                if (isNaN(clientIdNum)) {
+                     console.error("❌ Invalid Client ID:", data.clientId);
+                     throw new Error("ID Client invalide");
+                }
+
                 const client = await tx.query.clients.findFirst({
                     where: and(eq(clients.id, clientIdNum), eq(clients.userId, userId)),
                     with: {
                         prescriptions: {
-                            orderBy: [desc(sales.createdAt)], // Actually we want latest prescription
+                            orderBy: (prescriptions, { desc }) => [desc(prescriptions.createdAt)],
                             limit: 1
                         }
                     }
@@ -203,7 +208,7 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                     };
 
                     if (client.prescriptions && client.prescriptions.length > 0) {
-                        const latest = client.prescriptions.sort((a,b) => (b.date?.getTime() || 0) - (a.date?.getTime() || 0))[0];
+                        const latest = client.prescriptions[0];
                         if (latest) {
                             clientSnapshot.prescriptionSnapshot = latest.prescriptionData;
                         }
@@ -213,12 +218,6 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
 
             // 3. Update Stock for each item
             for (const item of data.items) {
-                // Assuming productRef is the ID string from products.id or reference? 
-                // In the legacy system, productRef often stored the Firestore ID.
-                // In the new system, we should rely on `products.id` (integer) if possible, or `reference` string.
-                // `SaleItem` definition has `productRef: string`.
-                // Let's try to match by ID first (if int), then reference.
-                
                 let productId: number | null = parseInt(item.productRef);
                 let productToUpdate;
 
@@ -230,8 +229,7 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                 }
                 
                 if (!productToUpdate) {
-                    // Fallback: search by reference or firebaseId (stored in reference?)
-                    // If productRef is a string (e.g. "PROD-123" or legacy ID "abcde"), check reference.
+                    // Fallback: search by reference
                     productToUpdate = await tx.query.products.findFirst({
                         where: and(eq(products.reference, item.productRef), eq(products.userId, userId))
                     });
@@ -246,11 +244,6 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                         })
                         .where(eq(products.id, productToUpdate.id));
                 } else {
-                    // Log warning or fail? 
-                    // For now, we proceed but maybe we should warn. 
-                    // Ideally, we shouldn't fail the sale if a product is "Custom" or "Service" (not in stock).
-                    // If category is "Accessoire" or something.
-                    // Implementation Plan didn't specify strict stock enforcement, just update.
                     console.warn(`⚠️ Product not found for stock update: ${item.productRef}`);
                 }
             }
@@ -278,6 +271,8 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                 date: new Date()
             };
 
+            console.log("📝 Inserting sale:", newSale);
+
             const result = await tx.insert(sales).values(newSale).returning();
 
             await logSuccess(userId, 'CREATE', 'sales', result[0].id.toString());
@@ -286,8 +281,9 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
 
     } catch (error: any) {
         console.error('💥 Error creating sale:', error);
+        console.error('💥 Stack:', error.stack);
         await logFailure(userId, 'CREATE', 'sales', error.message);
-        return { success: false, error: 'Erreur lors de la création de la vente' };
+        return { success: false, error: `Erreur lors de la création de la vente: ${error.message}` };
     }
 });
 
@@ -334,15 +330,8 @@ export const processReturn = secureAction(async (userId, user, saleId: string, r
 
             // 1. Update Product Stocks
             for (const item of returnItems) {
-                // Try to find product by ID (assuming productRef is ID)
-                // If productRef is string but ID is int, this might fail if we don't parse.
-                // However, products.firebaseId is string.
-                // We'll try to find by ID (int) if number, or firebaseId if string?
-                // Legacy logic was messy. Let's assume productRef is the ID string from `products.id`.
-                
                 let productId: number | null = parseInt(item.productRef);
                 if (isNaN(productId)) {
-                    // Try to look up by reference or firebaseId?
                     const p = await tx.query.products.findFirst({
                         where: and(eq(products.userId, userId), eq(products.reference, item.productRef))
                     });
@@ -360,30 +349,57 @@ export const processReturn = secureAction(async (userId, user, saleId: string, r
                 }
             }
 
-            // 2. Add Negative Payment (Refund)
-            const refundPayment = {
-                id: `REF-${Date.now()}`,
-                amount: -totalRefund,
-                date: new Date().toISOString(),
-                method: 'refund',
-                note: `Retour articles: ${returnItems.map(i => `${i.quantity}x ${i.name}`).join(', ')}`,
-                receivedBy: user.email || 'System'
-            };
-
-            const currentTotalPaid = Number(sale.totalPaye || 0);
-            const newTotalPaid = currentTotalPaid - totalRefund;
-
+            // 2. Recalculate Sale Totals
+            // Instead of subtracting, let's recalculate from updated items to be safe
+            // Or just subtract correctly.
+            
             const currentTotalTTC = Number(sale.totalTTC || 0);
             const currentTotalHT = Number(sale.totalHT || 0);
-            
-            // Simplified recalc
-            // Assuming item.price is TTC unit price
-            const newTotalTTC = currentTotalTTC - totalRefund;
-            const totalRefundHT = returnItems.reduce((sum, item) => sum + ((item.price / 1.2) * item.quantity), 0);
-            const newTotalHT = currentTotalHT - totalRefundHT;
+            const currentTotalPaid = Number(sale.totalPaye || 0);
+
+            // Calculate value of returned items
+            const returnedTTC = returnItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            // Approximation for HT: price / 1.2
+            const returnedHT = returnItems.reduce((sum, item) => sum + ((item.price / 1.2) * item.quantity), 0);
+
+            const newTotalTTC = Math.max(0, currentTotalTTC - returnedTTC);
+            const newTotalHT = Math.max(0, currentTotalHT - returnedHT);
             const newTotalTVA = newTotalTTC - newTotalHT;
 
-            // 3. Update Sale
+            // 3. Handle Payment/Refund Logic
+            // Only issue a refund if the client has paid MORE than the new Total.
+            // If they owe money, just reduce the debt (don't refund cash).
+            
+            let refundAmount = 0;
+            let newTotalPaid = currentTotalPaid;
+            let paymentRecordsToAdd: any[] = [];
+
+            if (currentTotalPaid > newTotalTTC) {
+                // Client paid more than what they kept -> Refund the difference
+                refundAmount = currentTotalPaid - newTotalTTC;
+                newTotalPaid = newTotalTTC; // Paid amount becomes equal to total (fully paid)
+                
+                paymentRecordsToAdd.push({
+                    id: `REF-${Date.now()}`,
+                    amount: -refundAmount,
+                    date: new Date().toISOString(),
+                    method: 'refund',
+                    note: `Remboursement suite retour: ${returnItems.map(i => `${i.quantity}x ${i.name}`).join(', ')}`,
+                    receivedBy: user.email || 'System'
+                });
+            } else {
+                // Client paid less than or equal to new total -> No refund, just less debt
+                // No payment record needed, unless we want to track the 'return' event as a note?
+                // Let's rely on the updated items list to show what happened.
+            }
+
+            // 4. Determine New Status
+            const remaining = Math.max(0, newTotalTTC - newTotalPaid);
+            let newStatus = 'impaye';
+            if (remaining <= 0.01) newStatus = 'paye';
+            else if (newTotalPaid > 0.01) newStatus = 'partiel';
+
+            // 5. Update Sale
             const updatedItems = (sale.items as SaleItem[]).map(i => {
                 const returned = returnItems.find(r => r.productRef === i.productRef && r.name === i.productName);
                 if (returned) {
@@ -397,14 +413,14 @@ export const processReturn = secureAction(async (userId, user, saleId: string, r
             await tx.update(sales)
                 .set({
                     items: updatedItems,
-                    paymentHistory: [...currentHistory, refundPayment],
+                    paymentHistory: [...currentHistory, ...paymentRecordsToAdd],
                     totalTTC: newTotalTTC.toFixed(2),
                     totalNet: newTotalTTC.toFixed(2),
                     totalHT: newTotalHT.toFixed(2),
-                    totalTVA: newTotalTVA.toFixed(2),
+                    totalTVA: newTotalTVA.toFixed(2), // Fix TVA
                     totalPaye: newTotalPaid.toFixed(2),
-                    resteAPayer: Math.max(0, newTotalTTC - newTotalPaid).toFixed(2),
-                    status: (newTotalTTC - newTotalPaid) <= 0.01 ? 'paye' : 'partiel',
+                    resteAPayer: remaining.toFixed(2),
+                    status: newStatus,
                     updatedAt: new Date()
                 })
                 .where(eq(sales.id, id));
@@ -442,5 +458,63 @@ export const getClientSales = secureAction(async (userId, user, clientId: string
         return { success: true, sales: mappedSales };
     } catch (error: any) {
         return { success: false, error: error.message };
+    }
+});
+
+/**
+ * Add a payment to a sale
+ */
+export const addPayment = secureAction(async (userId, user, saleId: string, payment: { amount: number; method: string; note?: string; date?: string }) => {
+    try {
+        const id = parseInt(saleId);
+        
+        await db.transaction(async (tx) => {
+            const sale = await tx.query.sales.findFirst({
+                where: and(eq(sales.id, id), eq(sales.userId, userId))
+            });
+
+            if (!sale) throw new Error("Vente introuvable");
+
+            // Calculate new totals
+            const currentPaid = Number(sale.totalPaye || 0);
+            const newPaid = currentPaid + payment.amount;
+            const totalTTC = Number(sale.totalTTC || sale.totalNet || 0);
+            const remaining = Math.max(0, totalTTC - newPaid);
+            
+            // Determine status
+            let newStatus = 'impaye';
+            if (remaining <= 0.01) newStatus = 'paye';
+            else if (newPaid > 0) newStatus = 'partiel';
+
+            // Create payment record
+            const newPaymentRecord = {
+                id: `PAY-${Date.now()}`,
+                amount: payment.amount,
+                date: payment.date || new Date().toISOString(),
+                method: payment.method,
+                note: payment.note,
+                receivedBy: user.email || 'System'
+            };
+
+            const currentHistory = (sale.paymentHistory as any[]) || [];
+
+            await tx.update(sales)
+                .set({
+                    paymentHistory: [...currentHistory, newPaymentRecord],
+                    totalPaye: newPaid.toFixed(2),
+                    resteAPayer: remaining.toFixed(2),
+                    status: newStatus,
+                    lastPaymentDate: new Date(),
+                    updatedAt: new Date()
+                })
+                .where(eq(sales.id, id));
+        });
+
+        await logSuccess(userId, 'UPDATE', 'sales', saleId, { action: 'addPayment', amount: payment.amount });
+        return { success: true, message: 'Paiement enregistré avec succès' };
+
+    } catch (error: any) {
+        await logFailure(userId, 'UPDATE', 'sales', error.message, saleId);
+        return { success: false, error: 'Erreur lors de l\'enregistrement du paiement' };
     }
 });
