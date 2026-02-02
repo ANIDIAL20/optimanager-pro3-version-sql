@@ -115,20 +115,20 @@ export function ProductForm({ product }: ProductFormProps) {
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(ProductSchema),
-    defaultValues: product || {
-      reference: '',
-      nomProduit: '',
-      categorieId: '',
-      marqueId: '',
-      matiereId: '',
-      couleurId: '',
-      prixAchat: 0,
-      prixVente: 0,
-      quantiteStock: 0,
-      stockMin: 0,
-      description: '',
-      imageUrl: '',
-      imageHint: '',
+    defaultValues: {
+      reference: product?.reference ?? '',
+      nomProduit: product?.nomProduit ?? '',
+      categorieId: product?.categorieId?.toString() ?? '',
+      marqueId: product?.marqueId?.toString() ?? '',
+      matiereId: product?.matiereId?.toString() ?? '',
+      couleurId: product?.couleurId?.toString() ?? '',
+      prixAchat: product?.prixAchat ?? 0,
+      prixVente: product?.prixVente ?? 0,
+      quantiteStock: product?.quantiteStock ?? 0,
+      stockMin: product?.stockMin ?? 0,
+      description: product?.description ?? '',
+      imageUrl: product?.imageUrl ?? '',
+      imageHint: product?.imageHint ?? '',
     },
   });
 
@@ -222,7 +222,7 @@ export function ProductForm({ product }: ProductFormProps) {
         description: error.message || "Une erreur s'est produite. Veuillez réessayer.",
       });
     } finally {
-      setIsSubmitting(false);
+        setIsSubmitting(false);
     }
   }
 

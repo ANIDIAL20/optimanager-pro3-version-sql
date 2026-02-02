@@ -84,7 +84,10 @@ export default function AccountingPage() {
 
     // Export Handler - Disabled pending SQL migration
     const handleExport = async (type: 'sales' | 'clients' | 'stock') => {
-        alert('Les exports nécessitent une migration SQL. Fonctionnalité temporairement désactivée.');
+        toast({
+            title: "Fonctionnalité désactivée",
+            description: "Les exports sont temporairement indisponibles en attente de migration.",
+        });
         return;
         
         /* Firebase version

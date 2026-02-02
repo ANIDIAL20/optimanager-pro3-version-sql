@@ -61,6 +61,8 @@ export const deleteProduct = createAction(
         
         await productRepository.deleteProduct(id, userId);
         revalidatePath('/dashboard/produits');
+        revalidatePath('/produits');
+        revalidatePath('/dashboard/stock');
         return { success: true };
     }
 );

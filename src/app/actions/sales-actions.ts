@@ -294,18 +294,54 @@ export const deleteSale = secureAction(async (userId, user, saleId: string) => {
     try {
         const id = parseInt(saleId);
         
-        // Check for devis dependency? (Cascade handled in schema?)
-        // Schema: saleId in devis references sales.id. If no cascade, we might fail.
-        // Assuming schema handles or we rely on Drizzle behavior.
-        
-        const result = await db.delete(sales)
-            .where(and(eq(sales.id, id), eq(sales.userId, userId)))
-            .returning();
+        await db.transaction(async (tx) => {
+            // 1. Fetch sale to get items for stock reversion
+            const sale = await tx.query.sales.findFirst({
+                where: and(eq(sales.id, id), eq(sales.userId, userId))
+            });
 
-        if (result.length === 0) return { success: false, error: 'Vente introuvable' };
+            if (!sale) throw new Error("Vente introuvable");
+
+            // 2. Revert Stock
+            if (sale.items && Array.isArray(sale.items)) {
+                for (const item of sale.items as SaleItem[]) {
+                    // Start logic similar to processReturn, but for full quantity
+                    if (!item.productRef) continue;
+
+                    // Try to identify product
+                    let productId: number | null = parseInt(item.productRef);
+                    if (isNaN(productId)) {
+                        const p = await tx.query.products.findFirst({
+                            where: and(eq(products.userId, userId), eq(products.reference, item.productRef))
+                        });
+                        if (p) productId = p.id;
+                        else productId = null;
+                    }
+
+                    if (productId) {
+                        // Re-add the quantity to stock
+                         await tx.update(products)
+                            .set({ 
+                                quantiteStock: sql`${products.quantiteStock} + ${item.quantity}`,
+                                updatedAt: new Date()
+                            })
+                            .where(eq(products.id, productId));
+                    }
+                }
+            }
+
+            // 3. Unlink Devis (if any)
+            await tx.update(devis)
+                .set({ saleId: null, status: 'VALIDE' }) // Revert devis to valid state
+                .where(and(eq(devis.saleId, id), eq(devis.userId, userId)));
+
+            // 4. Delete Sale
+            await tx.delete(sales)
+                .where(eq(sales.id, id));
+        });
 
         await logSuccess(userId, 'DELETE', 'sales', saleId);
-        return { success: true, message: 'Vente supprimée avec succès' };
+        return { success: true, message: 'Vente supprimée et stock restauré avec succès' };
 
     } catch (error: any) {
         return { success: false, error: error.message };

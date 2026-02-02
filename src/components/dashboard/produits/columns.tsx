@@ -183,6 +183,18 @@ function ProductActions({ product }: { product: Product }) {
     const [isDeleting, setIsDeleting] = React.useState(false);
     const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
     const { toast } = useToast();
+
+    // Fix Zombie Overlay: Cleanup body styles when dialog closes
+    React.useEffect(() => {
+        if (!showDeleteDialog) {
+            const timer = setTimeout(() => {
+                document.body.style.pointerEvents = "";
+                document.body.style.overflow = "";
+            }, 300);
+            return () => clearTimeout(timer);
+        }
+    }, [showDeleteDialog]);
+
     const handleDelete = async () => {
         setIsDeleting(true);
         startTransition(async () => {

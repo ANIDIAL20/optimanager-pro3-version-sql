@@ -1,67 +1,42 @@
-'use client';
-
-import * as React from 'react';
-import { useParams } from 'next/navigation';
-import { doc } from 'firebase/firestore';
-import { useFirestore, useDoc, useFirebase } from '@/firebase';
-import type { Supplier } from '@/lib/types';
-import { PageHeader } from '@/components/page-header';
+import { Suspense } from 'react';
+import { notFound } from 'next/navigation';
+import { getSupplier } from '@/app/actions/supplier-actions';
 import { SupplierForm } from '../../_components/supplier-form';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
-
+import { PageHeader } from '@/components/page-header';
 import { BackButton } from '@/components/ui/back-button';
+import { Skeleton } from '@/components/ui/skeleton';
 
-export default function EditSupplierPage() {
-  const params = useParams();
-  const firestore = useFirestore();
-  const { user } = useFirebase();
+export default async function EditSupplierPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supplierRaw = await getSupplier(params.id);
 
-  const supplierId = params.id as string;
-
-  const supplierRef = React.useMemo(
-    () =>
-      firestore && user
-        ? doc(firestore, `stores/${user.uid}/suppliers`, supplierId)
-        : null,
-    [firestore, user, supplierId]
-  );
-
-  const { data: supplier, isLoading, error } = useDoc<Supplier>(supplierRef);
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-1 flex-col gap-4">
-        <div className="space-y-2">
-          <Skeleton className="h-8 w-64" />
-          <Skeleton className="h-4 w-96" />
-        </div>
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-6">
-            <Skeleton className="h-96 w-full" />
-          </div>
-          <div className="space-y-6">
-            <Skeleton className="h-64 w-full" />
-          </div>
-        </div>
-      </div>
-    );
+  if (!supplierRaw) {
+    notFound();
   }
 
-  if (error || !supplier) {
-    return (
-      <div className="flex flex-1 flex-col gap-4">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Erreur</AlertTitle>
-          <AlertDescription>
-            Impossible de charger les informations du fournisseur. Le fournisseur n'existe peut-être pas.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
+  // Map DB fields to Form fields if necessary
+  // The form expects 'nomCommercial', DB has 'name'.
+  // DB has 'paymentTerms', form uses 'delaiPaiement' in schema but might accept 'paymentTerms' if we map it?
+  // Actually SupplierForm:
+  // defaultValues: supplier ? { ...supplier }
+  // And it manages fields like 'delaiPaiement'.
+  // If we pass 'paymentTerms' in supplier object, form won't pick it up for 'delaiPaiement' unless we map it.
+  
+  const supplier = {
+    ...supplierRaw,
+    nomCommercial: supplierRaw.name,
+    email: supplierRaw.email,
+    telephone: supplierRaw.phone,
+    adresse: supplierRaw.address,
+    ville: supplierRaw.city,
+    delaiPaiement: supplierRaw.paymentTerms,
+    modePaiement: supplierRaw.paymentMethod,
+    banque: supplierRaw.bank,
+    // typeProduits is stored as string "a, b" in DB category?
+    // In actions/supplier-actions.ts createSupplier: category: data.typeProduits.join(', ')
+    // So we need to split it back.
+    typeProduits: supplierRaw.category ? supplierRaw.category.split(', ') : [],
+  };
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -72,7 +47,28 @@ export default function EditSupplierPage() {
         title="Modifier le Fournisseur"
         description={`Modifiez les informations de ${supplier.nomCommercial}`}
       />
-      <SupplierForm supplier={supplier} />
+      <Suspense fallback={<EditSkeleton />}>
+        <SupplierForm supplier={supplier} />
+      </Suspense>
+    </div>
+  );
+}
+
+function EditSkeleton() {
+  return (
+    <div className="flex flex-1 flex-col gap-4">
+      <div className="space-y-2">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-4 w-96" />
+      </div>
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2 space-y-6">
+          <Skeleton className="h-96 w-full" />
+        </div>
+        <div className="space-y-6">
+          <Skeleton className="h-64 w-full" />
+        </div>
+      </div>
     </div>
   );
 }

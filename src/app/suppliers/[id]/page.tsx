@@ -1,14 +1,14 @@
 import { Suspense } from "react";
 import SupplierView from "./client-view";
+import { getSupplier } from "@/app/actions/supplier-actions";
 
-export function generateStaticParams() {
-  return [{ id: "static" }];
-}
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supplier = await getSupplier(params.id);
 
-export default function Page({ params }: { params: { id: string } }) {
   return (
-    <Suspense fallback={<div>Loading supplier...</div>}>
-      <SupplierView />
+    <Suspense fallback={<div>Chargement du fournisseur...</div>}>
+      <SupplierView supplier={supplier} />
     </Suspense>
   );
 }

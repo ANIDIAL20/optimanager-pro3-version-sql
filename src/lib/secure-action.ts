@@ -50,6 +50,11 @@ export function secureAction<TArgs extends any[], TReturn>(
       
       return await handler(user.uid, user, ...args);
     } catch (error: any) {
+      // ⚡ Allow Next.js Redirects to bubble up
+      if (error.message === 'NEXT_REDIRECT' || error.digest?.startsWith('NEXT_REDIRECT')) {
+        throw error;
+      }
+      
       if (!error.message?.includes('Authentication required')) {
           console.error('Secure action error:', error);
       }

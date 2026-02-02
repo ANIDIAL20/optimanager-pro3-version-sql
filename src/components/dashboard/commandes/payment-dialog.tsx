@@ -80,20 +80,26 @@ export function PaymentDialog({ order, open, onOpenChange, onPaymentSuccess }: P
             setAmount(Math.max(0, remainingAmount).toFixed(2));
             setMethod('cash');
             setNote('');
-        } else {
-             // Force cleanup of body styles when dialog closes
-             // This fixes the "stuck overlay" / "invisible barrier" issue
-             setTimeout(() => {
-                 document.body.style.pointerEvents = '';
-                 // We don't want to reset overflow if another modal is open, 
-                 // but for this specific "stuck" case, it's usually safe to ensure it's not 'hidden' if this is the only one.
-                 // Ideally Radix handles this, but we are patching a bug.
-                 if (document.body.style.pointerEvents === 'none') {
-                     document.body.style.pointerEvents = '';
-                 }
-             }, 100);
         }
     }, [open, remainingAmount]);
+
+    // FORCE CLEANUP: Manually unlock the body when the modal closes
+    React.useEffect(() => {
+        if (!open) {
+            // Small timeout to allow the exit animation to finish
+            const timer = setTimeout(() => {
+                document.body.style.pointerEvents = "";
+                document.body.style.overflow = "";
+            }, 300); // 300ms matches Shadcn animation duration
+
+            return () => clearTimeout(timer);
+        }
+        // Safety net: Also unlock on unmount
+        return () => {
+            document.body.style.pointerEvents = "";
+            document.body.style.overflow = "";
+        };
+    }, [open]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

@@ -91,8 +91,27 @@ export function SupplierForm({ supplier }: SupplierFormProps) {
   const form = useForm<SupplierFormValues>({
     resolver: zodResolver(SupplierSchema),
     defaultValues: supplier ? {
-      ...supplier,
+      nomCommercial: supplier.nomCommercial || '',
+      raisonSociale: supplier.raisonSociale || '',
+      typeProduits: supplier.typeProduits || [],
+      telephone: supplier.telephone || '',
+      email: supplier.email || '',
+      adresse: supplier.adresse || '',
+      ville: supplier.ville || '',
+      pays: supplier.pays || '',
+      if: supplier.if || '',
+      ice: supplier.ice || '',
+      rc: supplier.rc || '',
+      rib: supplier.rib || '',
+      banque: supplier.banque || '', // Combobox might need handling
+      delaiPaiement: supplier.delaiPaiement || undefined,
+      modePaiement: supplier.modePaiement || undefined,
       remise: supplier.remise || undefined,
+      contactNom: supplier.contactNom || '',
+      contactTelephone: supplier.contactTelephone || '',
+      contactEmail: supplier.contactEmail || '',
+      notes: supplier.notes || '',
+      statut: supplier.statut || 'Actif',
     } : {
       nomCommercial: '',
       raisonSociale: '',
@@ -168,7 +187,7 @@ export function SupplierForm({ supplier }: SupplierFormProps) {
           title: 'Fournisseur Modifié',
           description: `Le fournisseur "${data.nomCommercial}" a été mis à jour.`,
         });
-        // router.push(`/dashboard/fournisseurs/${supplier.id}`); // Stay or redirect?
+        router.push(`/suppliers/${supplier.id}`);
         router.refresh();
       } else {
         await createSupplier(payload);
@@ -177,7 +196,7 @@ export function SupplierForm({ supplier }: SupplierFormProps) {
           description: `Le fournisseur "${data.nomCommercial}" a été créé.`,
           variant: "default"
         });
-        router.push('/dashboard/fournisseurs');
+        router.push('/suppliers');
       }
     } catch (error: any) {
       console.error("Erreur lors de la sauvegarde du fournisseur:", error);
@@ -318,7 +337,7 @@ export function SupplierForm({ supplier }: SupplierFormProps) {
                   <FormItem><FormLabel>Mode de Paiement</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="-- Choisir --" /></SelectTrigger></FormControl><SelectContent><SelectItem value="Espèces">Espèces</SelectItem><SelectItem value="Chèque">Chèque</SelectItem><SelectItem value="Virement">Virement</SelectItem><SelectItem value="Carte">Carte</SelectItem></SelectContent></Select><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="remise" render={({ field }) => (
-                  <FormItem><FormLabel>Remise Habituelle (%)</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
+                  <FormItem><FormLabel>Remise Habituelle (%)</FormLabel><FormControl><Input type="number" placeholder="0" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
                 )} />
               </CardContent>
             </Card>
