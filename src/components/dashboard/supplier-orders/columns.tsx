@@ -185,7 +185,7 @@ export const columns: ColumnDef<SupplierOrderUI>[] = [
 // Actions Component
 import { useToast } from "@/hooks/use-toast";
 import { confirmOrderReception, deleteSupplierOrder } from "@/app/actions/supplier-orders-actions";
-import { useFirebase } from "@/firebase";
+// import { useFirebase } from "@/firebase";
 import { useRouter } from "next/navigation";
 
 function OrderActions({ order }: { order: SupplierOrderUI }) {

@@ -1,29 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
-import { getReminderStats } from '@/app/actions/reminder-actions';
 import { Bell, AlertCircle, Clock, CheckCircle } from 'lucide-react';
 
-export function ReminderStats() {
-  const [stats, setStats] = useState({
-    total: 0,
-    pending: 0,
-    urgent: 0,
-    today: 0,
-  });
+interface ReminderStatsProps {
+  stats: {
+    total: number;
+    pending: number;
+    urgent: number;
+    today: number;
+  };
+}
 
-  useEffect(() => {
-    const loadStats = async () => {
-      try {
-        const data = await getReminderStats();
-        setStats(data);
-      } catch (error) {
-        console.error('Failed to load stats', error);
-      }
-    };
-    loadStats();
-  }, []);
+export function ReminderStats({ stats }: ReminderStatsProps) {
+  // Data is now passed from the server component
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

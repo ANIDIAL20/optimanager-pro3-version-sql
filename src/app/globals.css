@@ -50,3 +50,34 @@
   }
 }
 
+@media print {
+  /* Hide all direct children of body EXCEPT the print-portal */
+  body > *:not(.print-portal) {
+    display: none !important;
+  }
+
+  /* Ensure the print portal renders as the main document */
+  .print-portal {
+    display: block !important;
+    position: relative; /* Changed from absolute to flow correctly */
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: white;
+  }
+
+  /* Reset body/html for full page printing */
+  html, body {
+    height: auto !important; /* Allow expansion */
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  /* Ensure content inside portal matches standard flow */
+  .print-portal * {
+    display: unset; 
+  }
+}

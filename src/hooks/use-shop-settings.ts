@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { doc, getDoc } from 'firebase/firestore';
-import { useFirestore, useFirebase } from '@/firebase';
+import { getShopSettings } from '@/app/actions/shop-settings-actions';
 
 interface ShopSettings {
     shopName: string;
@@ -15,25 +14,17 @@ export function useShopSettings() {
     const [settings, setSettings] = useState<ShopSettings | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
-    const firestore = useFirestore();
-    const { user } = useFirebase();
 
     useEffect(() => {
         const fetchSettings = async () => {
-            if (!firestore || !user) {
-                setIsLoading(false);
-                return;
-            }
-
             try {
                 setIsLoading(true);
-                const settingsRef = doc(firestore, `stores/${user.uid}/settings`, 'shop');
-                const settingsSnap = await getDoc(settingsRef);
+                const result = await getShopSettings();
 
-                if (settingsSnap.exists()) {
-                    setSettings(settingsSnap.data() as ShopSettings);
+                if (result.success && result.data) {
+                    setSettings(result.data as ShopSettings);
                 } else {
-                    // Default settings if none exist
+                    // Default settings if none exist or error
                     setSettings({
                         shopName: 'Ma Boutique',
                     });
@@ -51,7 +42,7 @@ export function useShopSettings() {
         };
 
         fetchSettings();
-    }, [firestore, user]);
+    }, []);
 
     return { settings, isLoading, error };
 }

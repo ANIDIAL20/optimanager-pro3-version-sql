@@ -11,12 +11,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
-import { useFirestore, useFirebase } from '@/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { getStorage } from 'firebase/storage';
+
 import { Loader2, Upload, Building2, Image as ImageIcon } from 'lucide-react';
 import Image from 'next/image';
+import { getShopSettings, updateShopSettings } from '@/app/actions/shop-settings-actions';
 
 const shopSettingsSchema = z.object({
     shopName: z.string().min(1, 'Le nom de la boutique est requis'),
@@ -31,9 +29,6 @@ type ShopSettingsFormValues = z.infer<typeof shopSettingsSchema>;
 
 export default function ParametresPage() {
     const { toast } = useToast();
-    const firestore = useFirestore();
-    const { user } = useFirebase();
-    const storage = getStorage();
     const [isLoading, setIsLoading] = React.useState(true);
     const [isUploading, setIsUploading] = React.useState(false);
     const [logoPreview, setLogoPreview] = React.useState<string | null>(null);
@@ -54,15 +49,13 @@ export default function ParametresPage() {
     // Load existing settings
     React.useEffect(() => {
         const loadSettings = async () => {
-            if (!firestore || !user) return;
-
-            try {
+             // Server action auto-handles auth check
+             try {
                 setIsLoading(true);
-                const settingsRef = doc(firestore, `stores/${user.uid}/settings`, 'shop');
-                const settingsSnap = await getDoc(settingsRef);
+                const result = await getShopSettings();
 
-                if (settingsSnap.exists()) {
-                    const data = settingsSnap.data();
+                if (result.success && result.data) {
+                    const data = result.data;
                     form.reset({
                         shopName: data.shopName || '',
                         address: data.address || '',
@@ -88,79 +81,37 @@ export default function ParametresPage() {
         };
 
         loadSettings();
-    }, [firestore, user, form, toast]);
+    }, [form, toast]);
 
     // Handle logo upload
     const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (!file || !user) return;
-
-        // Validate file type
-        if (!file.type.startsWith('image/')) {
-            toast({
-                variant: 'destructive',
-                title: 'Erreur',
-                description: 'Veuillez sélectionner une image valide.',
-            });
-            return;
-        }
-
-        // Validate file size (max 2MB)
-        if (file.size > 2 * 1024 * 1024) {
-            toast({
-                variant: 'destructive',
-                title: 'Erreur',
-                description: 'L\'image ne doit pas dépasser 2 MB.',
-            });
-            return;
-        }
-
-        setIsUploading(true);
-        try {
-            // Create a reference to the logo file
-            const logoRef = ref(storage, `logos/${user.uid}/${Date.now()}_${file.name}`);
-
-            // Upload the file
-            await uploadBytes(logoRef, file);
-
-            // Get the download URL
-            const downloadURL = await getDownloadURL(logoRef);
-
-            // Update form and preview
-            form.setValue('logoUrl', downloadURL);
-            setLogoPreview(downloadURL);
-
-            toast({
-                title: 'Logo téléchargé',
-                description: 'Votre logo a été téléchargé avec succès.',
-            });
-        } catch (error) {
-            console.error('Error uploading logo:', error);
-            toast({
-                variant: 'destructive',
-                title: 'Erreur',
-                description: 'Impossible de télécharger le logo.',
-            });
-        } finally {
-            setIsUploading(false);
-        }
+        // Disabled for Migration
+        toast({
+            title: "Information",
+            description: "Le téléchargement d'images est temporairement désactivé pendant la migration vers la nouvelle base de données."
+        });
+        /* 
+        Legacy Firebase Upload Code Removed
+        */
     };
 
     // Submit form
     const onSubmit = async (data: ShopSettingsFormValues) => {
-        if (!firestore || !user) return;
-
         try {
-            const settingsRef = doc(firestore, `stores/${user.uid}/settings`, 'shop');
-            await setDoc(settingsRef, {
-                ...data,
-                updatedAt: new Date().toISOString(),
-            });
+            const result = await updateShopSettings(data);
 
-            toast({
-                title: 'Paramètres enregistrés',
-                description: 'Vos paramètres de boutique ont été mis à jour.',
-            });
+            if (result.success) {
+                toast({
+                    title: 'Paramètres enregistrés',
+                    description: 'Vos paramètres de boutique ont été mis à jour.',
+                });
+            } else {
+                 toast({
+                    variant: 'destructive',
+                    title: 'Erreur',
+                    description: result.error || 'Une erreur s\'est produite',
+                });
+            }
         } catch (error) {
             console.error('Error saving settings:', error);
             toast({

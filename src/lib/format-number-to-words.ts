@@ -1,4 +1,4 @@
-const n2words = require('n2words');
+import { fr } from 'n2words';
 
 /**
  * Converts a currency amount to words in French (Moroccan Dirham format)
@@ -26,7 +26,7 @@ export function formatCurrencyToWords(amount: number): string {
 
   // Convert integer part (Dirhams)
   if (integerPart > 0) {
-    const dirhamsInWords = n2words(integerPart, { lang: 'fr' });
+    const dirhamsInWords = fr(integerPart);
     // Capitalize first letter
     const capitalizedDirhams = dirhamsInWords.charAt(0).toUpperCase() + dirhamsInWords.slice(1);
     
@@ -37,7 +37,7 @@ export function formatCurrencyToWords(amount: number): string {
 
   // Convert decimal part (Centimes)
   if (decimalPart > 0) {
-    const centimesInWords = n2words(decimalPart, { lang: 'fr' });
+    const centimesInWords = fr(decimalPart);
     // Capitalize first letter
     const capitalizedCentimes = centimesInWords.charAt(0).toUpperCase() + centimesInWords.slice(1);
     

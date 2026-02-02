@@ -12,6 +12,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { BackButton } from '@/components/ui/back-button';
 import { PageHeader } from '@/components/page-header';
+import { createPortal } from 'react-dom';
+import { getPrintData } from '@/app/actions/print-actions';
+import { PrintDocumentTemplate } from '@/components/printing/print-document-template';
 
 interface DevisDetailsPageProps {
     params: Promise<{ id: string }>;
@@ -25,6 +28,9 @@ export default function DevisDetailsPage({ params }: DevisDetailsPageProps) {
     const [devis, setDevis] = React.useState<Devis | null>(null);
     const [isLoading, setIsLoading] = React.useState(true);
     const [isConverting, setIsConverting] = React.useState(false);
+    
+    // Print logic
+    const [printData, setPrintData] = React.useState<any>(null);
 
     const loadDevis = React.useCallback(async () => {
         if (!id) return;
@@ -32,6 +38,16 @@ export default function DevisDetailsPage({ params }: DevisDetailsPageProps) {
         const result = await getDevisById(id);
         if (result.success && result.devis) {
             setDevis(result.devis);
+            
+            // Fetch print data in background
+            try {
+                const pData = await getPrintData(id, 'devis');
+                if (pData.success) {
+                    setPrintData(pData.data);
+                }
+            } catch (err) {
+                console.error("Failed to load print data", err);
+            }
         } else {
             toast({
                 title: "Erreur",
@@ -93,23 +109,26 @@ export default function DevisDetailsPage({ params }: DevisDetailsPageProps) {
     if (!devis) return null;
 
     const handlePrint = () => {
-        const iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
-        iframe.src = `/dashboard/devis/${devis.id}/print`;
-        document.body.appendChild(iframe);
-
-        iframe.onload = () => {
-            if (iframe.contentWindow) {
-                iframe.contentWindow.print();
-            }
-            setTimeout(() => {
-                document.body.removeChild(iframe);
-            }, 1000);
-        };
+        if (!printData) {
+            toast({
+                title: "Patience",
+                description: "Chargement des données d'impression...",
+            });
+            return;
+        }
+        window.print();
     };
 
     return (
         <div className="flex flex-1 flex-col gap-6">
+            {/* Hidden Print Portal */}
+            {printData && typeof document !== 'undefined' && createPortal(
+                <div className="print-portal hidden">
+                    <PrintDocumentTemplate type="devis" data={printData} />
+                </div>,
+                document.body
+            )}
+
             {/* Back Button */}
             <div className="w-fit">
                 <BackButton />

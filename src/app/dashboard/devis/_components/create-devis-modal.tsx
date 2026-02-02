@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { createDevis, DevisItem } from '@/app/actions/devis-actions';
 import { getClients } from '@/app/actions/clients-actions';
-import { getProducts } from '@/app/actions/products-actions';
+import { getProducts, getCategories } from '@/app/actions/products-actions';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,12 +16,16 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Trash2, Loader2, Search } from 'lucide-react';
+import { Plus, Trash2, Loader2, Search, ShoppingCart, User, X, Box } from 'lucide-react';
 import { ClientSelector } from '@/components/sales/client-selector';
-import { Client, Product } from '@/lib/types';
+import { Client, Product, Category } from '@/lib/types'; // Add Category type if needed
 import { cn } from '@/lib/utils';
 import { QuickClientDialog } from '@/components/sales/quick-client-dialog';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 
 interface CreateDevisModalProps {
     children: React.ReactNode;
@@ -40,6 +44,11 @@ export function CreateDevisModal({ children, onSuccess }: CreateDevisModalProps)
     const [items, setItems] = React.useState<DevisItem[]>([]);
     const [clients, setClients] = React.useState<Client[]>([]);
     const [products, setProducts] = React.useState<Product[]>([]);
+    const [categories, setCategories] = React.useState<{ id: string, name: string }[]>([]);
+
+    // Search & Filter State
+    const [searchQuery, setSearchQuery] = React.useState('');
+    const [selectedCategory, setSelectedCategory] = React.useState<string>('all');
 
     // Load data when modal opens
     React.useEffect(() => {
@@ -48,16 +57,20 @@ export function CreateDevisModal({ children, onSuccess }: CreateDevisModalProps)
         const loadData = async () => {
             setIsLoading(true);
             try {
-                const [clientsResult, productsResult] = await Promise.all([
+                const [clientsResult, productsResult, categoriesResult] = await Promise.all([
                     getClients(),
-                    getProducts()
+                    getProducts(),
+                    getCategories()
                 ]);
-                
+
                 if (clientsResult.success) {
                     setClients(clientsResult.clients as any);
                 }
                 if (productsResult.success) {
                     setProducts(productsResult.data as any);
+                }
+                if (categoriesResult.success) {
+                   setCategories(categoriesResult.data as any);
                 }
             } catch (error) {
                 console.error('Error loading data:', error);
@@ -73,37 +86,48 @@ export function CreateDevisModal({ children, onSuccess }: CreateDevisModalProps)
     const resetForm = () => {
         setSelectedClient(null);
         setItems([]);
+        setSearchQuery('');
+        setSelectedCategory('all');
     };
 
-    // Row Management
-    const addItem = () => {
-        setItems([...items, {
-            reference: '',
-            designation: '',
-            quantite: 1,
-            prixUnitaire: 0,
-            productId: ''
-        }]);
+    // --- Actions ---
+
+    const addItem = (product: Product) => {
+        // Check if item already exists
+        const existingIndex = items.findIndex(i => i.productId === product.id);
+
+        if (existingIndex > -1) {
+            // Update quantity
+            const newItems = [...items];
+            newItems[existingIndex].quantite += 1;
+            setItems(newItems);
+        } else {
+            // Add new item
+            setItems([...items, {
+                productId: product.id,
+                reference: product.reference || '',
+                designation: product.nomProduit || product.nom || 'Produit sans nom',
+                quantite: 1,
+                prixUnitaire: product.prixVente || 0
+            }]);
+        }
     };
 
-    const updateItem = (index: number, field: keyof DevisItem, value: any) => {
+    const updateItemQty = (index: number, delta: number) => {
         const newItems = [...items];
-        newItems[index] = { ...newItems[index], [field]: value };
-        setItems(newItems);
+        const currentQty = newItems[index].quantite;
+        const newQty = currentQty + delta;
+
+        if (newQty <= 0) {
+            removeItem(index);
+        } else {
+            newItems[index].quantite = newQty;
+            setItems(newItems);
+        }
     };
 
-    const handleProductSelect = (index: number, product: Product) => {
-        const newItems = [...items];
-        newItems[index] = {
-            ...newItems[index],
-            productId: product.id,
-            reference: product.reference || '',
-            designation: product.nom || product.nomProduit || '',
-            prixUnitaire: product.prixVente || 0,
-            quantite: 1 // Default to 1
-        };
-        setItems(newItems);
-    };
+
+
 
     const removeItem = (index: number) => {
         setItems(items.filter((_, i) => i !== index));
@@ -112,6 +136,16 @@ export function CreateDevisModal({ children, onSuccess }: CreateDevisModalProps)
     // Calculate Totals
     const totalHT = items.reduce((sum, item) => sum + (item.quantite * item.prixUnitaire), 0);
     const totalTTC = totalHT * 1.20;
+
+    // Filter Products
+    const filteredProducts = products.filter(product => {
+        const matchesSearch = (product.nomProduit || product.nom || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              (product.reference || '').toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesCategory = selectedCategory === 'all' || 
+                                (product.categorie === selectedCategory) ||
+                                (product.category === selectedCategory); // Handle differing field names
+        return matchesSearch && matchesCategory;
+    });
 
     // Save
     const handleSave = async () => {
@@ -122,14 +156,6 @@ export function CreateDevisModal({ children, onSuccess }: CreateDevisModalProps)
         if (items.length === 0) {
             toast({ title: 'Erreur', description: 'Veuillez ajouter au moins un produit', variant: 'destructive' });
             return;
-        }
-
-        // Validate items
-        for (const item of items) {
-            if (!item.designation) {
-                toast({ title: 'Erreur', description: 'La désignation est obligatoire pour tous les articles', variant: 'destructive' });
-                return;
-            }
         }
 
         setIsSaving(true);
@@ -162,18 +188,127 @@ export function CreateDevisModal({ children, onSuccess }: CreateDevisModalProps)
             <DialogTrigger asChild>
                 {children}
             </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-                <DialogHeader>
-                    <DialogTitle>Nouveau Devis Professionnel</DialogTitle>
-                    <DialogDescription>
-                        Créez un devis détaillé pour vos clients.
-                    </DialogDescription>
-                </DialogHeader>
+            <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] p-0 gap-0 overflow-hidden flex flex-row">
+                
+                {/* -------------------- LEFT PANEL: PRODUCT CATALOG (60%) -------------------- */}
+                <div className="flex-1 flex flex-col bg-muted/10 h-full border-r relative">
+                   {/* Header: Search & Categories */}
+                   <div className="p-4 bg-background border-b space-y-4">
+                        <div className="flex items-center gap-2">
+                             <div className="relative flex-1">
+                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    placeholder="Rechercher produit (nom, référence)..."
+                                    className="pl-9 bg-muted/20"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                             </div>
+                        </div>
 
-                <div className="flex-1 overflow-y-auto py-4 space-y-6 px-1">
-                    {/* 1. Client Selection */}
-                    <div className="space-y-2">
-                        <Label>Client</Label>
+                        {/* Categories Tabs */}
+                        <ScrollArea className="w-full pb-2">
+                            <Tabs value={selectedCategory} onValueChange={setSelectedCategory} className="w-full">
+                                <TabsList className="bg-transparent h-auto p-0 gap-2 flex-wrap justify-start">
+                                    <TabsTrigger 
+                                        value="all" 
+                                        className="rounded-full border bg-background data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-1.5 h-auto text-sm"
+                                    >
+                                        Tous
+                                    </TabsTrigger>
+                                    {categories.map(cat => (
+                                        <TabsTrigger 
+                                            key={cat.id} 
+                                            value={cat.name}
+                                            className="rounded-full border bg-background data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-1.5 h-auto text-sm"
+                                        >
+                                            {cat.name}
+                                        </TabsTrigger>
+                                    ))}
+                                </TabsList>
+                            </Tabs>
+                        </ScrollArea>
+                   </div>
+                   
+                   {/* Product Grid */}
+                   <ScrollArea className="flex-1 p-4">
+                        {isLoading ? (
+                            <div className="flex justify-center items-center h-40">
+                                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : filteredProducts.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-40 text-muted-foreground space-y-2">
+                                <Box className="h-10 w-10 opacity-20" />
+                                <p>Aucun produit trouvé</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                                {filteredProducts.map((product) => (
+                                    <div 
+                                        key={product.id} 
+                                        onClick={() => {
+                                            if (product.quantiteStock > 0) {
+                                                addItem(product);
+                                            }
+                                        }}
+                                        className={cn(
+                                            "group transition-transform duration-200",
+                                            product.quantiteStock > 0 
+                                                ? "cursor-pointer hover:scale-[1.02]" 
+                                                : "opacity-50 cursor-not-allowed grayscale-[0.5]"
+                                        )}
+                                    >
+                                        <Card className="h-full border-muted hover:border-primary/50 overflow-hidden shadow-sm hover:shadow-md">
+                                            <CardContent className="p-3 space-y-2">
+                                                <div className="flex justify-between items-start">
+                                                    <Badge variant={product.quantiteStock > 0 ? "outline" : "destructive"} className={cn("text-[10px] px-1.5 py-0 h-5", product.quantiteStock > 0 ? "text-green-600 border-green-200 bg-green-50" : "")}>
+                                                        {product.quantiteStock > 0 ? `${product.quantiteStock} en stock` : 'Rupture'}
+                                                    </Badge>
+                                                    <span className="text-[10px] text-muted-foreground font-mono">{product.reference}</span>
+                                                </div>
+                                                
+                                                <div className="h-10 flex items-center">
+                                                     <h4 className="font-medium text-sm line-clamp-2 leading-tight" title={product.nomProduit || product.nom}>
+                                                        {product.nomProduit || product.nom}
+                                                    </h4>
+                                                </div>
+                                                
+                                                <div className="pt-2 flex justify-between items-center border-t border-dashed">
+                                                    <span className="font-bold text-primary">{product.prixVente} DH</span>
+                                                    <Button 
+                                                        size="icon" 
+                                                        variant="ghost" 
+                                                        disabled={product.quantiteStock <= 0}
+                                                        className="h-6 w-6 rounded-full group-hover:bg-primary group-hover:text-primary-foreground disabled:opacity-50 disabled:bg-transparent"
+                                                    >
+                                                        <Plus className="h-3 w-3" />
+                                                    </Button>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                   </ScrollArea>
+                </div>
+
+
+                {/* -------------------- RIGHT PANEL: QUOTE DETAILS (40%) -------------------- */}
+                <div className="w-[400px] lg:w-[450px] xl:w-[500px] flex flex-col bg-background h-full shadow-xl z-10">
+                    <DialogHeader className="p-4 border-b bg-muted/5">
+                        <DialogTitle className="flex items-center gap-2">
+                            <ShoppingCart className="h-5 w-5" />
+                            Nouveau Devis
+                        </DialogTitle>
+                        <DialogDescription className="text-xs">
+                             Sélectionnez un client et ajoutez des produits.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                     {/* Client Selection */}
+                    <div className="p-4 bg-muted/10 border-b space-y-2">
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Client</Label>
                         <div className="flex gap-2">
                             <div className="flex-1">
                                 <ClientSelector
@@ -184,177 +319,116 @@ export function CreateDevisModal({ children, onSuccess }: CreateDevisModalProps)
                             </div>
                             <QuickClientDialog onClientCreated={setSelectedClient} />
                         </div>
+                         {selectedClient && (
+                            <div className="mt-2 text-xs flex items-center gap-2 text-muted-foreground">
+                                <User className="h-3 w-3" />
+                                <span>{selectedClient.telephone1 || 'Pas de téléphone'}</span>
+                            </div>
+                        )}
                     </div>
 
-                    {/* 2. Items Table with Product Search */}
-                    <div className="border rounded-lg overflow-hidden">
-                        <Table>
-                            <TableHeader className="bg-muted/50">
-                                <TableRow>
-                                    <TableHead className="w-[40%]">Désignation / Produit</TableHead>
-                                    <TableHead className="w-[20%]">Référence</TableHead>
-                                    <TableHead className="w-[15%] text-right">Qté</TableHead>
-                                    <TableHead className="w-[15%] text-right">Prix U.</TableHead>
-                                    <TableHead className="w-[10%]"></TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
+                    {/* Items List */}
+                    <ScrollArea className="flex-1 bg-background p-0">
+                         {items.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full text-muted-foreground space-y-4 p-8 opacity-50">
+                                <ShoppingCart className="h-12 w-12" />
+                                <div className="text-center">
+                                    <p className="font-medium">Le devis est vide</p>
+                                    <p className="text-sm">Cliquez sur les produits à gauche pour les ajouter.</p>
+                                </div>
+                            </div>
+                         ) : (
+                            <div className="divide-y">
                                 {items.map((item, index) => (
-                                    <TableRow key={index}>
-                                        <TableCell>
-                                            <ProductSearchCombobox
-                                                products={products}
-                                                value={item.designation}
-                                                onSelect={(p) => handleProductSelect(index, p)}
-                                                onChange={(val) => updateItem(index, 'designation', val)}
-                                            />
-                                        </TableCell>
-                                        <TableCell>
-                                            <Input
-                                                value={item.reference}
-                                                onChange={(e) => updateItem(index, 'reference', e.target.value)}
-                                                className="h-8"
-                                                placeholder="Réf."
-                                            />
-                                        </TableCell>
-                                        <TableCell>
-                                            <Input
-                                                type="number"
-                                                min="1"
-                                                value={item.quantite}
-                                                onChange={(e) => updateItem(index, 'quantite', parseFloat(e.target.value) || 0)}
-                                                className="h-8 text-right"
-                                            />
-                                        </TableCell>
-                                        <TableCell>
-                                            <Input
-                                                type="number"
-                                                step="0.01"
-                                                value={item.prixUnitaire}
-                                                onChange={(e) => updateItem(index, 'prixUnitaire', parseFloat(e.target.value) || 0)}
-                                                className="h-8 text-right"
-                                            />
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
+                                    <div key={index} className="p-3 hover:bg-muted/10 transition-colors group relative">
+                                        <div className="flex justify-between gap-3 mb-2">
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="text-sm font-medium truncate" title={item.designation}>{item.designation}</h4>
+                                                <div className="text-[10px] text-muted-foreground font-mono">{item.reference}</div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="font-medium text-sm">{item.prixUnitaire * item.quantite} DH</div>
+                                                <div className="text-[10px] text-muted-foreground">{item.prixUnitaire} DH/u</div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="flex items-center justify-between">
+                                             <div className="flex items-center border rounded-md self-start">
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    className="h-7 w-7 rounded-none rounded-l-md hover:bg-muted"
+                                                    onClick={() => updateItemQty(index, -1)}
+                                                >
+                                                    -
+                                                </Button>
+                                                <div className="w-8 text-center text-sm font-medium">{item.quantite}</div>
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    className="h-7 w-7 rounded-none rounded-r-md hover:bg-muted"
+                                                    onClick={() => updateItemQty(index, 1)}
+                                                >
+                                                    <Plus className="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                            
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                                 onClick={() => removeItem(index)}
-                                                className="h-8 w-8 text-red-500 hover:text-red-700"
                                             >
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
-                                        </TableCell>
-                                    </TableRow>
+                                        </div>
+                                    </div>
                                 ))}
-                                {items.length === 0 && (
-                                    <TableRow>
-                                        <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
-                                            Aucun article. Cliquez sur "Ajouter une ligne" pour commencer.
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                        <div className="bg-muted/30 p-2 flex justify-center border-t">
-                            <Button variant="ghost" className="text-blue-600 gap-2" onClick={addItem}>
-                                <Plus className="h-4 w-4" /> Ajouter une ligne
+                            </div>
+                         )}
+                    </ScrollArea>
+
+                    {/* Footer Totals */}
+                    <div className="mt-auto border-t bg-muted/5 p-4 space-y-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                        <div className="space-y-1.5 text-sm">
+                             <div className="flex justify-between text-muted-foreground">
+                                <span>Total HT</span>
+                                <span>{totalHT.toFixed(2)} DH</span>
+                            </div>
+                             <div className="flex justify-between text-muted-foreground">
+                                <span>TVA (20%)</span>
+                                <span>{(totalTTC - totalHT).toFixed(2)} DH</span>
+                            </div>
+                             <Separator className="my-2" />
+                            <div className="flex justify-between items-end">
+                                <span className="font-semibold text-lg">Net à payer</span>
+                                <span className="font-bold text-2xl text-primary">{totalTTC.toFixed(2)} <span className="text-sm font-normal text-muted-foreground">DH</span></span>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 pt-2">
+                             <Button variant="outline" onClick={() => setIsOpen(false)} className="w-full">
+                                Annuler
+                            </Button>
+                             <Button onClick={handleSave} disabled={isSaving || items.length === 0} className="w-full">
+                                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Créer Devis
                             </Button>
                         </div>
                     </div>
-
-                    {/* 3. Totals */}
-                    <div className="flex justify-end pt-4 border-t">
-                        <div className="w-64 space-y-2">
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Total HT</span>
-                                <span>{totalHT.toFixed(2)} DH</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">TVA (20%)</span>
-                                <span>{(totalTTC - totalHT).toFixed(2)} DH</span>
-                            </div>
-                            <div className="flex justify-between text-lg font-bold pt-2 border-t">
-                                <span>Total TTC</span>
-                                <span className="text-blue-600">{totalTTC.toFixed(2)} DH</span>
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
-                {/* Footer Actions */}
-                <div className="flex justify-end gap-2 pt-4 border-t mt-auto">
-                    <Button variant="outline" onClick={() => setIsOpen(false)}>Annuler</Button>
-                    <Button onClick={handleSave} disabled={isSaving}>
-                        {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Enregistrer le Devis
-                    </Button>
-                </div>
+                {/* Close Button Absolute */}
+                <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="absolute top-2 right-2 z-50 rounded-full bg-background/50 hover:bg-background shadow-sm lg:hidden"
+                    onClick={() => setIsOpen(false)}
+                >
+                    <X className="h-4 w-4" />
+                </Button>
+
             </DialogContent>
         </Dialog>
-    );
-}
-
-// Inner Component: Product Search Combobox
-function ProductSearchCombobox({
-    products,
-    value,
-    onSelect,
-    onChange
-}: {
-    products: Product[];
-    value: string;
-    onSelect: (p: Product) => void;
-    onChange: (val: string) => void;
-}) {
-    const [isOpen, setIsOpen] = React.useState(false);
-    const [searchTerm, setSearchTerm] = React.useState(value);
-
-    // Sync internal search term with external value cleanly
-    React.useEffect(() => {
-        setSearchTerm(value);
-    }, [value]);
-
-    const filteredProducts = React.useMemo(() => {
-        if (!searchTerm) return [];
-        const lower = searchTerm.toLowerCase();
-        return products.filter(p =>
-            (p.nom || p.nomProduit || '').toLowerCase().includes(lower) ||
-            (p.reference && p.reference.toLowerCase().includes(lower))
-        ).slice(0, 10); // Limit to 10
-    }, [products, searchTerm]);
-
-    return (
-        <div className="relative">
-            <Input
-                value={searchTerm}
-                onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    onChange(e.target.value);
-                    setIsOpen(true);
-                }}
-                onFocus={() => setIsOpen(true)}
-                onBlur={() => setTimeout(() => setIsOpen(false), 200)} // Delay for click to register
-                placeholder="Rechercher produit..."
-                className="h-8"
-            />
-            {isOpen && filteredProducts.length > 0 && (
-                <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-900 border rounded-md shadow-lg max-h-48 overflow-auto">
-                    {filteredProducts.map(product => (
-                        <div
-                            key={product.id}
-                            className="px-3 py-2 text-sm hover:bg-muted cursor-pointer flex justify-between"
-                            onMouseDown={() => { // onMouseDown fires before onBlur
-                                onSelect(product);
-                                setIsOpen(false);
-                            }}
-                        >
-                            <span>{product.nom || product.nomProduit}</span>
-                            <span className="text-muted-foreground text-xs">{product.prixVente} DH</span>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
     );
 }
