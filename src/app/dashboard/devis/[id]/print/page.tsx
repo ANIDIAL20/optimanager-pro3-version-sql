@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useFirebase } from '@/firebase';
 import { Button } from '@/components/ui/button';
 import { Loader2, Printer, ArrowLeft } from 'lucide-react';
 import { getPrintData } from '@/app/actions/print-actions';
@@ -18,9 +17,6 @@ interface DevisPrintPageProps {
 export default function DevisPrintPage({ params }: DevisPrintPageProps) {
     const { id } = React.use(params);
     const router = useRouter();
-    const { user } = useFirebase();
-    const { toast } = useToast();
-
     // Auto print logic
     const searchParams = useSearchParams();
     const shouldAutoPrint = searchParams.get('auto') === 'true';
@@ -30,7 +26,7 @@ export default function DevisPrintPage({ params }: DevisPrintPageProps) {
 
     React.useEffect(() => {
         const fetchData = async () => {
-            if (!user || !id) return;
+            if (!id) return;
 
             // ✅ FIX: secureAction injects userId automatically
             const result = await getPrintData(id, 'devis');
@@ -43,13 +39,13 @@ export default function DevisPrintPage({ params }: DevisPrintPageProps) {
                     title: 'Erreur',
                     description: result.error
                 });
-                router.push('/dashboard/devis');
+                // router.push('/dashboard/devis'); // Optional: redirect on error
             }
             setIsLoading(false);
         };
 
         fetchData();
-    }, [user, id, router, toast]);
+    }, [id, router, toast]);
 
     // Auto-print effect
     React.useEffect(() => {

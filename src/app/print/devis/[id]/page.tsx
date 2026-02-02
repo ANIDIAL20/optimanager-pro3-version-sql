@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useFirebase } from '@/firebase';
 import { Button } from '@/components/ui/button';
 import { Loader2, Printer, ArrowLeft } from 'lucide-react';
 import { getPrintData } from '@/app/actions/print-actions';
@@ -16,7 +15,6 @@ interface DevisPrintPageProps {
 export default function DevisPrintPage({ params }: DevisPrintPageProps) {
     const { id } = React.use(params);
     const router = useRouter();
-    const { user } = useFirebase();
     const { toast } = useToast();
 
     // Auto print logic
@@ -28,7 +26,7 @@ export default function DevisPrintPage({ params }: DevisPrintPageProps) {
 
     React.useEffect(() => {
         const fetchData = async () => {
-            if (!user || !id) return;
+            if (!id) return;
 
             // ✅ FIX: secureAction injects userId automatically
             const result = await getPrintData(id, 'devis');
@@ -47,7 +45,7 @@ export default function DevisPrintPage({ params }: DevisPrintPageProps) {
         };
 
         fetchData();
-    }, [user, id, router, toast]);
+    }, [id, router, toast]);
 
     // Auto-print effect
     React.useEffect(() => {
@@ -75,17 +73,19 @@ export default function DevisPrintPage({ params }: DevisPrintPageProps) {
 
     return (
         <div className="min-h-screen bg-white flex flex-col items-center py-8 text-black">
-            {/* Toolbar (Hidden on Print) */}
-            <div className="w-full max-w-[210mm] mb-6 flex justify-between px-4 print:hidden">
-                <Button variant="outline" onClick={() => router.back()}>
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Retour
-                </Button>
-                <Button onClick={handlePrint}>
-                    <Printer className="mr-2 h-4 w-4" />
-                    Imprimer Devis
-                </Button>
-            </div>
+            {/* Toolbar (Hidden on Print and Preview) */}
+            {!searchParams.get('preview') && (
+                <div className="w-full max-w-[210mm] mb-6 flex justify-between px-4 print:hidden">
+                    <Button variant="outline" onClick={() => router.back()}>
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        Retour
+                    </Button>
+                    <Button onClick={handlePrint}>
+                        <Printer className="mr-2 h-4 w-4" />
+                        Imprimer Devis
+                    </Button>
+                </div>
+            )}
 
             {/* Shared Template */}
             <PrintDocumentTemplate type="devis" data={data} />

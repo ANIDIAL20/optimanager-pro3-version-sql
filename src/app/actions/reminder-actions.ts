@@ -5,7 +5,7 @@ import { db } from '@/db';
 import { reminders, products, sales, supplierOrders } from '@/db/schema';
 
 import { auth } from '@/auth';
-import { eq, and, desc, lt, gte, or, lte, isNull, gt } from 'drizzle-orm';
+import { eq, and, desc, lt, gte, or, lte, isNull, gt, sql } from 'drizzle-orm'; // verified
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
@@ -157,6 +157,7 @@ export async function markReminderAsRead(id: number) {
     .returning();
 
   revalidatePath('/dashboard');
+  revalidatePath('/', 'layout'); // Update sidebar badge
   return updated;
 }
 
@@ -185,6 +186,7 @@ export async function completeReminder(id: number) {
     .returning();
 
   revalidatePath('/dashboard');
+  revalidatePath('/', 'layout'); // Update sidebar badge
   return updated;
 }
 
@@ -209,6 +211,7 @@ export async function deleteReminder(id: number) {
     .returning();
 
   revalidatePath('/dashboard');
+  revalidatePath('/', 'layout'); // Update sidebar badge
   return deleted;
 }
 
@@ -216,7 +219,7 @@ export async function deleteReminder(id: number) {
  * Core Logic: Check deadlines and generate reminders
  * This function should be called periodically or on dashboard load
  */
-export async function checkDeadlines() {
+export async function checkDeadlines(shouldRevalidate = true) {
   const session = await auth();
   
   if (!session?.user?.id) {
@@ -225,6 +228,10 @@ export async function checkDeadlines() {
 
   let newRemindersCount = 0;
 
+
+
+  /* 
+  // DISABLED: User prefers to monitor stock via visual badges in the Stock Table only.
   // 1. Check Stock Levels
   // Get products with low stock
   const lowStockProducts = await db
@@ -233,8 +240,8 @@ export async function checkDeadlines() {
     .where(
       and(
         eq(products.userId, session.user.id),
-        // @ts-ignore
-        lte(products.quantiteStock, products.seuilAlerte)
+        // Use SQL for column-to-column comparison to be safe
+        sql`${products.quantiteStock} <= ${products.seuilAlerte}`
       )
     );
 
@@ -271,6 +278,7 @@ export async function checkDeadlines() {
       newRemindersCount++;
     }
   }
+  */
 
   // 2. Check Unpaid Sales (Debts)
   // Get unpaid sales
@@ -399,8 +407,9 @@ export async function checkDeadlines() {
     }
   }
   
-  if (newRemindersCount > 0) {
+  if (newRemindersCount > 0 && shouldRevalidate) {
     revalidatePath('/dashboard');
+    revalidatePath('/', 'layout'); // Update sidebar badge
   }
   
   return { success: true, message: `Vérification terminée. ${newRemindersCount} nouveaux rappels.` };

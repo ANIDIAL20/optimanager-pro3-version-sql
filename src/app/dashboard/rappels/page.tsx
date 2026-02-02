@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import { ReminderList } from '@/components/reminders/reminder-list';
 import { ReminderStats } from '@/components/reminders/reminder-stats';
 import { Bell } from 'lucide-react';
-import { checkDeadlines } from '@/app/actions/reminder-actions';
+import { checkDeadlines, getReminderStats } from '@/app/actions/reminder-actions';
 import { CreateReminderDialog } from '@/components/reminders/create-reminder-dialog';
 
 export const metadata: Metadata = {
@@ -13,7 +13,8 @@ export const metadata: Metadata = {
 export default async function RemindersPage() {
   // Trigger deadline check on page load (server-side)
   // In a real production app, this would be a cron job
-  await checkDeadlines();
+  await checkDeadlines(false);
+  const stats = await getReminderStats();
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -33,7 +34,7 @@ export default async function RemindersPage() {
       </div>
       
       {/* Stats Cards */}
-      <ReminderStats />
+      <ReminderStats stats={stats} />
       
       {/* Reminder List */}
       <ReminderList />
