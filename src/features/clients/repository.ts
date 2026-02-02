@@ -2,7 +2,7 @@
 import { BaseRepository } from '@/lib/repositories/base.repository';
 import { clients } from '@/db/schema';
 import { db } from '@/db';
-import { eq, and, like, or, desc } from 'drizzle-orm';
+import { eq, and, like, or, desc, sql } from 'drizzle-orm';
 import { CACHE_TAGS, redis } from '@/lib/cache/redis';
 
 export type Client = typeof clients.$inferSelect;
@@ -34,29 +34,33 @@ export class ClientRepository extends BaseRepository<Client, typeof clients> {
     }
 
     // 3. DB Query
-    let results;
+    let results: Client[];
 
-    if (role === 'admin') {
-      // Admin fetches all active clients
-      results = await db
-        .select()
-        .from(clients)
-        .where(eq(clients.isActive, true))
-        .orderBy(desc(clients.createdAt));
-    } else {
-      // Standard user fetches their own clients
-      try {
-        results = await db
-          .select()
-          .from(clients)
-          .where(and(eq(clients.userId, userId), eq(clients.isActive, true)))
-          .orderBy(desc(clients.createdAt));
-      } catch (err: any) {
+    // Define columns explicitly to map snake_case DB columns to camelCase Drizzle schema properties
+    const selectColumns = sql`
+        "id", "firebase_id" AS "firebaseId", "user_id" AS "userId", "full_name" AS "fullName",
+        "prenom", "nom", "email", "phone", "phone_2" AS "phone2", "address", "city", "gender", "cin",
+        "date_of_birth" AS "dateOfBirth", "mutuelle", "notes", "balance", "total_spent" AS "totalSpent",
+        "is_active" AS "isActive", "last_visit" AS "lastVisit", "created_at" AS "createdAt", 
+        "updated_at" AS "updatedAt"
+    `;
+
+    try {
+        let query; 
+        if (role === 'admin') {
+            query = sql`SELECT ${selectColumns} FROM "clients" WHERE "is_active" = true ORDER BY "created_at" DESC`;
+        } else {
+            query = sql`SELECT ${selectColumns} FROM "clients" WHERE "user_id" = ${userId} AND "is_active" = true ORDER BY "created_at" DESC`;
+        }
+
+        const { rows } = await db.execute(query);
+        results = rows as unknown as Client[];
+
+    } catch (err: any) {
         console.error('❌ DB_QUERY_ERROR:', err);
         console.error('❌ ERROR_CODE:', err.code);
         console.error('❌ ERROR_MESSAGE:', err.message);
         throw err;
-      }
     }
 
     // 4. Set Cache

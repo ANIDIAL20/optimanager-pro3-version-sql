@@ -24,6 +24,8 @@ import type { Sale } from "@/lib/types";
 import { SensitiveData } from "@/components/ui/sensitive-data";
 import { InvoiceActions } from "@/components/invoices/invoice-actions";
 import { PaymentDialog } from "./payment-dialog";
+import { deleteSale } from "@/app/actions/sales-actions";
+import { useToast } from "@/hooks/use-toast";
 
 // Extended Sale type with client info for display
 export type Order = Sale & {
@@ -225,57 +227,41 @@ function OrderActions({ order }: { order: Order }) {
     // TODO: Replace with SQL queries
     // const firestore = useFirestore();
     // const { user } = useFirebase();
+    const { toast } = useToast();
     const client = null;
     const shopSettings = null;
     const isLoading = false;
 
-    /* Firebase version - to be replaced
-    React.useEffect(() => {
-        const fetchData = async () => {
-            if (!firestore || !user || !order.clientId) {
-                setIsLoading(false);
-                return;
-            }
-
-            try {
-                const clientRef = doc(firestore, `stores/${user.uid}/clients`, order.clientId);
-                const clientSnap = await getDoc(clientRef);
-                if (clientSnap.exists()) {
-                    setClient({ id: clientSnap.id, ...clientSnap.data() });
-                }
-
-                const settingsRef = doc(firestore, `stores/${user.uid}/settings`, 'shop');
-                const settingsSnap = await getDoc(settingsRef);
-                if (settingsSnap.exists()) {
-                    setShopSettings(settingsSnap.data());
-                }
-            } catch (error) {
-                console.error('Error fetching data:', error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchData();
-    }, [firestore, user, order.clientId]);
-    */
+    // ... (keep commented out Firebase stuff if you want, or remove it. I'll just remove implicit logic to keep it clean)
 
     const handleDelete = async () => {
-        alert('La suppression de ventes nécessite une migration SQL. Fonctionnalité temporairement désactivée.');
-        return;
-        
-        /* Firebase version
-        if (!confirm(`Êtes-vous sûr de vouloir supprimer la commande #${order.id.substring(0, 8)} ?`)) {
+        if (!confirm(`Êtes-vous sûr de vouloir supprimer la commande #${order.id.substring(0, 8)} ? Cette action est irréversible.`)) {
             return;
         }
-        if (!firestore || !user) return;
+        
         try {
-            const orderRef = doc(firestore, `stores/${user.uid}/sales`, order.id);
-            await deleteDoc(orderRef);
-            router.refresh();
+            const result = await deleteSale(order.id);
+            if (result.success) {
+                toast({
+                     title: "✅ Vente supprimée",
+                     description: "La commande a été supprimée avec succès.",
+                });
+                router.refresh();
+            } else {
+                 toast({
+                     variant: "destructive",
+                     title: "Erreur",
+                     description: result.error || "Impossible de supprimer la vente.",
+                });
+            }
         } catch (error) {
             console.error('Error deleting order:', error);
+            toast({
+                variant: "destructive",
+                title: "Erreur",
+                description: "Une erreur inattendue est survenue.",
+           });
         }
-        */
     };
 
     return (

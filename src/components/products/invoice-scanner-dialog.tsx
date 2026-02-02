@@ -128,9 +128,8 @@ export function InvoiceScannerDialog() {
     const handleSave = async () => {
         // TODO: Implement SQL-based product import
         toast({
-            variant: "destructive",
-            title: "Migration en cours",
-            description: "Le scanner de facture nécessite une migration SQL. Fonctionnalité temporairement désactivée.",
+            title: "Fonctionnalité en cours de migration",
+            description: "L'importation de factures sera bientôt disponible.",
         });
         return;
         

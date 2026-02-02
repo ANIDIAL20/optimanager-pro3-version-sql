@@ -10,6 +10,8 @@ import { products } from '@/db/schema';
 import { eq, and, or, ilike, desc, lte, sql } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
+import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 
 // ========================================
 // TYPE DEFINITIONS
@@ -163,6 +165,7 @@ export interface ProductInput {
     categorie?: string;
     marque?: string; 
     fournisseur?: string; // Not in form?
+    shouldRedirect?: boolean;
 }
 
 // ...
@@ -171,61 +174,84 @@ export interface ProductInput {
  * Create Product
  */
 export const createProduct = secureAction(async (userId, user, data: ProductInput) => {
-    console.log(`📝 Creating product: ${data.nomProduit}`);
+    console.log(`📝 Creating product payload:`, JSON.stringify(data, null, 2));
 
     try {
-        if (!data.nomProduit || !data.prixVente) {
-            return { success: false, error: 'Nom et prix de vente requis' };
+        // Validation: Allow 0 as a valid price
+        if (!data.nomProduit || data.prixVente === undefined || data.prixVente === null) {
+            return { success: false, error: 'Nom et prix de vente requis (Données incomplètes)' };
         }
 
-        // Logic check: currently `products` table uses 'categorie' (text) and 'marque' (text)
-        // But Input passes 'categorieId' and 'marqueId'.
-        // We might need to fetch the names if IDs are passed, OR just store IDs if table allows?
-        // Checking legacy migration: `migrate-products.ts` used `categorie: data.categorie || ''`.
-        // If frontend passes IDs, we need to resolve them to names if the schema expects names.
-        // Schema: `categorie: text('categorie')`.
-        // If we store ID in text column, search will break?
-        // Let's assume we need to resolving names from IDs is too complex for this step without fetching.
-        // BUT `product-form.tsx` has `categories` list.
-        // Ideally we should pass names too.
-        // For now, I'll store the ID in the text field if name not provided, or empty?
-        // Actually, the frontend form `onSubmit` sends `categorieId`.
-        // If I just store `categorieId` in `categorie` column, the UI will show "cat_123" instead of "Lunettes".
-        // This is a known legacy issue. 
-        // Migration script `inspect-products` showed `categorieId` AND `categorie` fields in Firestore?
-        // `columns.tsx` showed `product.categorie || product.categorieId`.
-        // So the App supports both?
-        // Let's store what we get. If we receive category ID, store it in categorieId legacy column/json?
-        // Wait, Drizzle schema `products` has `categorie` (text). Does it have `categorieId`?
-        // Let's check schema.ts next step correctly.
-        // I'll proceed assuming I map inputs to `nom`, `quantiteStock`, etc.
+        // ⚡ Raw SQL Insert for stability
+        // Explicitly mapping fields to avoid Drizzle query builder issues in this env.
+        
+        // Prepare values (handle defaults and types)
+        const nom = data.nomProduit;
+        const reference = data.reference || '';
+        const categorie = data.categorie || data.categorieId || '';
+        const marque = data.marque || data.marqueId || '';
+        const fournisseur = data.fournisseur || '';
+        const prixAchat = data.prixAchat || 0;
+        const prixVente = data.prixVente;
+        const quantiteStock = data.quantiteStock || 0;
+        const seuilAlerte = data.stockMin || 5;
+        const description = data.description || '';
+        const isActive = true; // Default
 
-        const newProduct = {
-            userId,
-            nom: data.nomProduit,
-            reference: data.reference,
-            categorie: data.categorie || data.categorieId, // Fallback
-            marque: data.marque || data.marqueId, // Fallback
-            fournisseur: data.fournisseur,
-            prixAchat: data.prixAchat?.toString(),
-            prixVente: data.prixVente.toString(),
-            quantiteStock: data.quantiteStock || 0,
-            seuilAlerte: data.stockMin || 5,
-            description: data.description,
-            isActive: true,
-            createdAt: new Date(),
-            updatedAt: new Date()
-        };
+        // Use parameterized query for safety
+        const query = sql`
+            INSERT INTO products (
+                user_id, 
+                nom, 
+                reference, 
+                categorie, 
+                marque, 
+                fournisseur, 
+                prix_achat, 
+                prix_vente, 
+                quantite_stock, 
+                seuil_alerte, 
+                description, 
+                is_active,
+                created_at,
+                updated_at
+            ) VALUES (
+                ${userId},
+                ${nom},
+                ${reference},
+                ${categorie},
+                ${marque},
+                ${fournisseur},
+                ${prixAchat},
+                ${prixVente},
+                ${quantiteStock},
+                ${seuilAlerte},
+                ${description},
+                ${isActive},
+                NOW(),
+                NOW()
+            ) RETURNING id
+        `;
 
-        const result = await db.insert(products).values(newProduct).returning();
+        const result = await db.execute(query);
+        const newId = result.rows[0].id;
 
-        await logSuccess(userId, 'CREATE', 'products', result[0].id.toString());
-        return { success: true, data: { id: result[0].id.toString() }, message: 'Produit créé avec succès' };
+        await logSuccess(userId, 'CREATE', 'products', newId.toString());
+
+        // ⚡ Update cache
+        revalidatePath('/produits');
+
+        return { success: true, data: { id: newId.toString() }, message: 'Produit créé avec succès' };
 
     } catch (error: any) {
-        console.error('💥 Error creating product:', error);
+
+        console.error('💥 Error creating product (Raw SQL):', error);
+        console.error('Details:', {
+             message: error.message,
+             code: error.code
+        });
         await logFailure(userId, 'CREATE', 'products', error.message);
-        return { success: false, error: 'Erreur lors de la création du produit' };
+        return { success: false, error: `Erreur lors de la création: ${error.message}` };
     }
 });
 
@@ -234,34 +260,52 @@ export const createProduct = secureAction(async (userId, user, data: ProductInpu
  */
 export const updateProduct = secureAction(async (userId, user, productId: string, data: Partial<ProductInput>) => {
     try {
-        const id = parseInt(productId);
+        console.log(`📝 Update request for product ${productId}`, data);
+
+        // Refactoring to Raw SQL to avoid Drizzle/Type issues and potential ID parsing errors
+        const updateParts = [];
+        updateParts.push(sql`"updated_at" = NOW()`);
         
-        // Verify ownership
-        const existing = await db.select().from(products).where(and(eq(products.id, id), eq(products.userId, userId))).limit(1);
-        if (existing.length === 0) return { success: false, error: 'Produit introuvable' };
-
-        const updateData: any = { updatedAt: new Date() };
-        if (data.nomProduit) updateData.nom = data.nomProduit;
-        if (data.reference !== undefined) updateData.reference = data.reference;
-        if (data.categorie !== undefined) updateData.categorie = data.categorie;
-        if (data.categorieId !== undefined && !data.categorie) updateData.categorie = data.categorieId; // Fallback
-        if (data.marque !== undefined) updateData.marque = data.marque;
-        if (data.marqueId !== undefined && !data.marque) updateData.marque = data.marqueId; // Fallback
-        if (data.fournisseur !== undefined) updateData.fournisseur = data.fournisseur;
-        if (data.prixAchat !== undefined) updateData.prixAchat = data.prixAchat.toString();
-        if (data.prixVente !== undefined) updateData.prixVente = data.prixVente.toString();
-        if (data.quantiteStock !== undefined) updateData.quantiteStock = data.quantiteStock;
-        if (data.stockMin !== undefined) updateData.seuilAlerte = data.stockMin;
-        if (data.description !== undefined) updateData.description = data.description;
-
-        await db.update(products).set(updateData).where(eq(products.id, id));
+        if (data.nomProduit !== undefined) updateParts.push(sql`"nom" = ${data.nomProduit}`);
+        if (data.reference !== undefined) updateParts.push(sql`"reference" = ${data.reference}`);
+        
+        // Handle logic: if data.categorie is set, use it. If not, use categoryId fallback
+        const cat = data.categorie || data.categorieId;
+        if (cat !== undefined) updateParts.push(sql`"categorie" = ${cat}`);
+        
+        const brand = data.marque || data.marqueId;
+        if (brand !== undefined) updateParts.push(sql`"marque" = ${brand}`);
+        
+        if (data.fournisseur !== undefined) updateParts.push(sql`"fournisseur" = ${data.fournisseur}`);
+        if (data.prixAchat !== undefined) updateParts.push(sql`"prix_achat" = ${data.prixAchat}`);
+        if (data.prixVente !== undefined) updateParts.push(sql`"prix_vente" = ${data.prixVente}`);
+        if (data.quantiteStock !== undefined) updateParts.push(sql`"quantite_stock" = ${data.quantiteStock}`);
+        if (data.stockMin !== undefined) updateParts.push(sql`"seuil_alerte" = ${data.stockMin}`);
+        if (data.description !== undefined) updateParts.push(sql`"description" = ${data.description}`);
+        
+        // Try precise ID matching. If text/uuid:
+        const query = sql`
+            UPDATE products
+            SET ${sql.join(updateParts, sql`, `)}
+            WHERE id::text = ${productId} AND user_id = ${userId}
+            RETURNING id
+        `;
+        
+        const result = await db.execute(query);
+        
+        if (result.rowCount === 0) {
+             console.warn(`Product update returned 0 rows for ID ${productId}`);
+             return { success: false, error: 'Produit introuvable ou modifications échouées' };
+        }
 
         await logSuccess(userId, 'UPDATE', 'products', productId);
+        revalidatePath('/produits');
         return { success: true, message: 'Produit mis à jour' };
 
     } catch (error: any) {
+        console.error('Update Product Error:', error);
         await logFailure(userId, 'UPDATE', 'products', error.message, productId);
-        return { success: false, error: 'Erreur lors de la mise à jour' };
+        return { success: false, error: `Erreur lors de la mise à jour: ${error.message}` };
     }
 }); // End updateProduct followed by deleteProduct and updateStock...
 
@@ -280,6 +324,7 @@ export const deleteProduct = secureAction(async (userId, user, productId: string
         if (result.length === 0) return { success: false, error: 'Produit introuvable' };
 
         await logSuccess(userId, 'DELETE', 'products', productId);
+        revalidatePath('/produits');
         return { success: true, message: 'Produit supprimé' };
 
     } catch (error: any) {
