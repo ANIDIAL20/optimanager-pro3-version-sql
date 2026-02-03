@@ -12,9 +12,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { BackButton } from '@/components/ui/back-button';
 import { PageHeader } from '@/components/page-header';
-import { createPortal } from 'react-dom';
-import { getPrintData } from '@/app/actions/print-actions';
-import { PrintDocumentTemplate } from '@/components/printing/print-document-template';
+import { QuoteActions } from '@/components/quotes/quote-actions';
+import { getShopProfile } from '@/app/actions/shop-actions';
 
 interface DevisDetailsPageProps {
     params: Promise<{ id: string }>;
@@ -26,11 +25,9 @@ export default function DevisDetailsPage({ params }: DevisDetailsPageProps) {
     const router = useRouter();
 
     const [devis, setDevis] = React.useState<Devis | null>(null);
+    const [shopSettings, setShopSettings] = React.useState<any>(null);
     const [isLoading, setIsLoading] = React.useState(true);
     const [isConverting, setIsConverting] = React.useState(false);
-    
-    // Print logic
-    const [printData, setPrintData] = React.useState<any>(null);
 
     const loadDevis = React.useCallback(async () => {
         if (!id) return;
@@ -38,15 +35,13 @@ export default function DevisDetailsPage({ params }: DevisDetailsPageProps) {
         const result = await getDevisById(id);
         if (result.success && result.devis) {
             setDevis(result.devis);
-            
-            // Fetch print data in background
+
+            // Fetch shop settings for PDF actions
             try {
-                const pData = await getPrintData(id, 'devis');
-                if (pData.success) {
-                    setPrintData(pData.data);
-                }
-            } catch (err) {
-                console.error("Failed to load print data", err);
+                 const settings = await getShopProfile();
+                 if (settings) setShopSettings(settings);
+            } catch (e) {
+                console.error("Failed to load shop settings", e);
             }
         } else {
             toast({
@@ -106,28 +101,8 @@ export default function DevisDetailsPage({ params }: DevisDetailsPageProps) {
         );
     }
 
-    if (!devis) return null;
-
-    const handlePrint = () => {
-        if (!printData) {
-            toast({
-                title: "Patience",
-                description: "Chargement des données d'impression...",
-            });
-            return;
-        }
-        window.print();
-    };
-
     return (
         <div className="flex flex-1 flex-col gap-6">
-            {/* Hidden Print Portal */}
-            {printData && typeof document !== 'undefined' && createPortal(
-                <div className="print-portal hidden">
-                    <PrintDocumentTemplate type="devis" data={printData} />
-                </div>,
-                document.body
-            )}
 
             {/* Back Button */}
             <div className="w-fit">
@@ -145,13 +120,10 @@ export default function DevisDetailsPage({ params }: DevisDetailsPageProps) {
                             <CheckCircle2 className="w-3 h-3 mr-1" /> Transformé
                         </Badge>
                     )}
-                    <Button
-                        variant="outline"
-                        onClick={handlePrint}
-                    >
-                        <Printer className="mr-2 h-4 w-4" />
-                        Imprimer Devis
-                    </Button>
+                    {/* Quote Actions Dropdown */}
+                    {shopSettings && (
+                        <QuoteActions devis={devis} shopSettings={shopSettings} />
+                    )}
 
                     {devis.status !== 'TRANSFORME' && (
                         <Button
