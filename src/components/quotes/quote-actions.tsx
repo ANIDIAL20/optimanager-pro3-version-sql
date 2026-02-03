@@ -1,8 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { FileText, Printer, Download, Share2, Loader2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { FileText, Printer, Download, Share2, Loader2, ArrowDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -13,12 +12,12 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { pdf } from '@react-pdf/renderer';
-import { InvoicePDF } from './InvoicePDF';
-import type { Sale, Client } from '@/lib/types';
+import { QuotePDF } from './quote-pdf';
+import type { Devis } from '@/app/actions/devis-actions';
+import type { Client } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { PrintPreviewDialog } from '@/components/printing/print-preview-dialog';
 
-// Shop settings type (matching InvoicePDF)
 interface ShopSettings {
     shopName: string;
     logoUrl?: string;
@@ -28,14 +27,13 @@ interface ShopSettings {
     rib?: string;
 }
 
-interface InvoiceActionsProps {
-    sale: Sale;
-    client: Client;
+interface QuoteActionsProps {
+    devis: Devis;
     shopSettings: ShopSettings;
+    client?: Client; // Optional full client details
 }
 
-export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsProps) {
-    const router = useRouter();
+export function QuoteActions({ devis, shopSettings, client }: QuoteActionsProps) {
     const [isGenerating, setIsGenerating] = React.useState(false);
     const [showPrintPreview, setShowPrintPreview] = React.useState(false);
     const { toast } = useToast();
@@ -46,7 +44,7 @@ export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsPro
             setIsGenerating(true);
 
             // Create PDF document
-            const doc = <InvoicePDF sale={sale} client={client} shopSettings={shopSettings} />;
+            const doc = <QuotePDF devis={devis} shopSettings={shopSettings} client={client} />;
 
             // Generate blob
             const asPdf = pdf(doc);
@@ -58,7 +56,7 @@ export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsPro
             toast({
                 variant: 'destructive',
                 title: 'Erreur',
-                description: 'Impossible de générer la facture PDF.',
+                description: 'Impossible de générer le devis PDF.',
             });
             return null;
         } finally {
@@ -77,30 +75,26 @@ export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsPro
         if (!blob) return;
 
         try {
-            // Create download link
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `facture-${sale.id?.substring(0, 8) || 'invoice'}.pdf`;
+            link.download = `devis-${devis.id?.substring(0, 8) || 'quote'}.pdf`;
 
-            // Trigger download
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-
-            // Clean up
             URL.revokeObjectURL(url);
 
             toast({
                 title: 'Téléchargement réussi',
-                description: 'La facture a été téléchargée avec succès.',
+                description: 'Le devis a été téléchargé.',
             });
         } catch (error) {
             console.error('Error downloading PDF:', error);
             toast({
                 variant: 'destructive',
                 title: 'Erreur',
-                description: 'Impossible de télécharger la facture.',
+                description: 'Échec du téléchargement.',
             });
         }
     };
@@ -111,57 +105,30 @@ export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsPro
         if (!blob) return;
 
         try {
-            // Check if Web Share API is supported
             if (navigator.share && navigator.canShare) {
-                // Create file from blob
                 const file = new File(
                     [blob],
-                    `facture-${sale.id?.substring(0, 8) || 'invoice'}.pdf`,
+                    `devis-${devis.id?.substring(0, 8) || 'quote'}.pdf`,
                     { type: 'application/pdf' }
                 );
 
-                // Check if we can share this file
                 if (navigator.canShare({ files: [file] })) {
                     await navigator.share({
-                        title: 'Facture',
-                        text: `Facture pour ${client.prenom} ${client.nom}`,
+                        title: 'Devis',
+                        text: `Devis pour ${devis.clientName}`,
                         files: [file],
-                    });
-
-                    toast({
-                        title: 'Partage réussi',
-                        description: 'La facture a été partagée avec succès.',
                     });
                     return;
                 }
             }
-
-            // Fallback: Open PDF in new tab
+            
+            // Fallback: Open in new tab
             const url = URL.createObjectURL(blob);
-            const shareWindow = window.open(url, '_blank');
-
-            if (!shareWindow) {
-                toast({
-                    variant: 'destructive',
-                    title: 'Bloqué',
-                    description: 'Veuillez autoriser les pop-ups pour partager.',
-                });
-            }
-
-            // Clean up URL after a delay
+            window.open(url, '_blank');
             setTimeout(() => URL.revokeObjectURL(url), 10000);
-        } catch (error) {
-            // User cancelled share or other error
-            console.error('Error sharing PDF:', error);
 
-            // Don't show error toast if user simply cancelled
-            if (error instanceof Error && error.name !== 'AbortError') {
-                toast({
-                    variant: 'destructive',
-                    title: 'Erreur',
-                    description: 'Impossible de partager la facture.',
-                });
-            }
+        } catch (error) {
+            console.error('Error sharing PDF:', error);
         }
     };
 
@@ -171,20 +138,15 @@ export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsPro
                 <DropdownMenuTrigger asChild>
                     <Button variant="outline" disabled={isGenerating}>
                         {isGenerating ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Génération...
-                            </>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         ) : (
-                            <>
-                                <FileText className="mr-2 h-4 w-4" />
-                                Facture
-                            </>
+                            <FileText className="mr-2 h-4 w-4" />
                         )}
+                        Actions Devis
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuLabel>Actions Facture</DropdownMenuLabel>
+                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
                     <DropdownMenuSeparator />
 
                     <DropdownMenuItem onClick={handlePrint} disabled={isGenerating}>
@@ -207,8 +169,8 @@ export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsPro
             <PrintPreviewDialog
                 open={showPrintPreview}
                 onOpenChange={setShowPrintPreview}
-                url={`/print/facture/${sale.id}?preview=true`}
-                title={`Facture #${sale.saleNumber || sale.id?.substring(0, 8)}`}
+                url={`/print/devis/${devis.id}?preview=true`}
+                title={`Devis #${devis.id?.slice(0, 8).toUpperCase()}`}
             />
         </>
     );

@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from '@/db';
-import { devis, sales, clients, settings } from '@/db/schema';
+import { devis, sales, clients, shopProfiles } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 
@@ -71,11 +71,11 @@ export const getPrintData = secureAction(async (userId, user, documentId: string
 
         // 3. Fetch Shop Settings
         let settingsData = null;
-        const settingsResult = await db.query.settings.findFirst({
-            where: and(eq(settings.userId, userId), eq(settings.settingKey, 'shop'))
+        const settingsResult = await db.query.shopProfiles.findFirst({
+            where: eq(shopProfiles.userId, userId)
         });
         if (settingsResult) {
-            settingsData = settingsResult.value;
+            settingsData = settingsResult;
         }
 
         return {

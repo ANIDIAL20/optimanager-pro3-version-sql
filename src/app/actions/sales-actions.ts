@@ -216,7 +216,9 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                 }
             }
 
-            // 3. Update Stock for each item
+            // 3. Update Stock & Enrich Items
+            const enrichedItems: SaleItem[] = [];
+
             for (const item of data.items) {
                 let productId: number | null = parseInt(item.productRef);
                 let productToUpdate;
@@ -246,7 +248,29 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                 } else {
                     console.warn(`⚠️ Product not found for stock update: ${item.productRef}`);
                 }
+
+                // Enrich Item Snapshot
+                // Prefer provided values (custom price/name), fallback to DB
+                // Ensure we save the TEXT reference, not the ID, if possible
+                const finalRef = productToUpdate ? productToUpdate.reference : item.productRef;
+                const finalName = item.productName || (productToUpdate ? productToUpdate.nomProduit : 'Article Inconnu');
+                const finalPrice = item.unitPrice ?? (productToUpdate ? Number(productToUpdate.prixVente) : 0);
+                const finalTotal = item.total ?? (finalPrice * item.quantity);
+
+                enrichedItems.push({
+                    productRef: finalRef, // Save actual reference string
+                    productName: finalName,
+                    quantity: item.quantity,
+                    unitPrice: finalPrice,
+                    total: finalTotal,
+                    returnedQuantity: 0
+                });
             }
+
+            // Recalculate totals based on enriched items for accuracy
+            const calcTotalHT = enrichedItems.reduce((sum, item) => sum + item.total, 0);
+            const calcTotalTVA = calcTotalHT * 0.20;
+            const calcTotalTTC = calcTotalHT + calcTotalTVA;
 
             // 4. Create Sale Record
             const saleNumber = `SALE-${Date.now().toString().slice(-8)}`;
@@ -256,13 +280,13 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                 clientId: clientIdNum,
                 saleNumber,
                 ...clientSnapshot,
-                items: data.items,
-                totalHT: totalHT.toFixed(2),
-                totalTVA: totalTVA.toFixed(2),
-                totalTTC: totalTTC.toFixed(2),
-                totalNet: totalTTC.toFixed(2),
+                items: enrichedItems,
+                totalHT: calcTotalHT.toFixed(2),
+                totalTVA: calcTotalTVA.toFixed(2),
+                totalTTC: calcTotalTTC.toFixed(2),
+                totalNet: calcTotalTTC.toFixed(2),
                 totalPaye: '0',
-                resteAPayer: totalTTC.toFixed(2),
+                resteAPayer: calcTotalTTC.toFixed(2),
                 status: 'impaye',
                 paymentMethod: data.paymentMethod,
                 paymentHistory: [],

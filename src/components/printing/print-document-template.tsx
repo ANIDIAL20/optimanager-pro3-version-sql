@@ -42,7 +42,7 @@ export function PrintDocumentTemplate({ type, data }: PrintDocumentTemplateProps
 
     return (
         <>
-            <div className="w-[210mm] min-h-[297mm] mx-auto bg-white p-10 md:p-12 shadow-lg print:shadow-none print:m-0 print:w-[210mm] print:h-[297mm] print:p-10 text-black relative">
+            <div className="w-[210mm] min-h-[297mm] mx-auto bg-white p-10 md:p-12 shadow-lg print:shadow-none print:m-0 print:w-full print:h-[290mm] print:py-8 print:px-10 text-black relative">
 
                 {/* Header: Shop Info & Document Meta */}
                 <div className="flex justify-between items-start border-b border-slate-200 pb-6 mb-8">
@@ -50,7 +50,7 @@ export function PrintDocumentTemplate({ type, data }: PrintDocumentTemplateProps
                     <div className="flex gap-5 items-center">
                         {/* Logo */}
                         {settings?.logoUrl && (
-                            <div className="relative h-20 w-20">
+                            <div className="relative h-32 w-48">
                                 <Image
                                     src={settings.logoUrl}
                                     alt="Logo"
@@ -194,7 +194,7 @@ export function PrintDocumentTemplate({ type, data }: PrintDocumentTemplateProps
                         {isDevis ? 'Arrêté le présent devis' : 'Arrêté la présente facture'} à la somme de :
                     </p>
                     <p className="text-sm font-bold uppercase tracking-wide text-slate-900">
-                        {formatCurrencyToWords(totalTTC)}
+                        {totalTTC.toFixed(2)} DH ({formatCurrencyToWords(totalTTC)})
                     </p>
                 </div>
 

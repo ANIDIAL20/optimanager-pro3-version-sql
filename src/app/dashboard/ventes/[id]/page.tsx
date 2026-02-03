@@ -174,7 +174,7 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
                 description={`Effectuée le ${format(new Date(sale.date || sale.createdAt), "d MMMM yyyy 'à' HH:mm", { locale: fr })}`}
             >
                 <div className="flex gap-2">
-                    <Button variant="outline" className="gap-2 text-orange-600 border-orange-200 hover:bg-orange-50" onClick={() => setShowReturnDialog(true)}>
+                    <Button variant="outline" className="gap-2 text-orange-600 border-orange-200 hover:text-orange-700 hover:bg-orange-50" onClick={() => setShowReturnDialog(true)}>
                         <RotateCcw className="h-4 w-4" />
                         Retourner
                     </Button>

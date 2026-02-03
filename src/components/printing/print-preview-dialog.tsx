@@ -35,6 +35,15 @@ export function PrintPreviewDialog({ open, onOpenChange, url, title = "Aperçu a
         }
     }, [open, url]);
 
+    // Fix for Radix UI pointer-events: none getting stuck
+    React.useEffect(() => {
+        if (!open) {
+            setTimeout(() => {
+                document.body.style.pointerEvents = '';
+            }, 500); // Small delay to ensure Radix has finished its cleanup attempt
+        }
+    }, [open]);
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 gap-0">

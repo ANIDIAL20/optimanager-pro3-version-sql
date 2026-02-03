@@ -11,12 +11,14 @@ import { Loader2, TrendingUp, ShoppingCart, DollarSign, FileText, Users, Package
 import { format, startOfDay, startOfMonth, startOfYear, subMonths } from 'date-fns';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { SensitiveData } from '@/components/ui/sensitive-data';
+import { useToast } from '@/hooks/use-toast';
 
 export default function AccountingPage() {
     // const { user } = useFirebase();
     // const firestore = useFirestore();
 
     const [dateRange, setDateRange] = React.useState('thisMonth');
+    const { toast } = useToast();
     const [sales, setSales] = React.useState<any[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
     const [isExporting, setIsExporting] = React.useState(false);

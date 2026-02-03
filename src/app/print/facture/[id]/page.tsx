@@ -8,11 +8,11 @@ import { getPrintData } from '@/app/actions/print-actions';
 import { PrintDocumentTemplate } from '@/components/printing/print-document-template';
 import { useToast } from '@/hooks/use-toast';
 
-interface DevisPrintPageProps {
+interface FacturePrintPageProps {
     params: Promise<{ id: string }>;
 }
 
-export default function DevisPrintPage({ params }: DevisPrintPageProps) {
+export default function FacturePrintPage({ params }: FacturePrintPageProps) {
     const { id } = React.use(params);
     const router = useRouter();
     const { toast } = useToast();
@@ -28,8 +28,8 @@ export default function DevisPrintPage({ params }: DevisPrintPageProps) {
         const fetchData = async () => {
             if (!id) return;
 
-            // ✅ FIX: secureAction injects userId automatically
-            const result = await getPrintData(id, 'devis');
+            // Fetch data for 'facture' (sales)
+            const result = await getPrintData(id, 'facture');
 
             if (result.success) {
                 setData(result.data);
@@ -39,7 +39,7 @@ export default function DevisPrintPage({ params }: DevisPrintPageProps) {
                     title: 'Erreur',
                     description: result.error
                 });
-                router.push('/dashboard/devis');
+                router.push('/dashboard/ventes');
             }
             setIsLoading(false);
         };
@@ -82,13 +82,13 @@ export default function DevisPrintPage({ params }: DevisPrintPageProps) {
                     </Button>
                     <Button onClick={handlePrint}>
                         <Printer className="mr-2 h-4 w-4" />
-                        Imprimer Devis
+                        Imprimer Facture
                     </Button>
                 </div>
             )}
 
-            {/* Shared Template */}
-            <PrintDocumentTemplate type="devis" data={data} />
+            {/* Shared Template with type="facture" */}
+            <PrintDocumentTemplate type="facture" data={data} />
         </div>
     );
 }

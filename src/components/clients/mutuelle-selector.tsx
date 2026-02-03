@@ -17,9 +17,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover"
-// TODO: Migrate mutuelles/assurances to SQL
-// import { useFirestore, useCollection, useMemoFirebase, useFirebase } from "@/firebase"
-// import { collection, query, orderBy } from "firebase/firestore"
+import { getInsurances } from "@/app/actions/settings-actions"
 
 interface MutuelleSelectorProps {
     value: string
@@ -29,20 +27,23 @@ interface MutuelleSelectorProps {
 export function MutuelleSelector({ value, onSelect }: MutuelleSelectorProps) {
     const [open, setOpen] = React.useState(false)
     const [inputValue, setInputValue] = React.useState(value || "")
-    // TODO: Replace with SQL query for mutuelles
-    // const firestore = useFirestore()
-    // const { user } = useFirebase()
+    const [mutuelles, setMutuelles] = React.useState<{ id: number; name: string }[]>([]);
+    const [isLoading, setIsLoading] = React.useState(false);
 
-    const mutuelles: { id: string; name: string }[] | undefined = undefined;
-    const isLoading = false;
-
-    /* Firebase version
-    const mutuellesQuery = useMemoFirebase(
-        () => (firestore && user ? query(collection(firestore, `stores/${user.uid}/assurances`), orderBy("name")) : null),
-        [firestore, user]
-    )
-    const { data: mutuelles, isLoading } = useCollection<{ id: string; name: string }>(mutuellesQuery)
-    */
+    React.useEffect(() => {
+        const fetchMutuelles = async () => {
+            setIsLoading(true);
+            try {
+                const data = await getInsurances();
+                setMutuelles(data);
+            } catch (error) {
+                console.error("Failed to fetch insurances", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchMutuelles();
+    }, []);
 
     // Sync internal input state with prop value
     React.useEffect(() => {
