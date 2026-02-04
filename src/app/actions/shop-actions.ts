@@ -31,44 +31,56 @@ type ShopProfileInput = z.infer<typeof shopProfileSchema>;
 // ACTIONS
 // ========================================
 
-/**
- * Get shop profile for current user
- */
-export async function getShopProfile() {
-  const session = await auth();
+  /*
+   * Get shop profile for current user
+   */
+  export async function getShopProfile() {
+    const session = await auth();
+    
+    if (!session?.user?.id) {
+      throw new Error('Non authentifié');
+    }
   
-  if (!session?.user?.id) {
-    throw new Error('Non authentifié');
+    try {
+      // Use Query Builder instead of Relational Query for stability
+      const [profile] = await db
+        .select()
+        .from(shopProfiles)
+        .where(eq(shopProfiles.userId, session.user.id))
+        .limit(1);
+    
+      return profile || null;
+    } catch (error: any) {
+        console.error("❌ getShopProfile ERROR:", error);
+        // Log all properties of the error
+        console.error("Error details:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+        throw error;
+    }
   }
-
-  const profile = await db.query.shopProfiles.findFirst({
-    where: eq(shopProfiles.userId, session.user.id),
-  });
-
-  return profile || null;
-}
-
-/**
- * Create or update shop profile
- */
-export async function upsertShopProfile(data: ShopProfileInput) {
-  const session = await auth();
   
-  if (!session?.user?.id) {
-    throw new Error('Non authentifié');
-  }
-
-  console.log('[upsertShopProfile] User:', session.user.id, 'Data:', data);
-
-  // Validate input
-  const validated = shopProfileSchema.parse(data);
-
-  // Check if profile exists
-  const existing = await db.query.shopProfiles.findFirst({
-    where: eq(shopProfiles.userId, session.user.id),
-  });
-
-  if (existing) {
+  /**
+   * Create or update shop profile
+   */
+  export async function upsertShopProfile(data: ShopProfileInput) {
+    const session = await auth();
+    
+    if (!session?.user?.id) {
+      throw new Error('Non authentifié');
+    }
+  
+    console.log('[upsertShopProfile] User:', session.user.id, 'Data:', data);
+  
+    // Validate input
+    const validated = shopProfileSchema.parse(data);
+  
+    // Check if profile exists using Query Builder
+    const [existing] = await db
+        .select()
+        .from(shopProfiles)
+        .where(eq(shopProfiles.userId, session.user.id))
+        .limit(1);
+  
+    if (existing) {
     // Update existing profile
     const [updated] = await db
       .update(shopProfiles)

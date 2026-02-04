@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import {
   Card,
@@ -27,6 +28,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
@@ -36,6 +38,7 @@ import {
   createSetting,
   updateSetting,
   deleteSetting,
+  deleteSettings,
 } from '@/app/actions/settings-actions';
 import {
   seedCategories,
@@ -89,10 +92,14 @@ export function ManageSettings({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
   const [isSeeding, setIsSeeding] = React.useState(false);
+  const [isDeletingAll, setIsDeletingAll] = React.useState(false);
   const [editingItem, setEditingItem] = React.useState<SettingItem | null>(null);
   const [deletingItem, setDeletingItem] = React.useState<SettingItem | null>(null);
   const [formName, setFormName] = React.useState('');
   const [formCategory, setFormCategory] = React.useState('');
+
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = React.useState<number[]>([]);
 
   // Load items
   const loadItems = React.useCallback(async () => {
@@ -100,6 +107,7 @@ export function ManageSettings({
       setIsLoading(true);
       const data = await getSettings(type);
       setItems(data as SettingItem[]);
+      setSelectedIds([]); // Clear selection on reload
     } catch (error: any) {
       toast({
         variant: 'destructive',
@@ -114,6 +122,46 @@ export function ManageSettings({
   React.useEffect(() => {
     loadItems();
   }, [loadItems]);
+
+  // Toggle selection for a single item
+  const toggleSelection = (id: number) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  // Toggle all items
+  const toggleAll = () => {
+    if (selectedIds.length === items.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(items.map((i) => i.id));
+    }
+  };
+
+  // Delete selected items
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+
+    setIsDeletingAll(true);
+    try {
+      const result = await deleteSettings(type, selectedIds);
+      toast({
+        title: 'Succès',
+        description: `${result.count} élément(s) supprimé(s).`,
+      });
+      setSelectedIds([]);
+      loadItems();
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erreur',
+        description: error.message,
+      });
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
 
   // Seed default data
   const handleSeed = async () => {
@@ -148,12 +196,17 @@ export function ManageSettings({
           result = await seedBanks();
           break;
         default:
-          throw new Error('Type non supporté pour l\'import');
+          throw new Error("Type non supporté pour l'import");
       }
 
       toast({
         title: result.message,
-        description: result.count > 0 ? `${result.count} ${itemName.toLowerCase()}s importé${result.count > 1 ? 's' : ''}.` : undefined,
+        description:
+          result.count > 0
+            ? `${result.count} ${itemName.toLowerCase()}s importé${
+                result.count > 1 ? 's' : ''
+              }.`
+            : undefined,
       });
 
       if (result.count > 0) {
@@ -162,8 +215,8 @@ export function ManageSettings({
     } catch (error: any) {
       toast({
         variant: 'destructive',
-        title: 'Erreur d\'import',
-        description: error?.message || 'Impossible d\'importer les données.',
+        title: "Erreur d'import",
+        description: error?.message || "Impossible d'importer les données.",
       });
     } finally {
       setIsSeeding(false);
@@ -213,14 +266,18 @@ export function ManageSettings({
         await updateSetting(type, editingItem.id, data);
         toast({
           title: `${itemName} modifié${itemName.endsWith('e') ? 'e' : ''}`,
-          description: `"${formName}" a été mis${itemName.endsWith('e') ? 'e' : ''} à jour.`,
+          description: `"${formName}" a été mis${
+            itemName.endsWith('e') ? 'e' : ''
+          } à jour.`,
         });
       } else {
         // Create
         await createSetting(type, data);
         toast({
           title: `${itemName} ajouté${itemName.endsWith('e') ? 'e' : ''}`,
-          description: `"${formName}" a été créé${itemName.endsWith('e') ? 'e' : ''}.`,
+          description: `"${formName}" a été créé${
+            itemName.endsWith('e') ? 'e' : ''
+          }.`,
         });
       }
 
@@ -251,7 +308,9 @@ export function ManageSettings({
       await deleteSetting(type, deletingItem.id);
       toast({
         title: `${itemName} supprimé${itemName.endsWith('e') ? 'e' : ''}`,
-        description: `"${deletingItem.name}" a été supprimé${itemName.endsWith('e') ? 'e' : ''}.`,
+        description: `"${deletingItem.name}" a été supprimé${
+          itemName.endsWith('e') ? 'e' : ''
+        }.`,
       });
       setIsDeleteDialogOpen(false);
       loadItems();
@@ -274,14 +333,18 @@ export function ManageSettings({
               <CardDescription>{description}</CardDescription>
             </div>
             <div className="flex gap-2">
-              {showSeedButton && items.length === 0 && (
-                <Button variant="outline" onClick={handleSeed} disabled={isSeeding}>
+              {showSeedButton && (
+                <Button
+                  variant="outline"
+                  onClick={handleSeed}
+                  disabled={isSeeding}
+                >
                   {isSeeding ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
                     <Download className="h-4 w-4 mr-2" />
                   )}
-                  Importer
+                  Importer / Restaurer
                 </Button>
               )}
               <Button onClick={handleCreate}>
@@ -298,23 +361,70 @@ export function ManageSettings({
             </div>
           ) : items.length === 0 ? (
             <div className="text-center py-12 text-slate-500">
-              <p>Aucun{itemName.endsWith('e') ? 'e' : ''} {itemName.toLowerCase()} pour le moment.</p>
+              <p>
+                Aucun{itemName.endsWith('e') ? 'e' : ''}{' '}
+                {itemName.toLowerCase()} pour le moment.
+              </p>
               <p className="text-sm mt-2">
                 Cliquez sur "Ajouter" pour commencer.
               </p>
             </div>
           ) : (
             <div className="grid gap-2">
+              {/* Header with Select All and Batch Actions */}
+              <div className="flex items-center p-2 mb-2 bg-slate-100 rounded-md">
+                <Checkbox
+                  checked={
+                    items.length > 0 && selectedIds.length === items.length
+                  }
+                  onCheckedChange={toggleAll}
+                  id="select-all"
+                  className="mr-3"
+                />
+                <Label
+                  htmlFor="select-all"
+                  className="cursor-pointer font-medium text-sm text-slate-700"
+                >
+                  {selectedIds.length > 0
+                    ? `${selectedIds.length} sélectionné(s)`
+                    : 'Tout sélectionner'}
+                </Label>
+                {selectedIds.length > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="ml-auto h-7 text-xs"
+                    onClick={handleDeleteSelected}
+                    disabled={isDeletingAll}
+                  >
+                    <Trash2 className="h-3 w-3 mr-1" />
+                    Supprimer la sélection
+                  </Button>
+                )}
+              </div>
+
               {items.map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border hover:border-slate-300 transition-colors"
+                  className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                    selectedIds.includes(item.id)
+                      ? 'bg-blue-50 border-blue-200'
+                      : 'bg-slate-50 hover:border-slate-300'
+                  }`}
                 >
-                  <div>
-                    <p className="font-medium">{item.name}</p>
-                    {showCategory && item.category && (
-                      <p className="text-sm text-slate-500">{item.category}</p>
-                    )}
+                  <div className="flex items-center gap-3">
+                    <Checkbox
+                      checked={selectedIds.includes(item.id)}
+                      onCheckedChange={() => toggleSelection(item.id)}
+                    />
+                    <div>
+                      <p className="font-medium">{item.name}</p>
+                      {showCategory && item.category && (
+                        <p className="text-sm text-slate-500">
+                          {item.category}
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <Button
@@ -349,7 +459,9 @@ export function ManageSettings({
             <DialogDescription>
               {editingItem
                 ? `Modifiez les détails de ${itemName.toLowerCase()}.`
-                : `Ajoutez un${itemName.endsWith('e') ? 'e' : ''} nouveau${itemName.endsWith('e') ? 'lle' : ''} ${itemName.toLowerCase()}.`}
+                : `Ajoutez un${itemName.endsWith('e') ? 'e' : ''} nouveau${
+                    itemName.endsWith('e') ? 'lle' : ''
+                  } ${itemName.toLowerCase()}.`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -359,7 +471,13 @@ export function ManageSettings({
                 id="name"
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
-                placeholder={`e.g., ${itemName === 'Marque' ? 'Ray-Ban' : itemName === 'Couleur' ? 'Noir' : 'Exemple'}`}
+                placeholder={`e.g., ${
+                  itemName === 'Marque'
+                    ? 'Ray-Ban'
+                    : itemName === 'Couleur'
+                    ? 'Noir'
+                    : 'Exemple'
+                }`}
                 autoFocus
               />
             </div>
@@ -388,18 +506,24 @@ export function ManageSettings({
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <AlertDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+      >
         <AlertDialogContent onInteractOutside={(e) => e.preventDefault()}>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
             <AlertDialogDescription>
-              Êtes-vous sûr de vouloir supprimer "{deletingItem?.name}" ?
-              Cette action est irréversible.
+              Êtes-vous sûr de vouloir supprimer "{deletingItem?.name}" ? Cette
+              action est irréversible.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
               Supprimer
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -29,6 +29,8 @@ export interface Product {
     seuilAlerte: number;
     categorie: string;
     marque: string;
+    modele?: string;
+    couleur?: string;
     fournisseur: string;
     description: string;
     isActive: boolean;
@@ -78,6 +80,8 @@ export const getProducts = secureAction(async (userId, user, searchQuery?: strin
             seuilAlerte: p.seuilAlerte || 5,
             categorie: p.categorie || '',
             marque: p.marque || '',
+            modele: p.modele || '',
+            couleur: p.couleur || '',
             fournisseur: p.fournisseur || '',
             description: p.description || '',
             isActive: p.isActive || false,
@@ -118,7 +122,7 @@ export const getProduct = secureAction(async (userId, user, productId: string) =
         // Map
         const mapped: Product = {
             id: product.id.toString(),
-            name: product.nom,
+            nomProduit: product.nom,
             reference: product.reference || '',
             category: product.categorie || '',
             brand: product.marque || '',
@@ -234,7 +238,7 @@ export const createProduct = secureAction(async (userId, user, data: ProductInpu
         `;
 
         const result = await db.execute(query);
-        const newId = result.rows[0].id;
+        const newId = (result.rows[0] as any).id;
 
         await logSuccess(userId, 'CREATE', 'products', newId.toString());
 

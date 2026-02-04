@@ -17,6 +17,11 @@ export interface Product {
   imageHint?: string;
   description?: string;
   categorie?: string; // Added for categorization
+  nom?: string; // Legacy alias
+  category?: string; // Legacy alias
+  marque?: string;
+  modele?: string;
+  couleur?: string;
 }
 
 
@@ -25,6 +30,7 @@ export interface Client {
   nom: string;
   prenom: string;
   name?: string; // Legacy support
+  fullName?: string; // Helper
   phone?: string; // Legacy support
   sexe?: 'Homme' | 'Femme';
   cni?: string;

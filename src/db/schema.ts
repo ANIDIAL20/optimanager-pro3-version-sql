@@ -56,6 +56,8 @@ export const products = pgTable('products', {
   designation: text('designation'),
   categorie: text('categorie'),
   marque: text('marque'),
+  modele: text('modele'), // Model number/name
+  couleur: text('couleur'), // Color
   fournisseur: text('fournisseur'),
   
   // Pricing
@@ -478,7 +480,17 @@ export const shopProfiles = pgTable('shop_profiles', {
   
   // Business info
   ice: text('ice'), // Identifiant Commun de l'Entreprise (Morocco)
+  rc: text('rc'), // Registre de Commerce
+  if: text('if'), // Identifiant Fiscal
+  patente: text('patente'), // Patente
   rib: text('rib'), // Relevé d'Identité Bancaire
+  
+  // VAT Settings
+  tvaRate: decimal('tva_rate', { precision: 5, scale: 2 }).default('20.00'),
+  
+  // Payment Information
+  paymentTerms: text('payment_terms'), // e.g., "Paiement comptant à réception"
+  paymentMethods: json('payment_methods').$type<string[]>(), // Array of accepted payment methods
   
   // Logo (stored as base64 or URL)
   logoUrl: text('logo_url'),

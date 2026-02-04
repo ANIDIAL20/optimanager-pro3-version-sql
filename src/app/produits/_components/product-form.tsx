@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Upload, Image as ImageIcon, X, Check, Loader2 } from 'lucide-react';
+import { Upload, Image as ImageIcon, X, Check, Loader2, Plus } from 'lucide-react';
 // TODO: Migrate settings (brands/categories/materials/colors) to SQL
 // import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, useFirebase } from '@/firebase';
 // import { collection, doc, query, orderBy } from 'firebase/firestore';
@@ -35,6 +35,7 @@ import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
 import { getCategoryIcon } from '@/lib/category-icons';
 import { createProduct, updateProduct } from '@/app/actions/products-actions';
+import { getBrands, getCategories, getMaterials, getColors, createSetting } from '@/app/actions/settings-actions';
 
 const ProductSchema = z.object({
   reference: z.string().min(1, 'La référence est requise.'),
@@ -58,11 +59,6 @@ interface ProductFormProps {
   product?: Product;
 }
 
-
-import { getBrands, getCategories, getMaterials, getColors } from '@/app/actions/settings-actions';
-
-// ... (imports remain)
-
 export function ProductForm({ product }: ProductFormProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -75,10 +71,24 @@ export function ProductForm({ product }: ProductFormProps) {
   const [materials, setMaterials] = React.useState<Material[]>([]);
   const [colors, setColors] = React.useState<Color[]>([]);
 
+  // Search State for Quick Add
+  const [searchBrand, setSearchBrand] = React.useState("");
+  const [searchCategory, setSearchCategory] = React.useState("");
+  const [searchMaterial, setSearchMaterial] = React.useState("");
+  const [searchColor, setSearchColor] = React.useState("");
+
+  // Open State for Popovers
+  const [openBrand, setOpenBrand] = React.useState(false);
+  const [openCategory, setOpenCategory] = React.useState(false);
+  const [openMaterial, setOpenMaterial] = React.useState(false);
+  const [openColor, setOpenColor] = React.useState(false);
+
+  // Loading States
   const [isLoadingBrands, setIsLoadingBrands] = React.useState(true);
   const [isLoadingCategories, setIsLoadingCategories] = React.useState(true);
   const [isLoadingMaterials, setIsLoadingMaterials] = React.useState(true);
   const [isLoadingColors, setIsLoadingColors] = React.useState(true);
+  const [isCreatingSetting, setIsCreatingSetting] = React.useState(false);
 
   React.useEffect(() => {
     async function loadSettings() {
@@ -160,6 +170,49 @@ export function ProductForm({ product }: ProductFormProps) {
     }
   };
 
+  // Quick Create Handler
+  const handleQuickCreate = async (
+    type: 'brands' | 'categories' | 'materials' | 'colors',
+    name: string,
+    setSearch: (val: string) => void,
+    setList: React.Dispatch<React.SetStateAction<any[]>>,
+    fieldWithId: string,
+    setOpen: (val: boolean) => void
+  ) => {
+    if (!name.trim()) return;
+    
+    setIsCreatingSetting(true);
+    try {
+      // Optimistic update
+      const tempId = `temp-${Date.now()}`;
+      // Note: We don't update list optimistically here because actual ID is needed for relationship.
+      // But we could display it. For now, wait for server response.
+      
+      const created = await createSetting(type, { name: name.trim() });
+      
+      if (created) {
+        const newItem = { ...created, id: created.id.toString() };
+        setList((prev) => [...prev, newItem]);
+        form.setValue(fieldWithId as any, newItem.id); // Typings are loose here
+        setSearch("");
+        setOpen(false);
+        toast({
+          title: "Ajouté !",
+          description: `${name} a été ajouté à la liste.`
+        });
+      }
+    } catch (error: any) {
+      console.error("Quick create error:", error);
+      toast({
+        variant: "destructive",
+        title: "Erreur",
+        description: "Impossible de créer l'élément."
+      });
+    } finally {
+        setIsCreatingSetting(false);
+    }
+  };
+
   const onSubmit = async (data: ProductFormValues, stayOnPage?: boolean) => {
     setIsSubmitting(true);
     try {
@@ -170,7 +223,7 @@ export function ProductForm({ product }: ProductFormProps) {
             stockMin: data.stockMin,
             matiereId: data.matiereId || undefined,
             couleurId: data.couleurId || undefined,
-            // Lookup names using the IDs (which are now strings in our state)
+            // Lookup names using the IDs
             categorie: categories?.find(c => c.id === data.categorieId)?.name,
             marque: brands?.find(b => b.id === data.marqueId)?.name,
         };
@@ -274,35 +327,70 @@ export function ProductForm({ product }: ProductFormProps) {
                   control={form.control}
                   name="categorieId"
                   render={({ field }) => (
-                    <FormItem className="md:col-span-2">
+                    <FormItem className="md:col-span-2 flex flex-col">
                       <FormLabel>Catégorie</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                        disabled={isLoadingCategories}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="-- Choisir une catégorie --" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {isLoadingCategories && (
-                            <SelectItem value="loading" disabled>Chargement...</SelectItem>
-                          )}
-                          {categories?.map((cat) => {
-                            const Icon = getCategoryIcon(cat.name);
-                            return (
-                              <SelectItem key={cat.id} value={cat.id}>
-                                <div className="flex items-center gap-2">
-                                  <Icon className="h-4 w-4 text-muted-foreground" />
-                                  <span>{cat.name}</span>
-                                </div>
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
+                      <Popover open={openCategory} onOpenChange={setOpenCategory}>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={openCategory}
+                              className={cn("w-full justify-between", !field.value && "text-muted-foreground")}
+                              disabled={isLoadingCategories}
+                            >
+                              {field.value
+                                ? categories?.find((cat) => cat.id === field.value)?.name
+                                : "Choisir ou créer une catégorie..."}
+                              <Check className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[300px] p-0">
+                          <Command>
+                            <CommandInput 
+                                placeholder="Chercher une catégorie..." 
+                                value={searchCategory}
+                                onValueChange={setSearchCategory}
+                            />
+                            <CommandList>
+                              <CommandEmpty>
+                                {isLoadingCategories ? (
+                                    'Chargement...' 
+                                ) : (
+                                    <Button 
+                                        variant="ghost" 
+                                        className="w-full justify-start text-sm"
+                                        onClick={() => handleQuickCreate('categories', searchCategory, setSearchCategory, setCategories, 'categorieId', setOpenCategory)}
+                                        disabled={isCreatingSetting}
+                                    >
+                                        <Plus className="mr-2 h-4 w-4" />
+                                        Créer "{searchCategory}"
+                                    </Button>
+                                )}
+                              </CommandEmpty>
+                              <CommandGroup>
+                                {categories?.map((cat) => {
+                                    const Icon = getCategoryIcon(cat.name);
+                                    return (
+                                  <CommandItem
+                                    value={cat.name}
+                                    key={cat.id}
+                                    onSelect={() => { 
+                                        form.setValue("categorieId", cat.id); 
+                                        setOpenCategory(false);
+                                    }}
+                                  >
+                                    <Check className={cn("mr-2 h-4 w-4", cat.id === field.value ? "opacity-100" : "opacity-0")} />
+                                    <Icon className="mr-2 h-4 w-4 text-muted-foreground" />
+                                    {cat.name}
+                                  </CommandItem>
+                                )})}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -320,19 +408,20 @@ export function ProductForm({ product }: ProductFormProps) {
               </CardHeader>
               <CardContent className="grid grid-cols-1 gap-6 md:grid-cols-2">
 
-                {/* Brand with Combobox */}
+                {/* Brand with Combobox & Quick Add */}
                 <FormField
                   control={form.control}
                   name="marqueId"
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Marque</FormLabel>
-                      <Popover>
+                      <Popover open={openBrand} onOpenChange={setOpenBrand}>
                         <PopoverTrigger asChild>
                           <FormControl>
                             <Button
                               variant="outline"
                               role="combobox"
+                              aria-expanded={openBrand}
                               className={cn("w-full justify-between", !field.value && "text-muted-foreground")}
                               disabled={isLoadingBrands}
                             >
@@ -345,17 +434,36 @@ export function ProductForm({ product }: ProductFormProps) {
                         </PopoverTrigger>
                         <PopoverContent className="w-[300px] p-0">
                           <Command>
-                            <CommandInput placeholder="Chercher une marque..." />
+                            <CommandInput 
+                                placeholder="Chercher une marque..." 
+                                value={searchBrand}
+                                onValueChange={setSearchBrand}
+                            />
                             <CommandList>
                               <CommandEmpty>
-                                {isLoadingBrands ? 'Chargement...' : "Aucune marque trouvée."}
+                                {isLoadingBrands ? (
+                                    'Chargement...'
+                                ) : (
+                                    <Button 
+                                        variant="ghost" 
+                                        className="w-full justify-start text-sm"
+                                        onClick={() => handleQuickCreate('brands', searchBrand, setSearchBrand, setBrands, 'marqueId', setOpenBrand)}
+                                        disabled={isCreatingSetting}
+                                    >
+                                        <Plus className="mr-2 h-4 w-4" />
+                                        Créer "{searchBrand}"
+                                    </Button>
+                                )}
                               </CommandEmpty>
                               <CommandGroup>
                                 {brands?.map((brand) => (
                                   <CommandItem
                                     value={brand.name}
                                     key={brand.id}
-                                    onSelect={() => { form.setValue("marqueId", brand.id); }}
+                                    onSelect={() => { 
+                                        form.setValue("marqueId", brand.id); 
+                                        setOpenBrand(false);
+                                    }}
                                   >
                                     <Check className={cn("mr-2 h-4 w-4", brand.id === field.value ? "opacity-100" : "opacity-0")} />
                                     {brand.name}
@@ -371,20 +479,20 @@ export function ProductForm({ product }: ProductFormProps) {
                   )}
                 />
 
-
-                {/* Material with Combobox */}
+                {/* Material with Combobox & Quick Add */}
                 <FormField
                   control={form.control}
                   name="matiereId"
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Matière</FormLabel>
-                      <Popover>
+                      <Popover open={openMaterial} onOpenChange={setOpenMaterial}>
                         <PopoverTrigger asChild>
                           <FormControl>
                             <Button
                               variant="outline"
                               role="combobox"
+                              aria-expanded={openMaterial}
                               className={cn("w-full justify-between", !field.value && "text-muted-foreground")}
                               disabled={isLoadingMaterials}
                             >
@@ -397,17 +505,36 @@ export function ProductForm({ product }: ProductFormProps) {
                         </PopoverTrigger>
                         <PopoverContent className="w-[300px] p-0">
                           <Command>
-                            <CommandInput placeholder="Chercher une matière..." />
+                            <CommandInput 
+                                placeholder="Chercher une matière..." 
+                                value={searchMaterial}
+                                onValueChange={setSearchMaterial}
+                            />
                             <CommandList>
                               <CommandEmpty>
-                                {isLoadingMaterials ? 'Chargement...' : "Aucune matière trouvée."}
+                                 {isLoadingMaterials ? (
+                                    'Chargement...'
+                                ) : (
+                                    <Button 
+                                        variant="ghost" 
+                                        className="w-full justify-start text-sm"
+                                        onClick={() => handleQuickCreate('materials', searchMaterial, setSearchMaterial, setMaterials, 'matiereId', setOpenMaterial)}
+                                        disabled={isCreatingSetting}
+                                    >
+                                        <Plus className="mr-2 h-4 w-4" />
+                                        Créer "{searchMaterial}"
+                                    </Button>
+                                )}
                               </CommandEmpty>
                               <CommandGroup>
                                 {materials?.map((mat) => (
                                   <CommandItem
                                     value={mat.name}
                                     key={mat.id}
-                                    onSelect={() => { form.setValue("matiereId", mat.id); }}
+                                    onSelect={() => { 
+                                        form.setValue("matiereId", mat.id); 
+                                        setOpenMaterial(false);
+                                    }}
                                   >
                                     <Check className={cn("mr-2 h-4 w-4", mat.id === field.value ? "opacity-100" : "opacity-0")} />
                                     {mat.name}
@@ -423,19 +550,20 @@ export function ProductForm({ product }: ProductFormProps) {
                   )}
                 />
 
-                {/* Color with Combobox */}
+                {/* Color with Combobox & Quick Add */}
                 <FormField
                   control={form.control}
                   name="couleurId"
                   render={({ field }) => (
                     <FormItem className="md:col-span-2 flex flex-col">
                       <FormLabel>Couleur</FormLabel>
-                      <Popover>
+                      <Popover open={openColor} onOpenChange={setOpenColor}>
                         <PopoverTrigger asChild>
                           <FormControl>
                             <Button
                               variant="outline"
                               role="combobox"
+                              aria-expanded={openColor}
                               className={cn("w-full justify-between", !field.value && "text-muted-foreground")}
                               disabled={isLoadingColors}
                             >
@@ -456,17 +584,36 @@ export function ProductForm({ product }: ProductFormProps) {
                         </PopoverTrigger>
                         <PopoverContent className="w-[300px] p-0">
                           <Command>
-                            <CommandInput placeholder="Chercher une couleur..." />
+                            <CommandInput 
+                                placeholder="Chercher une couleur..." 
+                                value={searchColor}
+                                onValueChange={setSearchColor}
+                            />
                             <CommandList>
                               <CommandEmpty>
-                                {isLoadingColors ? 'Chargement...' : "Aucune couleur trouvée."}
+                                {isLoadingColors ? (
+                                    'Chargement...'
+                                ) : (
+                                    <Button 
+                                        variant="ghost" 
+                                        className="w-full justify-start text-sm"
+                                        onClick={() => handleQuickCreate('colors', searchColor, setSearchColor, setColors, 'couleurId', setOpenColor)}
+                                        disabled={isCreatingSetting}
+                                    >
+                                        <Plus className="mr-2 h-4 w-4" />
+                                        Créer "{searchColor}"
+                                    </Button>
+                                )}
                               </CommandEmpty>
                               <CommandGroup>
                                 {colors?.map((color) => (
                                   <CommandItem
                                     value={color.name}
                                     key={color.id}
-                                    onSelect={() => { form.setValue("couleurId", color.id); }}
+                                    onSelect={() => { 
+                                        form.setValue("couleurId", color.id); 
+                                        setOpenColor(false);
+                                    }}
                                   >
                                     <Check className={cn("mr-2 h-4 w-4", color.id === field.value ? "opacity-100" : "opacity-0")} />
                                     <div className="flex items-center gap-2">
@@ -709,4 +856,3 @@ export function ProductForm({ product }: ProductFormProps) {
     </Form>
   );
 }
-

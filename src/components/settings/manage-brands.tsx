@@ -16,8 +16,22 @@ import {
   AlertCircle,
   Database,
   Loader2,
+  Loader2,
   RefreshCw,
+  Trash2,
+  Download
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -32,12 +46,14 @@ import { useToast } from '@/hooks/use-toast';
 import { BrandForm } from './brand-form';
 import { seedBrands } from '@/lib/brands-seed';
 import { ManageItem } from './manage-item';
-import { getSettings, createSetting } from '@/app/actions/settings-actions';
+import { ManageItem } from './manage-item';
+import { getSettings, createSetting, deleteAllSettings } from '@/app/actions/settings-actions';
 
 
 export function ManageBrands() {
   const [isAddDialogOpen, setIsAddDialogOpen] = React.useState(false);
   const [isSeeding, setIsSeeding] = React.useState(false);
+  const [isDeletingAll, setIsDeletingAll] = React.useState(false);
   const [brands, setBrands] = React.useState<Brand[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -103,6 +119,20 @@ export function ManageBrands() {
     } finally {
       setIsSeeding(false);
     }
+  };
+
+  const handleDeleteAll = async () => {
+      setIsDeletingAll(true);
+      try {
+          await deleteAllSettings('brands');
+          toast({ title: 'Succès', description: 'Toutes les marques ont été supprimées.' });
+          setBrands([]); // Optimistic update
+          fetchBrands();
+      } catch (error: any) {
+          toast({ variant: 'destructive', title: 'Erreur', description: error.message });
+      } finally {
+          setIsDeletingAll(false);
+      }
   };
 
   const handleSuccess = () => {
@@ -206,36 +236,66 @@ export function ManageBrands() {
           </>
         )}
       </CardContent>
-      <CardFooter className="flex flex-wrap gap-2">
-        <Dialog modal={false} open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Ajouter une Marque
-            </Button>
-          </DialogTrigger>
-          <DialogContent
-            onInteractOutside={(e) => {
-              e.preventDefault();
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>Ajouter une nouvelle marque</DialogTitle>
-              <DialogDescription>
-                Remplissez les détails pour créer une nouvelle marque.
-              </DialogDescription>
-            </DialogHeader>
-            <BrandForm onSuccess={handleSuccess} />
-          </DialogContent>
-        </Dialog>
-        <Button variant="outline" onClick={handleSeedDatabase} disabled={isSeeding}>
-          {isSeeding ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Database className="mr-2 h-4 w-4" />
-          )}
-          {isSeeding ? 'Import en cours...' : 'Importer les marques'}
-        </Button>
+      <CardFooter className="flex flex-wrap gap-2 justify-between">
+        <div className="flex gap-2">
+            <Dialog modal={false} open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+                <Button>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Ajouter une Marque
+                </Button>
+            </DialogTrigger>
+            <DialogContent
+                onInteractOutside={(e) => {
+                e.preventDefault();
+                }}
+            >
+                <DialogHeader>
+                <DialogTitle>Ajouter une nouvelle marque</DialogTitle>
+                <DialogDescription>
+                    Remplissez les détails pour créer une nouvelle marque.
+                </DialogDescription>
+                </DialogHeader>
+                <BrandForm onSuccess={handleSuccess} />
+            </DialogContent>
+            </Dialog>
+
+            {/* Import Button - Only Show if empty or < 2 */}
+            {(!brands || brands.length < 2) && (
+                <Button variant="outline" onClick={handleSeedDatabase} disabled={isSeeding}>
+                {isSeeding ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                    <Download className="mr-2 h-4 w-4" />
+                )}
+                {isSeeding ? 'Import...' : 'Importer par défaut'}
+                </Button>
+            )}
+        </div>
+
+        {/* Delete All Button - Only Show if > 1 */}
+        {brands && brands.length > 1 && (
+            <AlertDialog>
+                <AlertDialogTrigger asChild>
+                    <Button variant="destructive" disabled={isDeletingAll}>
+                        {isDeletingAll ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Trash2 className="mr-2 h-4 w-4"/>}
+                        Tout supprimer
+                    </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Êtes-vous absolument sûr ?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Cette action est irréversible. Elle supprimera définitivement toutes les marques ({brands.length}) de votre liste.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Annuler</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDeleteAll} className="bg-red-600 hover:bg-red-700">Confirm Supprimer</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        )}
       </CardFooter>
     </Card>
   );
