@@ -118,18 +118,91 @@ export async function createReminder(data: any) {
     throw new Error('Non authentifié');
   }
 
-  const [newReminder] = await db
-    .insert(reminders)
-    .values({
-      userId: session.user.id,
-      ...data,
-      dueDate: data.dueDate ? new Date(data.dueDate) : null,
-      metadata: data.metadata ? JSON.stringify(data.metadata) : null,
-    } as any)
-    .returning();
+  // Check for Batch Config
+  const batchConfig = data.metadata?.batchConfig;
 
-  revalidatePath('/dashboard');
-  return newReminder;
+  if (batchConfig && batchConfig.mode !== 'simple') {
+      // --- BATCH CREATION ---
+      const remindersToCreate: any[] = [];
+      const startDate = data.dueDate ? new Date(data.dueDate) : new Date();
+
+      if (batchConfig.mode === 'recurring') {
+          // Recurring Logic
+          const count = batchConfig.count || 1;
+          const frequency = batchConfig.frequency || 'weekly';
+
+          for (let i = 0; i < count; i++) {
+              const currentDate = new Date(startDate);
+               
+              // Add offset based on frequency
+              if (frequency === 'daily') currentDate.setDate(startDate.getDate() + i);
+              if (frequency === 'weekly') currentDate.setDate(startDate.getDate() + (i * 7));
+              if (frequency === 'monthly') currentDate.setMonth(startDate.getMonth() + i);
+
+              remindersToCreate.push({
+                  userId: session.user.id,
+                  ...data,
+                  title: `${data.title} (${i + 1}/${count})`,
+                  dueDate: currentDate,
+                  metadata: JSON.stringify({ 
+                      ...data.metadata,
+                      batchId: Date.now().toString(), // Group ID
+                      index: i + 1,
+                      total: count 
+                  })
+              });
+          }
+
+      } else if (batchConfig.mode === 'installment') {
+          // Installment Logic
+          const months = batchConfig.months || 1;
+          const totalAmount = batchConfig.totalAmount || 0;
+          const monthlyAmount = (totalAmount / months).toFixed(2);
+
+          for (let i = 0; i < months; i++) {
+              const currentDate = new Date(startDate);
+              currentDate.setMonth(startDate.getMonth() + i);
+
+              remindersToCreate.push({
+                  userId: session.user.id,
+                  ...data,
+                  title: `${data.title} (${i + 1}/${months})`,
+                  message: `${data.message || ''}\n\nÉchéance ${i + 1}/${months}: ${monthlyAmount} DH`,
+                  dueDate: currentDate,
+                  metadata: JSON.stringify({ 
+                      ...data.metadata,
+                      batchId: Date.now().toString(),
+                      installmentAmount: monthlyAmount,
+                      installmentIndex: i + 1,
+                      installmentTotal: months 
+                  })
+              });
+          }
+      }
+
+      // Bulk Insert
+      if (remindersToCreate.length > 0) {
+          await db.insert(reminders).values(remindersToCreate);
+      }
+
+      revalidatePath('/dashboard');
+      return { success: true, count: remindersToCreate.length };
+
+  } else {
+      // --- SINGLE CREATION (Legacy) ---
+      const [newReminder] = await db
+        .insert(reminders)
+        .values({
+          userId: session.user.id,
+          ...data,
+          dueDate: data.dueDate ? new Date(data.dueDate) : null,
+          metadata: data.metadata ? JSON.stringify(data.metadata) : null,
+        } as any)
+        .returning();
+
+      revalidatePath('/dashboard');
+      return newReminder;
+  }
 }
 
 /**

@@ -110,6 +110,8 @@ export default function NewSalePage() {
                              marqueId: p.marqueId || '', // Legacy
                              categorie: p.categorie,
                              marque: p.marque,
+                             modele: p.modele,
+                             couleur: p.couleur,
                              description: p.description
                              // missing others but enough for POS
                         }));
@@ -213,6 +215,9 @@ export default function NewSalePage() {
             const saleItems = cartItems.map(item => ({
                 productId: item.product.id,
                 name: item.product.nomProduit,
+                marque: item.product.marque,
+                modele: item.product.modele,
+                couleur: item.product.couleur,
                 quantity: item.quantity,
                 price: item.product.prixVente,
                 total: item.product.prixVente * item.quantity

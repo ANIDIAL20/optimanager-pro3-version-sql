@@ -331,22 +331,26 @@ export async function seedCategories() {
     throw new Error('Non authentifié');
   }
 
-  // Check if already seeded
-  const existing = await db
-    .select()
+  // Get existing items to avoid duplicates
+  const existingItems = await db
+    .select({ name: categories.name })
     .from(categories)
-    .where(eq(categories.userId, session.user.id))
-    .limit(1);
+    .where(eq(categories.userId, session.user.id));
 
-  if (existing.length > 0) {
-    return { message: 'Catégories déjà importées', count: 0 };
+  const existingNames = new Set(existingItems.map(i => i.name.toLowerCase()));
+
+  // Filter only new items
+  const toInsert = defaultCategories.filter(name => !existingNames.has(name.toLowerCase()));
+
+  if (toInsert.length === 0) {
+    return { message: 'Catégories déjà à jour', count: 0 };
   }
 
-  // Insert all categories
+  // Insert missing items
   const inserted = await db
     .insert(categories)
     .values(
-      defaultCategories.map(name => ({
+      toInsert.map(name => ({
         userId: session.user.id,
         name,
       }))
@@ -354,7 +358,7 @@ export async function seedCategories() {
     .returning();
 
   console.log('[seedCategories] Inserted:', inserted.length);
-  return { message: 'Catégories importées avec succès', count: inserted.length };
+  return { message: `Importation réussie (${inserted.length} ajoutés)`, count: inserted.length };
 }
 
 /**
@@ -367,20 +371,27 @@ export async function seedBrands() {
     throw new Error('Non authentifié');
   }
 
-  const existing = await db
-    .select()
+  const existingItems = await db
+    .select({ name: brands.name })
     .from(brands)
-    .where(eq(brands.userId, session.user.id))
-    .limit(1);
+    .where(eq(brands.userId, session.user.id));
 
-  if (existing.length > 0) {
-    return { message: 'Marques déjà importées', count: 0 };
+  const existingNames = new Set(existingItems.map(i => i.name.toLowerCase()));
+
+  const toInsert = defaultBrands.filter(b => !existingNames.has(b.name.toLowerCase()));
+
+  if (toInsert.length === 0) {
+    return { message: 'Marques déjà à jour', count: 0 };
   }
 
+  // Chunk inserts if too many (Postgres limit)
+  // For < 1000 it's fine, but good practice. safe limit ~1000 parameters.
+  // defaultBrands is ~200 items * 3 columns = 600 params. Safe.
+  
   const inserted = await db
     .insert(brands)
     .values(
-      defaultBrands.map(brand => ({
+      toInsert.map(brand => ({
         userId: session.user.id,
         ...brand,
       }))
@@ -388,7 +399,7 @@ export async function seedBrands() {
     .returning();
 
   console.log('[seedBrands] Inserted:', inserted.length);
-  return { message: 'Marques importées avec succès', count: inserted.length };
+  return { message: `Importation réussie (${inserted.length} ajoutés)`, count: inserted.length };
 }
 
 /**
@@ -401,20 +412,23 @@ export async function seedColors() {
     throw new Error('Non authentifié');
   }
 
-  const existing = await db
-    .select()
+  const existingItems = await db
+    .select({ name: colors.name })
     .from(colors)
-    .where(eq(colors.userId, session.user.id))
-    .limit(1);
+    .where(eq(colors.userId, session.user.id));
 
-  if (existing.length > 0) {
-    return { message: 'Couleurs déjà importées', count: 0 };
+  const existingNames = new Set(existingItems.map(i => i.name.toLowerCase()));
+
+  const toInsert = defaultColors.filter(name => !existingNames.has(name.toLowerCase()));
+
+  if (toInsert.length === 0) {
+    return { message: 'Couleurs déjà à jour', count: 0 };
   }
 
   const inserted = await db
     .insert(colors)
     .values(
-      defaultColors.map(name => ({
+      toInsert.map(name => ({
         userId: session.user.id,
         name,
       }))
@@ -422,7 +436,7 @@ export async function seedColors() {
     .returning();
 
   console.log('[seedColors] Inserted:', inserted.length);
-  return { message: 'Couleurs importées avec succès', count: inserted.length };
+  return { message: `Importation réussie (${inserted.length} ajoutés)`, count: inserted.length };
 }
 
 /**
@@ -435,28 +449,31 @@ export async function seedMaterials() {
     throw new Error('Non authentifié');
   }
 
-  const existing = await db
-    .select()
+  const existingItems = await db
+    .select({ name: materials.name })
     .from(materials)
-    .where(eq(materials.userId, session.user.id))
-    .limit(1);
+    .where(eq(materials.userId, session.user.id));
 
-  if (existing.length > 0) {
-    return { message: 'Matières déjà importées', count: 0 };
+  const existingNames = new Set(existingItems.map(i => i.name.toLowerCase()));
+
+  const toInsert = defaultMaterials.filter(m => !existingNames.has(m.name.toLowerCase()));
+
+  if (toInsert.length === 0) {
+    return { message: 'Matières déjà à jour', count: 0 };
   }
 
   const inserted = await db
     .insert(materials)
     .values(
-      defaultMaterials.map(name => ({
+      toInsert.map(m => ({
         userId: session.user.id,
-        name,
+        ...m,
       }))
     )
     .returning();
 
   console.log('[seedMaterials] Inserted:', inserted.length);
-  return { message: 'Matières importées avec succès', count: inserted.length };
+  return { message: `Importation réussie (${inserted.length} ajoutés)`, count: inserted.length };
 }
 
 /**
@@ -469,20 +486,23 @@ export async function seedTreatments() {
     throw new Error('Non authentifié');
   }
 
-  const existing = await db
-    .select()
+  const existingItems = await db
+    .select({ name: treatments.name })
     .from(treatments)
-    .where(eq(treatments.userId, session.user.id))
-    .limit(1);
+    .where(eq(treatments.userId, session.user.id));
 
-  if (existing.length > 0) {
-    return { message: 'Traitements déjà importés', count: 0 };
+  const existingNames = new Set(existingItems.map(i => i.name.toLowerCase()));
+
+  const toInsert = defaultTreatments.filter(name => !existingNames.has(name.toLowerCase()));
+
+  if (toInsert.length === 0) {
+    return { message: 'Traitements déjà à jour', count: 0 };
   }
 
   const inserted = await db
     .insert(treatments)
     .values(
-      defaultTreatments.map(name => ({
+      toInsert.map(name => ({
         userId: session.user.id,
         name,
       }))
@@ -490,7 +510,7 @@ export async function seedTreatments() {
     .returning();
 
   console.log('[seedTreatments] Inserted:', inserted.length);
-  return { message: 'Traitements importés avec succès', count: inserted.length };
+  return { message: `Importation réussie (${inserted.length} ajoutés)`, count: inserted.length };
 }
 
 /**
@@ -503,20 +523,23 @@ export async function seedInsurances() {
     throw new Error('Non authentifié');
   }
 
-  const existing = await db
-    .select()
+  const existingItems = await db
+    .select({ name: insurances.name })
     .from(insurances)
-    .where(eq(insurances.userId, session.user.id))
-    .limit(1);
+    .where(eq(insurances.userId, session.user.id));
 
-  if (existing.length > 0) {
-    return { message: 'Mutuelles déjà importées', count: 0 };
+  const existingNames = new Set(existingItems.map(i => i.name.toLowerCase()));
+
+  const toInsert = defaultInsurances.filter(name => !existingNames.has(name.toLowerCase()));
+
+  if (toInsert.length === 0) {
+    return { message: 'Mutuelles déjà à jour', count: 0 };
   }
 
   const inserted = await db
     .insert(insurances)
     .values(
-      defaultInsurances.map(name => ({
+      toInsert.map(name => ({
         userId: session.user.id,
         name,
       }))
@@ -524,7 +547,7 @@ export async function seedInsurances() {
     .returning();
 
   console.log('[seedInsurances] Inserted:', inserted.length);
-  return { message: 'Mutuelles importées avec succès', count: inserted.length };
+  return { message: `Importation réussie (${inserted.length} ajoutés)`, count: inserted.length };
 }
 
 /**
@@ -537,20 +560,23 @@ export async function seedMountingTypes() {
     throw new Error('Non authentifié');
   }
 
-  const existing = await db
-    .select()
+  const existingItems = await db
+    .select({ name: mountingTypes.name })
     .from(mountingTypes)
-    .where(eq(mountingTypes.userId, session.user.id))
-    .limit(1);
+    .where(eq(mountingTypes.userId, session.user.id));
 
-  if (existing.length > 0) {
-    return { message: 'Types de montage déjà importés', count: 0 };
+  const existingNames = new Set(existingItems.map(i => i.name.toLowerCase()));
+
+  const toInsert = defaultMountingTypes.filter(name => !existingNames.has(name.toLowerCase()));
+
+  if (toInsert.length === 0) {
+    return { message: 'Types de montage déjà à jour', count: 0 };
   }
 
   const inserted = await db
     .insert(mountingTypes)
     .values(
-      defaultMountingTypes.map(name => ({
+      toInsert.map(name => ({
         userId: session.user.id,
         name,
       }))
@@ -558,7 +584,7 @@ export async function seedMountingTypes() {
     .returning();
 
   console.log('[seedMountingTypes] Inserted:', inserted.length);
-  return { message: 'Types de montage importés avec succès', count: inserted.length };
+  return { message: `Importation réussie (${inserted.length} ajoutés)`, count: inserted.length };
 }
 
 /**
@@ -571,20 +597,23 @@ export async function seedBanks() {
     throw new Error('Non authentifié');
   }
 
-  const existing = await db
-    .select()
+  const existingItems = await db
+    .select({ name: banks.name })
     .from(banks)
-    .where(eq(banks.userId, session.user.id))
-    .limit(1);
+    .where(eq(banks.userId, session.user.id));
 
-  if (existing.length > 0) {
-    return { message: 'Banques déjà importées', count: 0 };
+  const existingNames = new Set(existingItems.map(i => i.name.toLowerCase()));
+
+  const toInsert = defaultBanks.filter(name => !existingNames.has(name.toLowerCase()));
+
+  if (toInsert.length === 0) {
+    return { message: 'Banques déjà à jour', count: 0 };
   }
 
   const inserted = await db
     .insert(banks)
     .values(
-      defaultBanks.map(name => ({
+      toInsert.map(name => ({
         userId: session.user.id,
         name,
       }))
@@ -592,7 +621,7 @@ export async function seedBanks() {
     .returning();
 
   console.log('[seedBanks] Inserted:', inserted.length);
-  return { message: 'Banques importées avec succès', count: inserted.length };
+  return { message: `Importation réussie (${inserted.length} ajoutés)`, count: inserted.length };
 }
 
 /**

@@ -18,6 +18,12 @@ import { logSuccess, logFailure } from '@/lib/audit-log';
 export interface SaleItem {
     productRef: string; // This is actually productId or reference? In legacy it seemed to be ID or Ref.
     productName: string;
+    
+    // New fields for print template
+    marque?: string;
+    modele?: string;
+    couleur?: string;
+
     quantity: number;
     unitPrice: number;
     total: number;
@@ -70,10 +76,9 @@ export const getSales = secureAction(async (userId, user) => {
     try {
         console.log('📊 Fetching sales for userId:', userId);
         
-        const salesData = await db.query.sales.findMany({
-            where: eq(sales.userId, userId),
-            orderBy: [desc(sales.createdAt)]
-        });
+        const salesData = await db.select().from(sales)
+            .where(eq(sales.userId, userId))
+            .orderBy(desc(sales.createdAt));
 
         console.log(`✅ Found ${salesData.length} sales`);
 
@@ -257,9 +262,17 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                 const finalPrice = item.unitPrice ?? (productToUpdate ? Number(productToUpdate.prixVente) : 0);
                 const finalTotal = item.total ?? (finalPrice * item.quantity);
 
+                // Fetch new details if available
+                const finalMarque = productToUpdate?.marque || undefined;
+                const finalModele = productToUpdate?.modele || undefined;
+                const finalCouleur = productToUpdate?.couleur || undefined;
+
                 enrichedItems.push({
                     productRef: finalRef, // Save actual reference string
                     productName: finalName,
+                    marque: finalMarque,
+                    modele: finalModele,
+                    couleur: finalCouleur,
                     quantity: item.quantity,
                     unitPrice: finalPrice,
                     total: finalTotal,

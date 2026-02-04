@@ -20,6 +20,12 @@ export interface DevisItem {
     productId?: string; // ID of the product
     reference: string;
     designation: string;
+    
+    // New fields
+    marque?: string;
+    modele?: string;
+    couleur?: string;
+
     quantite: number;
     prixUnitaire: number;
 }
@@ -254,6 +260,9 @@ export const convertDevisToSale = secureAction(async (userId, user, devisId: str
             const saleItems = devisItems.map(item => ({
                 productRef: item.productId || item.reference, // Use productId if available, else reference
                 productName: item.designation,
+                marque: item.marque,
+                modele: item.modele,
+                couleur: item.couleur,
                 quantity: item.quantite,
                 unitPrice: item.prixUnitaire,
                 total: item.quantite * item.prixUnitaire,

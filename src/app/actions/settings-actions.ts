@@ -17,7 +17,7 @@ import {
   banks,
   insurances,
 } from '@/db/schema';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, inArray, sql } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { z } from 'zod';
 
@@ -80,7 +80,7 @@ type BrandInput = z.infer<typeof brandSchema>;
  * Get all items from a settings table
  */
 
-import { unstable_noStore as noStore } from 'next/cache';
+import { unstable_noStore as noStore, revalidatePath } from 'next/cache';
 
 // ...
 
@@ -232,6 +232,59 @@ export async function deleteSetting(type: SettingType, id: number) {
 
   console.log(`[deleteSetting] Deleted ${type}:`, deleted);
   return deleted;
+}
+
+/**
+ * Delete multiple settings
+ */
+export async function deleteSettings(type: SettingType, ids: number[]) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    throw new Error('Non authentifié');
+  }
+
+  if (!ids || ids.length === 0) {
+      return { success: true, count: 0 };
+  }
+
+  const table = tableMap[type];
+
+  // Verify ownership and delete in one go
+  const deleted = await db
+    .delete(table)
+    .where(
+        and(
+            eq(table.userId, session.user.id),
+            inArray(table.id, ids)
+        )
+    )
+    .returning();
+
+  revalidatePath('/dashboard/parametres');
+  return { success: true, count: deleted.length };
+}
+
+/**
+ * Delete ALL items of a specific type (Destructive)
+ */
+export async function deleteAllSettings(type: SettingType) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    throw new Error('Non authentifié');
+  }
+
+  const table = tableMap[type];
+
+  // Bulk delete for this user
+  const deleted = await db
+    .delete(table)
+    .where(eq(table.userId, session.user.id))
+    .returning();
+
+  console.log(`[deleteAllSettings] Deleted ALL ${type} for user ${session.user.id}:`, deleted.length);
+  return { success: true, count: deleted.length };
 }
 
 // ========================================

@@ -107,6 +107,9 @@ export function CreateDevisModal({ children, onSuccess }: CreateDevisModalProps)
                 productId: product.id,
                 reference: product.reference || '',
                 designation: product.nomProduit || product.nom || 'Produit sans nom',
+                marque: product.marque || undefined,
+                modele: product.modele || undefined,
+                couleur: product.couleur || undefined,
                 quantite: 1,
                 prixUnitaire: product.prixVente || 0
             }]);
