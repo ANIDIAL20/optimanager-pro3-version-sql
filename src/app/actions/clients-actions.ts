@@ -398,15 +398,21 @@ export const deleteClient = secureAction(async (userId, user, clientId: string) 
             };
         }
 
-        // Delete associated prescriptions first (cascade)
+        // Delete associated prescriptions first (cascade) with strict userId check
         await db
             .delete(prescriptions)
-            .where(eq(prescriptions.clientId, clientIdNum));
+            .where(and(
+                eq(prescriptions.clientId, clientIdNum),
+                eq(prescriptions.userId, userId) // 🔒 Strict ownership check
+            ));
 
         // Delete the client
         await db
             .delete(clients)
-            .where(eq(clients.id, clientIdNum));
+            .where(and(
+                eq(clients.id, clientIdNum),
+                eq(clients.userId, userId)
+            ));
 
         console.log(`✅ Client deleted`);
         await logSuccess(userId, 'DELETE', 'clients', clientId);

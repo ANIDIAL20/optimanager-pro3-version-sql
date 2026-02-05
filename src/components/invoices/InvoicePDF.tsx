@@ -29,350 +29,183 @@ interface InvoicePDFProps {
 // Register fonts (optional - using default Helvetica)
 // You can add custom fonts here if needed
 
-// Create styles
-const styles = StyleSheet.create({
-    page: {
-        padding: 40,
-        fontSize: 10,
-        fontFamily: 'Helvetica',
-        backgroundColor: '#ffffff',
-    },
-    // Header Section
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 30,
-        paddingBottom: 20,
-        borderBottom: '2 solid #e2e8f0',
-    },
-    logoSection: {
-        width: '40%',
-    },
-    logo: {
-        width: 120,
-        height: 120,
-        objectFit: 'contain',
-    },
-    shopDetailsSection: {
-        width: '55%',
-        textAlign: 'right',
-    },
-    shopName: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1e293b',
-        marginBottom: 8,
-    },
-    shopDetail: {
-        fontSize: 9,
-        color: '#64748b',
-        marginBottom: 3,
-    },
-    // Invoice Title
-    invoiceTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#0f172a',
-        marginBottom: 20,
-        textTransform: 'uppercase',
-        letterSpacing: 1,
-    },
-    // Invoice Info Bar
-    infoBar: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 25,
-        padding: 15,
-        backgroundColor: '#f8fafc',
-        borderRadius: 4,
-    },
-    infoItem: {
-        flexDirection: 'column',
-    },
-    infoLabel: {
-        fontSize: 8,
-        color: '#64748b',
-        marginBottom: 4,
-        textTransform: 'uppercase',
-    },
-    infoValue: {
-        fontSize: 11,
-        color: '#1e293b',
-        fontWeight: 'bold',
-    },
-    // Client Section
-    clientSection: {
-        marginBottom: 25,
-        padding: 15,
-        backgroundColor: '#f1f5f9',
-        borderLeft: '4 solid #3b82f6',
-        borderRadius: 2,
-    },
-    sectionTitle: {
-        fontSize: 11,
-        fontWeight: 'bold',
-        color: '#1e293b',
-        marginBottom: 8,
-        textTransform: 'uppercase',
-    },
-    clientDetail: {
-        fontSize: 10,
-        color: '#475569',
-        marginBottom: 3,
-    },
-    // Table
-    table: {
-        marginBottom: 25,
-    },
-    tableHeader: {
-        flexDirection: 'row',
-        backgroundColor: '#1e293b',
-        padding: 10,
-        fontWeight: 'bold',
-        color: '#ffffff',
-    },
-    tableRow: {
-        flexDirection: 'row',
-        padding: 10,
-        borderBottom: '1 solid #e2e8f0',
-    },
-    tableRowAlt: {
-        backgroundColor: '#f8fafc',
-    },
-    colDescription: {
-        width: '50%',
-    },
-    colQty: {
-        width: '15%',
-        textAlign: 'center',
-    },
-    colPrice: {
-        width: '17.5%',
-        textAlign: 'right',
-    },
-    colTotal: {
-        width: '17.5%',
-        textAlign: 'right',
-    },
-    // Totals Section
-    totalsSection: {
-        marginLeft: 'auto',
-        width: '50%',
-        marginBottom: 30,
-    },
-    totalRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        padding: 8,
-        borderBottom: '1 solid #e2e8f0',
-    },
-    totalLabel: {
-        fontSize: 10,
-        color: '#64748b',
-    },
-    totalValue: {
-        fontSize: 10,
-        color: '#1e293b',
-        fontWeight: 'bold',
-    },
-    grandTotalRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        padding: 12,
-        backgroundColor: '#1e293b',
-        marginTop: 5,
-    },
-    grandTotalLabel: {
-        fontSize: 12,
-        color: '#ffffff',
-        fontWeight: 'bold',
-    },
-    grandTotalValue: {
-        fontSize: 14,
-        color: '#ffffff',
-        fontWeight: 'bold',
-    },
-    // Footer
-    footer: {
-        marginTop: 'auto',
-        paddingTop: 20,
-        borderTop: '2 solid #e2e8f0',
-    },
-    footerText: {
-        fontSize: 8,
-        color: '#64748b',
-        textAlign: 'center',
-        marginBottom: 3,
-    },
-    footerBold: {
-        fontWeight: 'bold',
-        color: '#1e293b',
-    },
-    // Notes
-    notesSection: {
-        marginBottom: 20,
-        padding: 12,
-        backgroundColor: '#fef3c7',
-        borderRadius: 4,
-    },
-    notesTitle: {
-        fontSize: 9,
-        fontWeight: 'bold',
-        color: '#92400e',
-        marginBottom: 5,
-    },
-    notesText: {
-        fontSize: 8,
-        color: '#78350f',
-        lineHeight: 1.4,
-    },
-});
+import { pdfStyles } from '@/lib/pdf-styles';
+import { formatCurrencyToWords } from '@/lib/format-number-to-words';
+
+// Create styles - Removed (using shared styles)
+
 
 export const InvoicePDF: React.FC<InvoicePDFProps> = ({ sale, client, shopSettings }) => {
-    // Calculate items (this is simplified - adjust based on your sale structure)
+    // Normalization
     const items = sale.items || [];
-    const subtotal = sale.totalNet || 0;
-    const discount = 0; // Discount can be added later
-    const tva = 0; // Add TVA calculation if needed
-    const total = sale.totalNet || subtotal;
+    const totalHT = sale.totalHT || (sale.totalNet / 1.2) || 0; // Fallback if totalHT missing
+    const totalTTC = sale.totalNet || 0;
+    const tva = totalTTC - totalHT;
+    const resteAPayer = sale.resteAPayer || 0;
+
+    // Dates
+    const formattedDate = sale.date ? new Date(sale.date).toLocaleDateString('fr-FR') : 'N/A';
+    const formattedTTC = Number(totalTTC).toFixed(2);
+    const amountInWords = formatCurrencyToWords(totalTTC);
 
     return (
         <Document>
-            <Page size="A4" style={styles.page}>
-                {/* Header with Logo and Shop Details */}
-                <View style={styles.header}>
-                    <View style={styles.logoSection}>
-                        {shopSettings.logoUrl ? (
-                            <PDFImage src={shopSettings.logoUrl} style={styles.logo} />
-                        ) : (
-                            <Text style={styles.shopName}>{shopSettings.shopName}</Text>
+            <Page size="A4" style={pdfStyles.page}>
+                
+                {/* Header */}
+                <View style={pdfStyles.headerContainer}>
+                    {/* Left: Logo & Shop Info */}
+                    <View style={pdfStyles.headerLeft}>
+                        {shopSettings.logoUrl && (
+                            <View style={pdfStyles.logoContainer}>
+                                <PDFImage src={shopSettings.logoUrl} style={pdfStyles.logo} />
+                            </View>
                         )}
+                        <View style={pdfStyles.shopInfo}>
+                            <Text style={pdfStyles.shopName}>{shopSettings.shopName}</Text>
+                            <Text style={pdfStyles.shopDetail}>{shopSettings.address || 'Adresse non renseignée'}</Text>
+                            {shopSettings.phone && <Text style={pdfStyles.shopDetail}>Tél: {shopSettings.phone}</Text>}
+                            <View style={pdfStyles.legalRow}>
+                                {shopSettings.ice && <Text style={pdfStyles.legalText}>ICE: {shopSettings.ice}</Text>}
+                                {shopSettings.rib && <Text style={pdfStyles.legalText}>RIB: {shopSettings.rib}</Text>}
+                            </View>
+                        </View>
                     </View>
-                    <View style={styles.shopDetailsSection}>
-                        <Text style={styles.shopName}>{shopSettings.shopName}</Text>
-                        {shopSettings.address && (
-                            <Text style={styles.shopDetail}>{shopSettings.address}</Text>
-                        )}
-                        {shopSettings.phone && (
-                            <Text style={styles.shopDetail}>Tél: {shopSettings.phone}</Text>
-                        )}
-                        {shopSettings.ice && (
-                            <Text style={styles.shopDetail}>ICE: {shopSettings.ice}</Text>
-                        )}
-                    </View>
-                </View>
 
-                {/* Invoice Title */}
-                <Text style={styles.invoiceTitle}>Facture</Text>
-
-                {/* Invoice Info Bar */}
-                <View style={styles.infoBar}>
-                    <View style={styles.infoItem}>
-                        <Text style={styles.infoLabel}>Numéro de Facture</Text>
-                        <Text style={styles.infoValue}>#{sale.id?.substring(0, 8).toUpperCase()}</Text>
-                    </View>
-                    <View style={styles.infoItem}>
-                        <Text style={styles.infoLabel}>Date</Text>
-                        <Text style={styles.infoValue}>
-                            {sale.date ? new Date(sale.date).toLocaleDateString('fr-FR') : 'N/A'}
-                        </Text>
-                    </View>
-                    <View style={styles.infoItem}>
-                        <Text style={styles.infoLabel}>Statut</Text>
-                        <Text style={styles.infoValue}>
-                            {sale.resteAPayer === 0 ? 'Payée' : 'En attente'}
+                    {/* Right: Doc Meta */}
+                    <View style={pdfStyles.headerRight}>
+                        <View style={pdfStyles.docBadge}>
+                            <Text style={pdfStyles.docTitle}>FACTURE</Text>
+                        </View>
+                        <Text style={pdfStyles.docMetaItem}>N° {String(sale.id || '').substring(0, 8).toUpperCase()}</Text>
+                        <Text style={pdfStyles.docMetaItem}>Date: <Text style={pdfStyles.docMetaValue}>{formattedDate}</Text></Text>
+                        <Text style={pdfStyles.docMetaItem}>
+                            Statut: <Text style={pdfStyles.docMetaValue}>{sale.resteAPayer === 0 ? 'PAYÉE' : 'EN ATTENTE'}</Text>
                         </Text>
                     </View>
                 </View>
 
-                {/* Client Information */}
-                <View style={styles.clientSection}>
-                    <Text style={styles.sectionTitle}>Informations Client</Text>
-                    <Text style={styles.clientDetail}>
-                        {client.prenom} {client.nom}
-                    </Text>
-                    {client.telephone1 && (
-                        <Text style={styles.clientDetail}>Tél: {client.telephone1}</Text>
-                    )}
-                    {client.ville && (
-                        <Text style={styles.clientDetail}>Ville: {client.ville}</Text>
-                    )}
-                    {client.email && (
-                        <Text style={styles.clientDetail}>Email: {client.email}</Text>
-                    )}
+                {/* Client Section */}
+                <View style={pdfStyles.clientContainer}>
+                    <View style={pdfStyles.clientBox}>
+                        <Text style={pdfStyles.clientLabel}>Client</Text>
+                        <Text style={pdfStyles.clientName}>{client.prenom} {client.nom}</Text>
+                        <Text style={pdfStyles.clientDetail}>{client.telephone1 || 'Tél non renseigné'}</Text>
+                        {client.ville && <Text style={pdfStyles.clientDetail}>{client.ville}</Text>}
+                        {client.email && <Text style={pdfStyles.clientDetail}>{client.email}</Text>}
+                    </View>
                 </View>
 
                 {/* Items Table */}
-                <View style={styles.table}>
-                    {/* Table Header */}
-                    <View style={styles.tableHeader}>
-                        <Text style={styles.colDescription}>Description</Text>
-                        <Text style={styles.colQty}>Qté</Text>
-                        <Text style={styles.colPrice}>Prix Unit.</Text>
-                        <Text style={styles.colTotal}>Total</Text>
+                <View style={pdfStyles.table}>
+                    <View style={pdfStyles.tableHeader}>
+                        <Text style={[pdfStyles.th, pdfStyles.colDesc]}>Désignation</Text>
+                        <Text style={[pdfStyles.th, pdfStyles.colBrand]}>Marque</Text>
+                        <Text style={[pdfStyles.th, pdfStyles.colModel]}>Modèle</Text>
+                        <Text style={[pdfStyles.th, pdfStyles.colQty]}>Qté</Text>
+                        <Text style={[pdfStyles.th, pdfStyles.colPrice]}>P.U. HT</Text>
+                        <Text style={[pdfStyles.th, { width: '13%', textAlign: 'right' }]}>Total HT</Text>
                     </View>
 
-                    {/* Table Rows - Simplified, adjust based on your data structure */}
-                    <View style={[styles.tableRow, styles.tableRowAlt]}>
-                        <Text style={styles.colDescription}>
-                            Produits
-                        </Text>
-                        <Text style={styles.colQty}>1</Text>
-                        <Text style={styles.colPrice}>{subtotal.toFixed(2)} MAD</Text>
-                        <Text style={styles.colTotal}>{subtotal.toFixed(2)} MAD</Text>
-                    </View>
+                    {items.map((item, index) => {
+                         // Adapters for different item structures if needed
+                         const name = item.nomProduit || item.productName || 'Article';
+                         // Cast to any to access potential extra fields not in SaleItem strict type
+                         const itemAny = item as any;
+                         const marque = itemAny.marque || itemAny.brand || '-';
+                         const modele = itemAny.modele || itemAny.model || '-';
+                         
+                         const price = Number(item.prixVente || item.unitPrice || item.price || 0);
+                         const qty = Number(item.quantity || 0);
+                         const total = price * qty;
+                         
+                         return (
+                            <View key={index} style={[pdfStyles.tableRow, index % 2 !== 0 ? pdfStyles.tableRowAlt : {}]}>
+                                <Text style={[pdfStyles.clientDetail, pdfStyles.colDesc]}>{name}</Text>
+                                <Text style={[pdfStyles.clientDetail, pdfStyles.colBrand]}>{marque}</Text>
+                                <Text style={[pdfStyles.clientDetail, pdfStyles.colModel]}>{modele}</Text>
+                                <Text style={[pdfStyles.clientDetail, pdfStyles.colQty]}>{qty}</Text>
+                                <Text style={[pdfStyles.clientDetail, pdfStyles.colPrice]}>{price.toFixed(2)}</Text>
+                                <Text style={[pdfStyles.docMetaValue, { width: '13%', textAlign: 'right', fontSize: 9 }]}>{total.toFixed(2)}</Text>
+                            </View>
+                        );
+                    })}
                 </View>
 
                 {/* Totals Section */}
-                <View style={styles.totalsSection}>
-                    <View style={styles.totalRow}>
-                        <Text style={styles.totalLabel}>Sous-total HT</Text>
-                        <Text style={styles.totalValue}>{subtotal.toFixed(2)} MAD</Text>
-                    </View>
-                    {discount > 0 && (
-                        <View style={styles.totalRow}>
-                            <Text style={styles.totalLabel}>Remise</Text>
-                            <Text style={styles.totalValue}>-{discount.toFixed(2)} MAD</Text>
+                <View style={pdfStyles.totalsContainer}>
+                    <View style={pdfStyles.totalsBox}>
+                        <View style={pdfStyles.totalRow}>
+                            <Text style={pdfStyles.totalLabel}>Total HT</Text>
+                            <Text style={pdfStyles.totalValue}>{Number(totalHT).toFixed(2)} DH</Text>
                         </View>
-                    )}
-                    <View style={styles.totalRow}>
-                        <Text style={styles.totalLabel}>TVA (0%)</Text>
-                        <Text style={styles.totalValue}>{tva.toFixed(2)} MAD</Text>
-                    </View>
-                    <View style={styles.grandTotalRow}>
-                        <Text style={styles.grandTotalLabel}>TOTAL TTC</Text>
-                        <Text style={styles.grandTotalValue}>{total.toFixed(2)} MAD</Text>
+                        <View style={pdfStyles.totalRow}>
+                            <Text style={pdfStyles.totalLabel}>TVA (20%)</Text>
+                            <Text style={pdfStyles.totalValue}>{Number(tva).toFixed(2)} DH</Text>
+                        </View>
+
+                        <View style={pdfStyles.totalTTCBox}>
+                            <Text style={pdfStyles.totalTTCLabel}>Total TTC</Text>
+                            <Text style={pdfStyles.totalTTCValue}>{formattedTTC} <Text style={{ fontSize: 9, fontWeight: 'normal' }}>DH</Text></Text>
+                        </View>
+
+                        {resteAPayer > 0 && (
+                            <View style={[pdfStyles.totalRow, { marginTop: 5 }]}>
+                                <Text style={[pdfStyles.totalLabel, { color: '#dc2626' }]}>Reste à Payer</Text>
+                                <Text style={[pdfStyles.totalValue, { color: '#dc2626' }]}>{Number(resteAPayer).toFixed(2)} DH</Text>
+                            </View>
+                        )}
                     </View>
                 </View>
 
-                {/* Payment Info */}
-                {sale.resteAPayer > 0 && (
-                    <View style={styles.notesSection}>
-                        <Text style={styles.notesTitle}>Information de Paiement</Text>
-                        <Text style={styles.notesText}>
-                            Montant Payé: {(sale.totalPaye || 0).toFixed(2)} MAD
-                        </Text>
-                        <Text style={styles.notesText}>
-                            Reste à Payer: {sale.resteAPayer.toFixed(2)} MAD
-                        </Text>
-                    </View>
-                )}
+                {/* Amount in Words */}
+                 <View style={pdfStyles.wordsContainer}>
+                    <Text style={pdfStyles.wordsLabel}>Arrêté la présente facture à la somme de :</Text>
+                    <Text style={pdfStyles.wordsValue}>{formattedTTC} DH ({amountInWords})</Text>
+                </View>
 
-                {/* Footer */}
-                <View style={styles.footer}>
-                    <Text style={styles.footerText}>
-                        <Text style={styles.footerBold}>Merci pour votre confiance!</Text>
-                    </Text>
-                    {shopSettings.rib && (
-                        <Text style={styles.footerText}>RIB: {shopSettings.rib}</Text>
-                    )}
-                    {shopSettings.ice && (
-                        <Text style={styles.footerText}>ICE: {shopSettings.ice}</Text>
-                    )}
-                    <Text style={styles.footerText}>
-                        Document généré le {new Date().toLocaleDateString('fr-FR')}
+                {/* Payment Methods */}
+                <View style={pdfStyles.paymentMethodsContainer}>
+                    <Text style={pdfStyles.paymentMethodsLabel}>Modes de paiement acceptés</Text>
+                    <Text style={pdfStyles.paymentMethodsList}>Espèces • Chèque • Virement bancaire</Text>
+                </View>
+
+                {/* Signatures */}
+                <View style={pdfStyles.signaturesContainer}>
+                    <View style={pdfStyles.signatureBox}>
+                        <Text style={pdfStyles.signatureLabel}>Signature du Client</Text>
+                        <Text style={pdfStyles.signatureSubLabel}>Lu et approuvé</Text>
+                    </View>
+                    <View style={pdfStyles.signatureBox}>
+                        <Text style={pdfStyles.signatureLabel}>Cachet et Signature</Text>
+                        <Text style={pdfStyles.signatureSubLabel}>{shopSettings.shopName || 'OptiManager'}</Text>
+                    </View>
+                </View>
+
+                 {/* Footer / Conditions - Absolute Position */}
+                 <View style={pdfStyles.footerSection}>
+                    <View style={pdfStyles.footerRow}>
+                        <View style={pdfStyles.footerCol}>
+                            <Text style={pdfStyles.footerLabel}>Conditions</Text>
+                            <Text style={pdfStyles.footerText}>Paiement comptant à réception.</Text>
+                            <Text style={pdfStyles.footerText}>Marchandise livrée, non reprise, non échangée.</Text>
+                        </View>
+                        {shopSettings.rib && (
+                             <View style={[pdfStyles.footerCol, { alignItems: 'flex-end' }]}>
+                                <Text style={pdfStyles.footerLabel}>Coordonnées Bancaires</Text>
+                                <Text style={[pdfStyles.footerText, { fontFamily: 'Courier' }]}>{shopSettings.rib}</Text>
+                            </View>
+                        )}
+                    </View>
+                    <Text style={[pdfStyles.footerText, { textAlign: 'center', marginTop: 10, fontStyle: 'italic' }]}>
+                        "Merci de votre confiance"
                     </Text>
                 </View>
+                
+                <Text style={pdfStyles.pagination} render={({ pageNumber, totalPages }) => (
+                    `${pageNumber} / ${totalPages}`
+                )} fixed />
+
             </Page>
         </Document>
     );

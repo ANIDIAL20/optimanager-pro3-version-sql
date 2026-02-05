@@ -10,6 +10,10 @@ import bcrypt from "bcryptjs";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
+  pages: {
+    signIn: "/login",
+    error: "/login",
+  },
   // IMPORTANT: We use JWT sessions, not database sessions
   // DrizzleAdapter is commented out because it forces database sessions
   // which conflicts with our JWT strategy in authConfig
@@ -23,11 +27,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     strategy: "jwt", // Explicitly enforce JWT sessions
   },
   providers: [
-    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+    ...(process.env.AUTH_GOOGLE_ID || process.env.GOOGLE_CLIENT_ID
       ? [
           Google({
-            clientId: process.env.GOOGLE_CLIENT_ID,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+            clientId: process.env.AUTH_GOOGLE_ID || process.env.GOOGLE_CLIENT_ID,
+            clientSecret: process.env.AUTH_GOOGLE_SECRET || process.env.GOOGLE_CLIENT_SECRET,
           }),
         ]
       : []),
@@ -120,26 +124,96 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
+  debug: true, // 🔍 Enable extensive debugging
   callbacks: {
     ...authConfig.callbacks,
-    async session({ session, token }) {
-      console.log('📋 Session Callback:', { 
-        hasSessionUser: !!session.user, 
-        tokenSub: token.sub,
-        tokenRole: token.role 
-      });
+    async jwt({ token, user, trigger, session }) {
+      console.log("🎫 JWT Callback Triggered", { email: token.email, sub: token.sub });
 
+      // 1. Initial Sign In (Google or Credentials)
+      if (user) {
+        token.id = user.id; // Initial, might be Google ID or DB ID
+        token.email = user.email;
+      }
+
+      // 2. On every JWT check (navigation), sync with DB to get real Role and ID
+      if (token.email) {
+        let attempts = 0;
+        const maxAttempts = 3;
+        
+        while (attempts < maxAttempts) {
+          try {
+            // Fetch fresh user data from DB
+            const [dbUser] = await db
+              .select({
+                id: users.id,
+                role: users.role,
+                isActive: users.isActive,
+              })
+              .from(users)
+              .where(eq(users.email, token.email as string))
+              .limit(1);
+
+            if (dbUser) {
+              token.sub = dbUser.id; // Use DB ID as the subject
+              token.role = dbUser.role; // Sync Role (ADMIN/USER)
+              token.isActive = dbUser.isActive;
+              console.log("✅ JWT Synced with DB:", { id: dbUser.id, role: dbUser.role });
+            } else {
+               console.log("⚠️ User not found in DB during JWT sync:", token.email);
+            }
+            
+            // Success - break loop
+            break; 
+            
+          } catch (error: any) {
+            attempts++;
+            console.error(`❌ Failed to sync user in JWT (Attempt ${attempts}/${maxAttempts})`);
+            console.error("Error Details:", {
+              message: error.message,
+              code: error.code,
+              hint: error.hint,
+              cause: error.cause,
+              stack: error.stack
+            });
+            
+            // Try fallback raw query on failure
+            try {
+              if (attempts === 1) { // Only try once
+                const { sql } = await import("drizzle-orm");
+                console.log("🔄 Attempting RAW SQL fallback...");
+                const rawResult = await db.execute(sql`SELECT * FROM "users" WHERE email = ${token.email} LIMIT 1`);
+                console.log("✅ RAW SQL SUCCESS:", rawResult.rows[0]);
+              }
+            } catch (rawErr) {
+              console.error("❌ RAW SQL ALSO FAILED:", rawErr);
+            }
+
+            if (attempts === maxAttempts) {
+              console.error("🚨 Final JWT Sync Failure - Session may be stale.");
+            } else {
+              // Wait 500ms before retry
+              await new Promise(r => setTimeout(r, 500));
+            }
+          }
+        }
+      }
+      
+      return token;
+    },
+    async session({ session, token }) {
+      console.log("📋 Session Callback Triggered", { sub: token.sub, role: token.role });
       if (token.sub && session.user) {
         session.user.id = token.sub;
-        session.user.role = token.role as string;
-        
-        console.log('✅ Session populated:', {
-          id: session.user.id,
-          email: session.user.email,
-          role: session.user.role,
-        });
+        session.user.email = token.email as string;
+        session.user.role = token.role as string; // Will now be 'ADMIN' from DB
       }
       return session;
     },
   },
 });
+
+console.log("🔒 Auth Configuration Loaded");
+console.log("- AUTH_SECRET Present:", !!process.env.AUTH_SECRET);
+console.log("- NODE_ENV:", process.env.NODE_ENV);
+console.log("- GOOGLE CLIENT ID Present:", !!(process.env.AUTH_GOOGLE_ID || process.env.GOOGLE_CLIENT_ID));

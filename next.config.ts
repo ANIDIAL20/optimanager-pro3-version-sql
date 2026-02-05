@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
       bodySizeLimit: '10mb', // Default is 1MB - images are typically 3-5MB
+      allowedOrigins: [
+        "localhost:3000",
+        "*.vercel.app", 
+      ],
     },
   },
 

@@ -34,6 +34,7 @@ interface InvoiceActionsProps {
     shopSettings: ShopSettings;
 }
 
+// Force HMR Update
 export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsProps) {
     const router = useRouter();
     const [isGenerating, setIsGenerating] = React.useState(false);
@@ -174,11 +175,12 @@ export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsPro
                             <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                 Génération...
+                                Facture
                             </>
                         ) : (
                             <>
                                 <FileText className="mr-2 h-4 w-4" />
-                                Facture
+                                Actions Facture
                             </>
                         )}
                     </Button>

@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Upload, Building2, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Upload, Building2, Image as ImageIcon, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import { getShopProfile, upsertShopProfile } from '@/app/actions/shop-actions';
 
@@ -227,33 +227,76 @@ export function ShopProfileForm() {
                             </div>
 
                             {/* Upload Button */}
-                            <div className="flex-1">
-                                <input
-                                    ref={fileInputRef}
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={handleLogoUpload}
-                                    className="hidden"
-                                />
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => fileInputRef.current?.click()}
-                                    disabled={isUploading}
-                                >
-                                    {isUploading ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            Téléchargement...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Upload className="mr-2 h-4 w-4" />
-                                            Télécharger un logo
-                                        </>
+
+
+                            {/* Upload/Remove Buttons */}
+                            <div className="flex-1 space-y-3">
+                                <div className="flex gap-2">
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleLogoUpload}
+                                        className="hidden"
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={isUploading}
+                                    >
+                                        {isUploading ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                Téléchargement...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Upload className="mr-2 h-4 w-4" />
+                                                {logoPreview ? 'Modifier le logo' : 'Télécharger un logo'}
+                                            </>
+                                        )}
+                                    </Button>
+
+                                    {logoPreview && (
+                                        <Button
+                                            type="button"
+                                            variant="destructive"
+                                            onClick={async () => {
+                                                if (confirm("Êtes-vous sûr de vouloir supprimer le logo ?")) {
+                                                    try {
+                                                        const currentValues = form.getValues();
+                                                        // Update server
+                                                        await upsertShopProfile({
+                                                            ...currentValues,
+                                                            logoUrl: "", // Clear logo
+                                                        });
+                                                        // Update local state
+                                                        form.setValue('logoUrl', "");
+                                                        setLogoPreview(null);
+                                                        if (fileInputRef.current) fileInputRef.current.value = "";
+                                                        
+                                                        toast({
+                                                            title: "Logo supprimé",
+                                                            description: "Le logo de la boutique a été retiré.",
+                                                        });
+                                                    } catch (error) {
+                                                        toast({
+                                                            variant: "destructive",
+                                                            title: "Erreur",
+                                                            description: "Impossible de supprimer le logo.",
+                                                        });
+                                                    }
+                                                }
+                                            }}
+                                            disabled={isUploading}
+                                        >
+                                            <Trash2 className="mr-2 h-4 w-4" />
+                                            Supprimer
+                                        </Button>
                                     )}
-                                </Button>
-                                <p className="text-sm text-slate-500 mt-2">
+                                </div>
+                                <p className="text-sm text-slate-500">
                                     PNG, JPG jusqu'à 2MB. Format recommandé: 500x500px
                                 </p>
                             </div>

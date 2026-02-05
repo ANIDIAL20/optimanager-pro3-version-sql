@@ -41,8 +41,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const pathname = usePathname();
     const { data: session } = useSession();
     const user = session?.user;
-    const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-    const isAdmin = user?.email === ADMIN_EMAIL;
+    // const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL; // Deprecated
+    // const isAdmin = user?.email === ADMIN_EMAIL; // Deprecated
     const [reminderCount, setReminderCount] = React.useState(0);
 
     React.useEffect(() => {
@@ -196,7 +196,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <SidebarMenu>
                     <SidebarMenuItem>
                         <SidebarMenuButton asChild isActive={pathname === '/dashboard/rappels'} tooltip="Rappels">
-                            <Link href="/dashboard/rappels" className="relative">
+                            <Link href="/dashboard/rappels">
                                 <Bell className="size-5" strokeWidth={1.5} />
                                 <span>Rappels</span>
                                 {reminderCount > 0 && (
@@ -217,18 +217,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         </SidebarMenuButton>
                     </SidebarMenuItem>
 
-                    {/* Admin Link (Hidden for clients) */}
-                    {isAdmin && (
+                    {/* Admin Link (Role Based) */}
+                    {user?.role === 'ADMIN' && (
                         <SidebarMenuItem>
                             <SidebarMenuButton
                                 asChild
-                                isActive={pathname === '/admin'}
-                                tooltip="Super Admin"
+                                isActive={pathname?.startsWith('/dashboard/admin')}
+                                tooltip="Admin Panel"
                                 className="mt-auto"
                             >
-                                <Link href="/admin">
+                                <Link href="/dashboard/admin">
                                     <ShieldCheck className="size-5" strokeWidth={1.5} />
-                                    <span>Super Admin</span>
+                                    <span>Admin Panel</span>
                                 </Link>
                             </SidebarMenuButton>
                         </SidebarMenuItem>

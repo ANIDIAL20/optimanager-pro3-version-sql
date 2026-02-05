@@ -12,17 +12,8 @@ async function main() {
   `);
 
   console.log('Columns found in clients table:');
-  const columns = result.rows.map((row: any) => row.column_name);
-  console.log(columns.join(', '));
-
-  const requiredColumns = ['phone_2', 'prenom', 'nom', 'gender', 'cin', 'date_of_birth', 'mutuelle'];
-  const missing = requiredColumns.filter(col => !columns.includes(col));
-
-  if (missing.length === 0) {
-    console.log('✅ ALL new columns (phone_2, prenom, nom, gender, cin, date_of_birth, mutuelle) exist!');
-  } else {
-    console.error('❌ MISSING columns:', missing.join(', '));
-  }
+  const columns = result.rows.map((row: any) => `${row.column_name} (${row.data_type})`);
+  console.log(JSON.stringify(columns, null, 2));
 
   process.exit(0);
 }
