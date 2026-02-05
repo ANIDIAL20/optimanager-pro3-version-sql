@@ -6,7 +6,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { CalendarIcon, Loader2, Package } from 'lucide-react';
+import { CalendarIcon, Package } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -276,7 +277,7 @@ export function ReceiveLensModal({ open, onOpenChange, saleId }: ReceiveLensModa
                                 Annuler
                             </Button>
                             <Button type="submit" disabled={isSubmitting}>
-                                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                {isSubmitting && <BrandLoader size="xs" className="mr-2 inline-flex" />}
                                 Confirmer Réception
                             </Button>
                         </DialogFooter>

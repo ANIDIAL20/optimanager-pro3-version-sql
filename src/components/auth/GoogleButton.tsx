@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Button } from '@/components/ui/button';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import { toast } from "sonner";
 
 export default function GoogleButton() {
@@ -37,7 +38,7 @@ export default function GoogleButton() {
             className="flex w-full items-center justify-center gap-3 rounded-xl border border-white/10 bg-white px-4 py-3 text-sm font-semibold text-black transition-all hover:bg-gray-100 disabled:opacity-70"
         >
             {isLoading ? (
-                <Loader2 className="animate-spin text-gray-500" size={20} />
+                <BrandLoader size="xs" className="mr-2 inline-flex" />
             ) : (
                 <>
                     {/* Google G Logo SVG */}

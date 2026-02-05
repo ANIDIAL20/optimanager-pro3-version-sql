@@ -1,3 +1,5 @@
+import { auth } from '@/auth';
+import { getClientUsageStats } from '@/app/actions/adminActions';
 import { getProducts, getCategories } from '@/features/products/actions';
 import { ProductsClientView } from './_components/products-client-view';
 import { type Product } from '@/components/dashboard/produits/columns';
@@ -23,10 +25,15 @@ export default async function ProductsPage() {
     marqueId: ''
   }));
 
+  // Fetch usage stats
+  const session = await auth();
+  const usageStats = session?.user?.id ? await getClientUsageStats(session.user.id) : { products: 0, maxProducts: 50 };
+
   return (
     <ProductsClientView 
         initialProducts={mappedProducts} 
         initialCategories={categoriesData} 
+        usageStats={usageStats}
     />
   );
 }

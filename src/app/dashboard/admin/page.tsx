@@ -31,9 +31,12 @@ export default async function AdminDashboardPage() {
         displayName: u.name || 'Shop Owner',
         phoneNumber: '',
         status: u.isActive ? 'active' : 'suspended',
-        plan: 'monthly', // Default assumption
         subscriptionEndDate: new Date(Date.now() + 30*24*60*60*1000).toISOString(),
-        revenue: 299, // Assumption
+        quotas: {
+            maxProducts: u.maxProducts,
+            maxClients: u.maxClients,
+            maxSuppliers: u.maxSuppliers
+        }
     }));
 
     // Mock Chart Data

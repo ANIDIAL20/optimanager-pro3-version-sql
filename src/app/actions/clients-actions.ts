@@ -10,6 +10,7 @@ import { clients, prescriptions, sales, lensOrders } from '@/db/schema';
 import { eq, and, or, like, desc } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
+import { getClientUsageStats } from '@/app/actions/adminActions';
 
 // ========================================
 // TYPE DEFINITIONS
@@ -189,6 +190,12 @@ export const createClient = secureAction(async (userId, user, data: Omit<Client,
                 success: false,
                 error: 'Le nom et le téléphone sont requis'
             };
+        }
+
+        // 🛡️ CHECK QUOTAS
+        const usage = await getClientUsageStats(userId);
+        if (usage.clients.count >= usage.clients.limit) {
+             return { success: false, error: `Vous avez atteint la limite de clients pour votre plan (${usage.clients.limit}). Veuillez mettre à niveau.` };
         }
 
         const clientData = {

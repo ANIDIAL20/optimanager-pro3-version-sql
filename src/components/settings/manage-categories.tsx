@@ -3,7 +3,8 @@
 import * as React from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { PlusCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ManageItem } from './manage-item';
@@ -43,7 +44,7 @@ export function ManageCategories() {
         <AlertDescription>
           Impossible de charger les catégories. {error}
           <Button variant="outline" size="sm" onClick={fetchCategories} className="mt-2">
-            <RefreshCw className="h-4 w-4 mr-2" />
+            {isSeeding ? <BrandLoader size="xs" className="mr-2 inline-flex" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Réessayer
           </Button>
         </AlertDescription>

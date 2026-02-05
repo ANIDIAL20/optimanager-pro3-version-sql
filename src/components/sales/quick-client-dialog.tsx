@@ -5,7 +5,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { UserPlus, Loader2 } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import { createClient } from '@/app/actions/clients-actions';
 import { Client } from '@/lib/types';
 // import { useFirebase } from '@/firebase'; // No longer needed - secureAction handles auth
@@ -186,7 +187,7 @@ export function QuickClientDialog({ onClientCreated }: QuickClientDialogProps) {
                     <DialogFooter className="mt-6">
                         <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Annuler</Button>
                         <Button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto">
-                            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {isLoading && <BrandLoader size="xs" className="mr-2 inline-flex" />}
                             Créer Client Immédiatement
                         </Button>
                     </DialogFooter>

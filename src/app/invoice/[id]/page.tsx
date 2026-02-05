@@ -5,11 +5,14 @@ export function generateStaticParams() {
   return [{ id: "static" }];
 }
 
-export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+import { BrandLoader } from '@/components/ui/loader-brand';
+
+export default async function InvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params;
+
   return (
-    <Suspense fallback={<div>Loading invoice...</div>}>
-      <InvoiceView params={resolvedParams} />
+    <Suspense fallback={<BrandLoader size="lg" className="mx-auto my-12" />}>
+      <InvoiceView />
     </Suspense>
   );
 }

@@ -6,7 +6,6 @@ import { motion } from 'framer-motion';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import {
-  Loader2,
   Mail,
   Lock,
   LayoutDashboard,
@@ -18,6 +17,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/ui/submit-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import GoogleButton from '@/components/auth/GoogleButton';
@@ -151,14 +151,13 @@ export function LoginClient() {
               </div>
             </div>
 
-            <Button
+            <SubmitButton
               type="submit"
-              disabled={loading}
+              isLoading={loading}
               className="w-full h-12 bg-gradient-to-r from-blue-600 via-blue-500 to-teal-500 hover:from-blue-700 hover:via-blue-600 hover:to-teal-600 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all duration-300"
-            >
-              {loading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
-              {loading ? 'Connexion en cours...' : 'Se connecter'}
-            </Button>
+              label="Se connecter"
+              loadingLabel="Connexion en cours..."
+            />
           </form>
 
           {/* Divider */}

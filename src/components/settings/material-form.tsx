@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import type { Material } from '@/lib/types';
-import { Loader2 } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import {
   Select,
   SelectContent,
@@ -119,7 +119,7 @@ export function MaterialForm({ material, onSuccess }: MaterialFormProps) {
           )}
         />
         <Button type="submit" disabled={isSubmitting} className="w-full">
-          {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          {isSubmitting ? <BrandLoader size="xs" className="mr-2 inline-flex" /> : null}
           {material ? 'Enregistrer les modifications' : 'Ajouter la matière'}
         </Button>
       </form>

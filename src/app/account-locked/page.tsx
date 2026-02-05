@@ -1,5 +1,6 @@
-import { Suspense } from "react";
-import { ShieldAlert } from "lucide-react";
+import { BrandLoader } from '@/components/ui/loader-brand';
+import { Suspense } from 'react';
+import LockedContent from './locked-content';
 import Link from "next/link";
 import { headers } from "next/headers";
 
@@ -13,7 +14,7 @@ export default function AccountLockedPage({
   searchParams: { minutes?: string };
 }) {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={<BrandLoader size="lg" className="mx-auto my-12" />}>
       <LockedContent minutes={searchParams.minutes} />
     </Suspense>
   );

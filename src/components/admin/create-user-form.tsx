@@ -13,7 +13,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { UserPlus, Loader2 } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import { toast } from 'sonner';
 
 /**
@@ -144,7 +145,7 @@ export function CreateUserForm() {
           >
             {isLoading ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {isLoading && <BrandLoader size="xs" className="mr-2 inline-flex" />}
                 Création en cours...
               </>
             ) : (

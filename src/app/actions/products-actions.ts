@@ -12,6 +12,7 @@ import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { getClientUsageStats } from './adminActions';
 
 // ========================================
 // TYPE DEFINITIONS
@@ -184,6 +185,12 @@ export const createProduct = secureAction(async (userId, user, data: ProductInpu
         // Validation: Allow 0 as a valid price
         if (!data.nomProduit || data.prixVente === undefined || data.prixVente === null) {
             return { success: false, error: 'Nom et prix de vente requis (Données incomplètes)' };
+        }
+
+        // 🛡️ CHECK QUOTAS
+        const usage = await getClientUsageStats(userId);
+        if (usage.products.count >= usage.products.limit) {
+             return { success: false, error: `Vous avez atteint la limite de produits pour votre plan (${usage.products.limit}). Veuillez mettre à niveau votre abonnement.` };
         }
 
         // ⚡ Raw SQL Insert for stability

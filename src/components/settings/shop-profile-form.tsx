@@ -10,7 +10,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Upload, Building2, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { Upload, Building2, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import Image from 'next/image';
 import { getShopProfile, upsertShopProfile } from '@/app/actions/shop-actions';
 
@@ -187,7 +188,7 @@ export function ShopProfileForm() {
     if (isLoading) {
         return (
             <div className="flex items-center justify-center p-12">
-                <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                <BrandLoader size="md" className="mx-auto text-slate-400" />
             </div>
         );
     }
@@ -247,7 +248,7 @@ export function ShopProfileForm() {
                                     >
                                         {isUploading ? (
                                             <>
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                <BrandLoader size="xs" className="mr-2 inline-flex" />
                                                 Téléchargement...
                                             </>
                                         ) : (
@@ -396,7 +397,7 @@ export function ShopProfileForm() {
                 <div className="flex justify-end">
                     <Button type="submit" size="lg" disabled={form.formState.isSubmitting}>
                         {form.formState.isSubmitting && (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            <BrandLoader size="xs" className="mr-2 inline-flex" />
                         )}
                         Enregistrer les modifications
                     </Button>

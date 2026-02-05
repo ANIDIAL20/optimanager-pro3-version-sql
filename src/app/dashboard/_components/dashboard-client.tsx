@@ -19,8 +19,12 @@ import {
     FileText,
     Bell,
     ArrowUpRight,
-    ShoppingBag
+    ShoppingBag,
+    Database,
+    Truck,
+    Briefcase
 } from 'lucide-react';
+import { Progress } from "@/components/ui/progress";
 
 interface DashboardData {
     globalRevenue: number;
@@ -44,11 +48,23 @@ interface DashboardData {
     }>;
 }
 
-interface DashboardClientProps {
-    user: AuthUser;
+interface UsageStats {
+    products: { count: number, limit: number };
+    clients: { count: number, limit: number };
+    suppliers: { count: number, limit: number };
 }
 
-export default function DashboardClient({ user }: DashboardClientProps) {
+interface DashboardClientProps {
+    user: AuthUser;
+    usage: UsageStats;
+}
+
+const formatLimit = (limit: number) => {
+    if (limit >= 10000) return "Illimité";
+    return limit;
+};
+
+export default function DashboardClient({ user, usage }: DashboardClientProps) {
     const [data, setData] = React.useState<DashboardData | null>(null);
     const [isLoading, setIsLoading] = React.useState(true);
 
@@ -338,6 +354,66 @@ export default function DashboardClient({ user }: DashboardClientProps) {
                         </Link>
                     </div>
                 </SpotlightCard>
+            </div>
+
+            {/* Quotas & Limits Row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                 {/* Products Quota */}
+                 <SpotlightCard className="p-6" spotlightColor="rgba(59, 130, 246, 0.1)">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                             <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                                <Package className="h-4 w-4 text-blue-600" />
+                            </div>
+                            <span className="text-sm font-medium text-slate-700">Produits</span>
+                        </div>
+                        <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                            {usage.products.count} / {formatLimit(usage.products.limit)}
+                        </span>
+                    </div>
+                    <Progress value={(usage.products.count / usage.products.limit) * 100} className="h-2 mb-2" />
+                    <p className="text-xs text-slate-400 text-right">
+                        {Math.round((usage.products.count / usage.products.limit) * 100)}% utilisé
+                    </p>
+                 </SpotlightCard>
+
+                 {/* Clients Quota */}
+                 <SpotlightCard className="p-6" spotlightColor="rgba(168, 85, 247, 0.1)">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                             <div className="h-8 w-8 rounded-lg bg-purple-50 flex items-center justify-center">
+                                <Users className="h-4 w-4 text-purple-600" />
+                            </div>
+                            <span className="text-sm font-medium text-slate-700">Clients</span>
+                        </div>
+                        <span className="text-xs font-bold bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
+                            {usage.clients.count} / {formatLimit(usage.clients.limit)}
+                        </span>
+                    </div>
+                    <Progress value={(usage.clients.count / usage.clients.limit) * 100} className="h-2 mb-2" />
+                     <p className="text-xs text-slate-400 text-right">
+                        {Math.round((usage.clients.count / usage.clients.limit) * 100)}% utilisé
+                    </p>
+                 </SpotlightCard>
+
+                 {/* Suppliers Quota */}
+                 <SpotlightCard className="p-6" spotlightColor="rgba(234, 179, 8, 0.1)">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                             <div className="h-8 w-8 rounded-lg bg-yellow-50 flex items-center justify-center">
+                                <Truck className="h-4 w-4 text-yellow-600" />
+                            </div>
+                            <span className="text-sm font-medium text-slate-700">Fournisseurs</span>
+                        </div>
+                        <span className="text-xs font-bold bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">
+                            {usage.suppliers.count} / {formatLimit(usage.suppliers.limit)}
+                        </span>
+                    </div>
+                    <Progress value={(usage.suppliers.count / usage.suppliers.limit) * 100} className="h-2 mb-2" />
+                     <p className="text-xs text-slate-400 text-right">
+                        {Math.round((usage.suppliers.count / usage.suppliers.limit) * 100)}% utilisé
+                    </p>
+                 </SpotlightCard>
             </div>
         </div>
     );

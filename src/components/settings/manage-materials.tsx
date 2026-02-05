@@ -15,9 +15,9 @@ import {
   PlusCircle,
   AlertCircle,
   Database,
-  Loader2,
   RefreshCw,
 } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import {
   Dialog,
   DialogContent,
@@ -193,7 +193,7 @@ export function ManageMaterials() {
           </DialogContent>
         </Dialog>
         <Button variant="outline" onClick={handleSeedDatabase} disabled={isSeeding}>
-          {isSeeding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Database className="mr-2 h-4 w-4" />}
+          {isSeeding ? <BrandLoader size="xs" className="mr-2 inline-flex" /> : <Database className="mr-2 h-4 w-4" />}
           {isSeeding ? 'Import en cours...' : 'Importer les matières'}
         </Button>
       </CardFooter>

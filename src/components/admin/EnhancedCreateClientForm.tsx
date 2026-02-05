@@ -1,739 +1,576 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { createClient } from "@/app/actions/adminActions";
-import { Loader2, UserPlus, DollarSign, RefreshCw, Clock } from "lucide-react";
-import { toast } from "sonner";
-import { useRouter } from "next/navigation";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  UserPlus, Box, Users, Truck, CreditCard,
+  RotateCw, Calendar, Check, ArrowRight, ArrowLeft,
+  Building2, Mail, Lock, Phone, Shield, Sparkles, MapPin, Hash
+} from "lucide-react";
+import { BrandLoader } from '@/components/ui/loader-brand';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import { Progress } from "@/components/ui/progress";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
-const FEATURES = [
-  { id: 'inventory', name: 'Gestion d\'inventaire', defaultOn: true },
-  { id: 'reports', name: 'Rapports de vente', defaultOn: true },
-  { id: 'export', name: 'Export de données', defaultOn: false },
-  { id: 'api', name: 'Accès API', defaultOn: false },
-  { id: 'multistore', name: 'Multi-magasins', defaultOn: false },
-  { id: 'analytics', name: 'Analyses avancées', defaultOn: false },
+// ============================================
+// PASSWORD STRENGTH HELPER
+// ============================================
+function getPasswordStrength(password: string): { label: string; color: string; score: number } {
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+  if (/[A-Z]/.test(password)) score++;
+  if (/[0-9]/.test(password)) score++;
+  if (/[^A-Za-z0-9]/.test(password)) score++;
+
+  if (score <= 1) return { label: "Faible", color: "bg-red-500", score: 20 };
+  if (score <= 3) return { label: "Moyen", color: "bg-amber-500", score: 60 };
+  return { label: "Fort", color: "bg-emerald-500", score: 100 };
+}
+
+// ============================================
+// STEP INDICATOR COMPONENT
+// ============================================
+const steps = [
+  { id: 1, title: "Identité", icon: Building2 },
+  { id: 2, title: "Plan & Finance", icon: CreditCard },
+  { id: 3, title: "Quotas", icon: Box },
+  { id: 4, title: "Confirmation", icon: Check },
 ];
 
+function StepIndicator({ currentStep }: { currentStep: number }) {
+  return (
+    <div className="flex items-center justify-between mb-8 px-4">
+      {steps.map((step, idx) => {
+        const isActive = currentStep === step.id;
+        const isCompleted = currentStep > step.id;
+        const Icon = step.icon;
+
+        return (
+          <div key={step.id} className="flex items-center">
+            <div className="flex flex-col items-center">
+              <div
+                className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all",
+                  isCompleted ? "bg-blue-600 border-blue-600 text-white" :
+                  isActive ? "border-blue-600 text-blue-600 bg-blue-50" :
+                  "border-slate-300 text-slate-400"
+                )}
+              >
+                {isCompleted ? <Check size={18} /> : <Icon size={18} />}
+              </div>
+              <span className={cn(
+                "text-[10px] mt-1 font-medium uppercase tracking-wide",
+                isActive ? "text-blue-600" : "text-slate-400"
+              )}>
+                {step.title}
+              </span>
+            </div>
+            {idx < steps.length - 1 && (
+              <div className={cn(
+                "w-12 h-0.5 mx-2 transition-all",
+                isCompleted ? "bg-blue-600" : "bg-slate-200"
+              )} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ============================================
+// MAIN WIZARD COMPONENT
+// ============================================
 export default function EnhancedCreateClientForm() {
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1);
   const router = useRouter();
 
-  // Form state
+  // Form State
   const [formData, setFormData] = useState({
-    // Business info
+    // Step 1: Identity
     displayName: '',
     email: '',
     password: '',
     phoneNumber: '',
-    
-    // App License Component
-    appLicenseEnabled: true,
-    appLicenseAmount: 1499,
-    appLicenseType: 'one-time' as 'one-time' | 'annual',
-    appLicenseHasInstallments: false,
-    appLicenseInstallmentCount: 3,
-    
-    // Subscription Component
-    subscriptionEnabled: true,
-    subscriptionAmount: 0,
-    subscriptionCycle: 'yearly' as 'monthly' | 'yearly',
-    
-    // 🆕 Progressive Pricing
-    subscriptionHasProgressivePricing: false,
-    subscriptionGracePeriodMonths: 12,
-    subscriptionPriceAfterGrace: 1000,
-    
-    // Trial
-    trialEnabled: false,
-    trialDays: 14,
-    
-    // Features (independent of price)
-    features: ['inventory', 'reports'],
-    
-    // Usage limits
-    limits: {
-      maxUsers: 3,
-      maxStorageGB: 5,
-    },
+    isActive: true,
+
+    // Step 2: Plan & Finance
+    paymentMode: 'subscription' as 'subscription' | 'lifetime',
+    billingCycle: 'monthly' as 'monthly' | 'yearly',
+    trialPeriodDays: 0,
+    licenseFee: 0, // Initial setup/license fee (one-time)
+    subscriptionPrice: 0, // Recurring subscription price
+    agreedPrice: 0, // Total for Lifetime mode
+    amountPaid: 0,
+    installmentsCount: 1,
+
+    // Step 3: Quotas
+    maxProducts: 50,
+    maxClients: 20,
+    maxSuppliers: 10,
+    unlimitedProducts: false,
+    unlimitedClients: false,
+    unlimitedSuppliers: false,
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  // Calculations
+  const remainingBalance = Math.max(0, formData.agreedPrice - formData.amountPaid);
+  const progressPercent = formData.agreedPrice > 0 ? (formData.amountPaid / formData.agreedPrice) * 100 : 0;
+  const passwordStrength = useMemo(() => getPasswordStrength(formData.password), [formData.password]);
 
-    const data = new FormData();
-    data.append('displayName', formData.displayName);
-    data.append('email', formData.email);
-    data.append('password', formData.password);
-    data.append('phoneNumber', formData.phoneNumber);
-    
-    // Dual-component pricing
-    data.append('pricingTier', 'custom');
-    data.append('appLicenseEnabled', formData.appLicenseEnabled.toString());
-    data.append('appLicenseAmount', formData.appLicenseAmount.toString());
-    data.append('appLicenseType', formData.appLicenseType);
-    data.append('appLicenseHasInstallments', formData.appLicenseHasInstallments.toString());
-    data.append('appLicenseInstallmentCount', formData.appLicenseInstallmentCount.toString());
-    data.append('subscriptionEnabled', formData.subscriptionEnabled.toString());
-    data.append('subscriptionAmount', formData.subscriptionAmount.toString());
-    data.append('subscriptionCycle', formData.subscriptionCycle);
-    
-    // Progressive pricing
-    data.append('subscriptionHasProgressivePricing', formData.subscriptionHasProgressivePricing.toString());
-    data.append('subscriptionGracePeriodMonths', formData.subscriptionGracePeriodMonths.toString());
-    data.append('subscriptionPriceAfterGrace', formData.subscriptionPriceAfterGrace.toString());
-    
-    data.append('trialEnabled', formData.trialEnabled.toString());
-    data.append('trialDays', formData.trialDays.toString());
-    data.append('features', JSON.stringify(formData.features));
-    data.append('limits', JSON.stringify(formData.limits));
+  // Validation
+  const isStep1Valid = formData.displayName.trim().length >= 2 &&
+                       formData.email.includes('@') &&
+                       formData.password.length >= 6;
 
+  const isStep2Valid = formData.agreedPrice >= 0;
+  const isStep3Valid = true; // Quotas always have defaults
+
+  const canProceed = () => {
+    if (currentStep === 1) return isStep1Valid;
+    if (currentStep === 2) return isStep2Valid;
+    if (currentStep === 3) return isStep3Valid;
+    return true;
+  };
+
+  // Navigation
+  const goNext = () => {
+    if (canProceed() && currentStep < 4) setCurrentStep(currentStep + 1);
+    else if (!canProceed()) toast.warning("Veuillez remplir tous les champs obligatoires.");
+  };
+  const goBack = () => { if (currentStep > 1) setCurrentStep(currentStep - 1); };
+
+  // Submit
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
     try {
+      const data = new FormData();
+      data.append('displayName', formData.displayName);
+      data.append('email', formData.email);
+      data.append('password', formData.password);
+      data.append('phoneNumber', formData.phoneNumber);
+      data.append('isActive', formData.isActive.toString());
+
+      data.append('paymentMode', formData.paymentMode);
+      data.append('billingCycle', formData.billingCycle);
+      data.append('trialPeriodDays', formData.trialPeriodDays.toString());
+      data.append('licenseFee', formData.licenseFee.toString());
+      data.append('subscriptionPrice', formData.subscriptionPrice.toString());
+      data.append('agreedPrice', formData.agreedPrice.toString());
+      data.append('amountPaid', formData.amountPaid.toString());
+      data.append('installmentsCount', formData.installmentsCount.toString());
+
+      const maxProducts = formData.unlimitedProducts ? 1000000 : formData.maxProducts;
+      const maxClients = formData.unlimitedClients ? 1000000 : formData.maxClients;
+      const maxSuppliers = formData.unlimitedSuppliers ? 1000000 : formData.maxSuppliers;
+      data.append('maxProducts', maxProducts.toString());
+      data.append('maxClients', maxClients.toString());
+      data.append('maxSuppliers', maxSuppliers.toString());
+
       const result = await createClient(data);
+
       if (result.success) {
-        toast.success("✅ " + result.message);
+        toast.success(`Client "${formData.displayName}" créé avec succès!`);
         setOpen(false);
+        resetForm();
         router.refresh();
       } else {
-        toast.error("❌ " + result.error);
+        toast.error(result.error || "Erreur lors de la création.");
       }
     } catch (err) {
       toast.error("Erreur inattendue.");
-      console.error(err);
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
-  const getTotalFirstYear = () => {
-    let total = 0;
-    
-    // App License
-    if (formData.appLicenseEnabled) {
-      total += formData.appLicenseAmount;
-    }
-    
-    // Subscription (first year only if no grace period)
-    if (formData.subscriptionEnabled && !formData.subscriptionHasProgressivePricing) {
-      if (formData.subscriptionCycle === 'yearly') {
-        total += formData.subscriptionAmount;
-      } else {
-        total += formData.subscriptionAmount * 12;
-      }
-    }
-    
-    return total;
+  const resetForm = () => {
+    setFormData({
+      displayName: '', email: '', password: '', phoneNumber: '', isActive: true,
+      paymentMode: 'subscription', billingCycle: 'monthly', trialPeriodDays: 0,
+      licenseFee: 0, subscriptionPrice: 0, agreedPrice: 0, amountPaid: 0, installmentsCount: 1,
+      maxProducts: 50, maxClients: 20, maxSuppliers: 10,
+      unlimitedProducts: false, unlimitedClients: false, unlimitedSuppliers: false,
+    });
+    setCurrentStep(1);
   };
 
-  const getTotalRecurring = () => {
-    let total = 0;
-    
-    // App License (only if annual)
-    if (formData.appLicenseEnabled && formData.appLicenseType === 'annual') {
-      total += formData.appLicenseAmount;
-    }
-    
-    // Subscription (after grace period if progressive)
-    if (formData.subscriptionEnabled) {
-      if (formData.subscriptionHasProgressivePricing) {
-        // Use the price after grace period
-        if (formData.subscriptionCycle === 'yearly') {
-          total += formData.subscriptionPriceAfterGrace;
-        } else {
-          total += formData.subscriptionPriceAfterGrace * 12;
-        }
-      } else {
-        if (formData.subscriptionCycle === 'yearly') {
-          total += formData.subscriptionAmount;
-        } else {
-          total += formData.subscriptionAmount * 12;
-        }
-      }
-    }
-    
-    return total;
-  };
+  // ========================================
+  // RENDER STEPS
+  // ========================================
 
-  const getTrialEndDate = () => {
-    const date = new Date();
-    date.setDate(date.getDate() + formData.trialDays);
-    return date.toLocaleDateString('fr-FR');
-  };
+  const renderStep1 = () => (
+    <div className="space-y-4 animate-in fade-in-50 slide-in-from-right-4 duration-300">
+      <div>
+        <Label className="flex items-center gap-2"><Building2 size={14} className="text-blue-500"/> Nom du magasin *</Label>
+        <Input
+          value={formData.displayName}
+          onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
+          placeholder="Ex: Optique Vision"
+          className="mt-1"
+        />
+      </div>
+      <div>
+        <Label className="flex items-center gap-2"><Mail size={14} className="text-emerald-500"/> Email *</Label>
+        <Input
+          type="email"
+          value={formData.email}
+          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          placeholder="contact@opticien.ma"
+          className="mt-1"
+        />
+      </div>
+      <div>
+        <Label className="flex items-center gap-2"><Phone size={14} className="text-amber-500"/> Téléphone</Label>
+        <Input
+          value={formData.phoneNumber}
+          onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+          placeholder="06 00 00 00 00"
+          className="mt-1"
+        />
+      </div>
+      <div>
+        <Label className="flex items-center gap-2"><Lock size={14} className="text-red-500"/> Mot de passe *</Label>
+        <Input
+          type="password"
+          value={formData.password}
+          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+          placeholder="Minimum 6 caractères"
+          className="mt-1"
+        />
+        {formData.password && (
+          <div className="mt-2 flex items-center gap-2">
+            <Progress value={passwordStrength.score} className={cn("h-1.5 flex-1", passwordStrength.color)} />
+            <span className={cn("text-xs font-medium",
+              passwordStrength.label === "Fort" ? "text-emerald-600" :
+              passwordStrength.label === "Moyen" ? "text-amber-600" : "text-red-600"
+            )}>
+              {passwordStrength.label}
+            </span>
+          </div>
+        )}
+      </div>
+      <div className="flex items-center justify-between border rounded-md p-3 bg-slate-50">
+        <div className="flex items-center gap-2">
+          <Shield size={16} className="text-slate-500"/>
+          <span className="text-sm font-medium">Statut du compte</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={cn("text-xs font-bold", formData.isActive ? "text-emerald-600" : "text-red-500")}>
+            {formData.isActive ? "Actif" : "Suspendu"}
+          </span>
+          <Switch checked={formData.isActive} onCheckedChange={(c) => setFormData({...formData, isActive: c})} />
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderStep2 = () => (
+    <div className="space-y-4 animate-in fade-in-50 slide-in-from-right-4 duration-300">
+      {/* Mode Toggle */}
+      <div className="bg-slate-100 p-1 rounded-lg flex text-xs font-medium">
+        <button
+          type="button"
+          onClick={() => setFormData({...formData, paymentMode: 'subscription'})}
+          className={cn("flex-1 py-2.5 rounded-md transition-all flex items-center justify-center gap-1.5",
+            formData.paymentMode === 'subscription' ? "bg-white shadow text-blue-600" : "text-slate-500")}
+        >
+          <RotateCw size={14} /> Abonnement SaaS
+        </button>
+        <button
+          type="button"
+          onClick={() => setFormData({...formData, paymentMode: 'lifetime'})}
+          className={cn("flex-1 py-2.5 rounded-md transition-all flex items-center justify-center gap-1.5",
+            formData.paymentMode === 'lifetime' ? "bg-white shadow text-purple-600" : "text-slate-500")}
+        >
+          <Sparkles size={14} /> Licence à Vie
+        </button>
+      </div>
+
+      {/* Trial Period */}
+      <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 p-3 rounded-md">
+        <Calendar size={16} className="text-amber-600" />
+        <Label className="text-xs text-amber-700 whitespace-nowrap">Période d'essai (Jours)</Label>
+        <Input
+          type="number"
+          value={formData.trialPeriodDays}
+          onChange={(e) => setFormData({...formData, trialPeriodDays: parseInt(e.target.value) || 0})}
+          className="h-8 w-20 text-center text-xs bg-white ml-auto"
+          min={0} max={90}
+        />
+      </div>
+
+      {formData.paymentMode === 'subscription' ? (
+        <div className="space-y-4 p-4 border rounded-lg bg-blue-50/30">
+          {/* License/Setup Fee (One-time) */}
+          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+            <Label className="text-emerald-700 font-bold text-sm flex items-center gap-1.5">
+              <Sparkles size={14}/> Frais de Licence (1ère fois)
+            </Label>
+            <Input
+              type="number"
+              value={formData.licenseFee}
+              onChange={(e) => setFormData({...formData, licenseFee: parseFloat(e.target.value) || 0})}
+              className="mt-2 font-bold text-lg border-emerald-300"
+              placeholder="Ex: 2500"
+            />
+            <p className="text-[10px] text-emerald-600 mt-1">Montant initial payé une seule fois à la création du compte.</p>
+          </div>
+
+          {/* Subscription Settings */}
+          <div className="border-t pt-4">
+            <Label className="text-xs text-slate-500 uppercase">Cycle de facturation</Label>
+            <div className="flex gap-2 mt-2">
+              <Badge
+                variant={formData.billingCycle === 'monthly' ? "default" : "outline"}
+                className="cursor-pointer px-4 py-1.5"
+                onClick={() => setFormData({...formData, billingCycle: 'monthly'})}
+              >
+                Mensuel
+              </Badge>
+              <Badge
+                variant={formData.billingCycle === 'yearly' ? "default" : "outline"}
+                className="cursor-pointer px-4 py-1.5"
+                onClick={() => setFormData({...formData, billingCycle: 'yearly'})}
+              >
+                Annuel
+              </Badge>
+            </div>
+          </div>
+
+          {/* Recurring Subscription Price */}
+          <div>
+            <Label className="text-blue-700 font-bold">Prix Abonnement {formData.billingCycle === 'monthly' ? 'Mensuel' : 'Annuel'} (MAD)</Label>
+            <Input
+              type="number"
+              value={formData.subscriptionPrice}
+              onChange={(e) => setFormData({...formData, subscriptionPrice: parseFloat(e.target.value) || 0})}
+              className="mt-1 font-bold text-lg"
+              placeholder={formData.billingCycle === 'monthly' ? "Ex: 200/mois" : "Ex: 2000/an"}
+            />
+            <p className="text-[10px] text-blue-600 mt-1">Montant récurrent payé chaque {formData.billingCycle === 'monthly' ? 'mois' : 'année'}.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4 p-4 border rounded-lg bg-purple-50/30">
+          <div>
+            <Label className="text-purple-700 font-bold">Prix Total Licence (MAD)</Label>
+            <Input
+              type="number"
+              value={formData.agreedPrice}
+              onChange={(e) => setFormData({...formData, agreedPrice: parseFloat(e.target.value) || 0})}
+              className="mt-1 font-bold text-lg border-purple-200"
+            />
+          </div>
+
+          <div className="p-3 bg-white rounded-lg border space-y-3">
+            <div className="flex justify-between text-xs text-purple-800 font-semibold uppercase">
+              <span>Avancement Paiement</span>
+              <span>{progressPercent.toFixed(0)}%</span>
+            </div>
+            <Progress value={progressPercent} className="h-2" />
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-[10px]">Montant Payé</Label>
+                <Input type="number" value={formData.amountPaid} onChange={(e) => setFormData({...formData, amountPaid: parseFloat(e.target.value) || 0})} className="h-8 text-sm" />
+              </div>
+              <div>
+                <Label className="text-[10px]">Reste à Payer</Label>
+                <div className="h-8 flex items-center px-3 bg-slate-100 rounded text-sm font-bold text-red-600">{remainingBalance.toFixed(2)} MAD</div>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t flex items-center gap-2">
+              <RotateCw size={14} className="text-purple-500"/>
+              <Label className="text-[10px] whitespace-nowrap">Nombre d'échéances</Label>
+              <Input type="number" value={formData.installmentsCount} onChange={(e) => setFormData({...formData, installmentsCount: parseInt(e.target.value) || 1})} className="h-8 w-16 text-center text-sm bg-white ml-auto" min={1} />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderStep3 = () => (
+    <div className="space-y-3 animate-in fade-in-50 slide-in-from-right-4 duration-300">
+      {/* Products */}
+      <div className="flex items-center gap-3 border p-3 rounded-lg bg-slate-50/50">
+        <Box size={20} className="text-blue-500"/>
+        <div className="flex-1">
+          <div className="flex justify-between items-center">
+            <Label className="text-sm font-medium">Produits</Label>
+            {formData.unlimitedProducts && <Badge variant="secondary" className="text-[10px] bg-blue-100 text-blue-700">Illimité</Badge>}
+          </div>
+          <div className="flex gap-2 items-center mt-1">
+            <Input type="number" className="h-8 text-sm bg-white" disabled={formData.unlimitedProducts} value={formData.maxProducts} onChange={(e) => setFormData({...formData, maxProducts: parseInt(e.target.value) || 0})} />
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-slate-500">∞</span>
+              <Switch className="scale-75" checked={formData.unlimitedProducts} onCheckedChange={(c) => setFormData({...formData, unlimitedProducts: c})} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Clients */}
+      <div className="flex items-center gap-3 border p-3 rounded-lg bg-slate-50/50">
+        <Users size={20} className="text-emerald-500"/>
+        <div className="flex-1">
+          <div className="flex justify-between items-center">
+            <Label className="text-sm font-medium">Clients</Label>
+            {formData.unlimitedClients && <Badge variant="secondary" className="text-[10px] bg-emerald-100 text-emerald-700">Illimité</Badge>}
+          </div>
+          <div className="flex gap-2 items-center mt-1">
+            <Input type="number" className="h-8 text-sm bg-white" disabled={formData.unlimitedClients} value={formData.maxClients} onChange={(e) => setFormData({...formData, maxClients: parseInt(e.target.value) || 0})} />
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-slate-500">∞</span>
+              <Switch className="scale-75" checked={formData.unlimitedClients} onCheckedChange={(c) => setFormData({...formData, unlimitedClients: c})} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Suppliers */}
+      <div className="flex items-center gap-3 border p-3 rounded-lg bg-slate-50/50">
+        <Truck size={20} className="text-amber-500"/>
+        <div className="flex-1">
+          <div className="flex justify-between items-center">
+            <Label className="text-sm font-medium">Fournisseurs</Label>
+            {formData.unlimitedSuppliers && <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-700">Illimité</Badge>}
+          </div>
+          <div className="flex gap-2 items-center mt-1">
+            <Input type="number" className="h-8 text-sm bg-white" disabled={formData.unlimitedSuppliers} value={formData.maxSuppliers} onChange={(e) => setFormData({...formData, maxSuppliers: parseInt(e.target.value) || 0})} />
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-slate-500">∞</span>
+              <Switch className="scale-75" checked={formData.unlimitedSuppliers} onCheckedChange={(c) => setFormData({...formData, unlimitedSuppliers: c})} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderStep4 = () => (
+    <div className="space-y-4 animate-in fade-in-50 slide-in-from-right-4 duration-300">
+      <div className="text-center mb-4">
+        <div className="w-16 h-16 mx-auto rounded-full bg-emerald-100 flex items-center justify-center mb-2">
+          <Check size={32} className="text-emerald-600" />
+        </div>
+        <h3 className="font-bold text-lg">Prêt à créer le compte</h3>
+        <p className="text-sm text-slate-500">Vérifiez les informations avant de confirmer.</p>
+      </div>
+
+      <div className="border rounded-lg overflow-hidden divide-y">
+        {/* Identity Summary */}
+        <div className="p-3 bg-slate-50">
+          <p className="text-xs text-slate-500 uppercase font-bold mb-1">Identité</p>
+          <p className="font-medium">{formData.displayName || "—"}</p>
+          <p className="text-sm text-slate-600">{formData.email || "—"}</p>
+          {formData.phoneNumber && <p className="text-sm text-slate-500">{formData.phoneNumber}</p>}
+        </div>
+
+        {/* Plan Summary */}
+        <div className="p-3">
+          <p className="text-xs text-slate-500 uppercase font-bold mb-1">Plan & Finance</p>
+          <div className="flex items-center gap-2 mb-2">
+            <Badge className={formData.paymentMode === 'subscription' ? "bg-blue-600" : "bg-purple-600"}>
+              {formData.paymentMode === 'subscription' ? `SaaS ${formData.billingCycle === 'monthly' ? 'Mensuel' : 'Annuel'}` : 'Licence à Vie'}
+            </Badge>
+          </div>
+
+          {formData.paymentMode === 'subscription' ? (
+            <div className="space-y-1 text-sm">
+              {formData.licenseFee > 0 && (
+                <p className="text-emerald-600"><strong>Licence initiale:</strong> {formData.licenseFee} MAD</p>
+              )}
+              <p className="text-blue-600"><strong>Abonnement {formData.billingCycle === 'monthly' ? 'mensuel' : 'annuel'}:</strong> {formData.subscriptionPrice} MAD</p>
+            </div>
+          ) : (
+            <p className="font-bold text-lg">{formData.agreedPrice} MAD</p>
+          )}
+
+          {formData.trialPeriodDays > 0 && (
+            <p className="text-xs text-amber-600 mt-1">+ {formData.trialPeriodDays} jours d'essai gratuit</p>
+          )}
+          {formData.paymentMode === 'lifetime' && remainingBalance > 0 && (
+            <p className="text-xs text-red-600 mt-1">Reste à payer: {remainingBalance.toFixed(2)} MAD</p>
+          )}
+        </div>
+
+        {/* Quotas Summary */}
+        <div className="p-3 bg-slate-50">
+          <p className="text-xs text-slate-500 uppercase font-bold mb-1">Quotas</p>
+          <div className="flex gap-4 text-sm">
+            <span><strong>{formData.unlimitedProducts ? '∞' : formData.maxProducts}</strong> Produits</span>
+            <span><strong>{formData.unlimitedClients ? '∞' : formData.maxClients}</strong> Clients</span>
+            <span><strong>{formData.unlimitedSuppliers ? '∞' : formData.maxSuppliers}</strong> Fournisseurs</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
-    <Dialog open={open} onOpenChange={setOpen} modal={false}>
+    <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) resetForm(); }} modal={false}>
       <DialogTrigger asChild>
         <Button className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700">
           <UserPlus className="mr-2 h-4 w-4" />
-          Nouveau Client
+          Nouvel Utilisateur
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-y-auto" onInteractOutside={(e) => e.preventDefault()}>
+      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto" onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
-          <DialogTitle>Créer une Offre Personnalisée</DialogTitle>
-          <DialogDescription>
-            Flexibilité totale - Pricing progressif et composants indépendants
-          </DialogDescription>
+          <DialogTitle>Créer un Compte Client</DialogTitle>
+          <DialogDescription>Assistant de création en {steps.length} étapes.</DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6 py-4">
-          {/* Business Information */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-slate-900">Informations du client</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <Label htmlFor="name">Nom du magasin *</Label>
-                <Input
-                  id="name"
-                  value={formData.displayName}
-                  onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
-                  placeholder="Optique Vision"
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="email">Email *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="client@opticien.com"
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="phone">Téléphone</Label>
-                <Input
-                  id="phone"
-                  value={formData.phoneNumber}
-                  onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
-                  placeholder="+212 6..."
-                />
-              </div>
-              <div className="col-span-2">
-                <Label htmlFor="password">Mot de passe *</Label>
-                <Input
-                  id="password"
-                  type="text"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="Minimum 6 caractères"
-                  required
-                  minLength={6}
-                />
-              </div>
-            </div>
-          </div>
+        <StepIndicator currentStep={currentStep} />
 
-          <Separator />
+        <div className="min-h-[300px]">
+          {currentStep === 1 && renderStep1()}
+          {currentStep === 2 && renderStep2()}
+          {currentStep === 3 && renderStep3()}
+          {currentStep === 4 && renderStep4()}
+        </div>
 
-          {/* Dual-Component Pricing System */}
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                <DollarSign className="h-4 w-4" />
-                Structure de pricing
-              </h3>
-              <p className="text-xs text-slate-600 mt-1">
-                Activez et configurez les composants selon votre négociation
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* App License Card */}
-              <Card className={cn(
-                "border-2 transition-all",
-                formData.appLicenseEnabled 
-                  ? "border-blue-300 bg-blue-50/30 shadow-sm" 
-                  : "border-slate-200 bg-slate-50/30 opacity-60"
-              )}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <DollarSign className="h-4 w-4 text-blue-600" />
-                      License Application
-                    </CardTitle>
-                    <Switch
-                      checked={formData.appLicenseEnabled}
-                      onCheckedChange={(checked) => setFormData({ ...formData, appLicenseEnabled: checked })}
-                    />
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="appLicense" className="text-xs">Montant (MAD)</Label>
-                    <Input
-                      id="appLicense"
-                      type="number"
-                      value={formData.appLicenseAmount}
-                      onChange={(e) => setFormData({ ...formData, appLicenseAmount: parseInt(e.target.value) || 0 })}
-                      min={0}
-                      disabled={!formData.appLicenseEnabled}
-                      className="text-lg font-semibold"
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className="text-xs">Type de license</Label>
-                    <Select
-                      value={formData.appLicenseType}
-                      onValueChange={(v: 'one-time' | 'annual') => setFormData({ ...formData, appLicenseType: v })}
-                      disabled={!formData.appLicenseEnabled}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="one-time">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                              One-Time
-                            </Badge>
-                            <span className="text-xs">Paiement unique</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="annual">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
-                              Annuel
-                            </Badge>
-                            <span className="text-xs">Se renouvelle chaque année</span>
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* 🆕 Installment Payment Option */}
-                  {formData.appLicenseEnabled && formData.appLicenseType === 'one-time' && (
-                    <div className="space-y-3 pt-2 border-t border-slate-200">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-3 w-3 text-blue-600" />
-                          <Label className="text-xs font-semibold">Paiement Échelonné</Label>
-                        </div>
-                        <Switch
-                          checked={formData.appLicenseHasInstallments}
-                          onCheckedChange={(checked) => setFormData({ ...formData, appLicenseHasInstallments: checked })}
-                        />
-                      </div>
-
-                      {formData.appLicenseHasInstallments && (
-                        <div className="bg-blue-50 rounded-lg p-3 space-y-3 border border-blue-200">
-                          <div className="space-y-2">
-                            <Label className="text-xs">Nombre de versements</Label>
-                            <Select
-                              value={formData.appLicenseInstallmentCount.toString()}
-                              onValueChange={(v) => setFormData({ ...formData, appLicenseInstallmentCount: parseInt(v) })}
-                            >
-                              <SelectTrigger className="h-8">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="2">2 fois</SelectItem>
-                                <SelectItem value="3">3 fois</SelectItem>
-                                <SelectItem value="4">4 fois</SelectItem>
-                                <SelectItem value="6">6 fois</SelectItem>
-                                <SelectItem value="12">12 fois</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <div className="bg-white rounded p-2 text-xs text-blue-800 border border-blue-300">
-                            <strong>Plan de paiement:</strong>
-                            <br />
-                            {Math.ceil(formData.appLicenseAmount / formData.appLicenseInstallmentCount)} MAD × {formData.appLicenseInstallmentCount} versements
-                            <br />
-                            <span className="text-blue-600">
-                              Total: {formData.appLicenseAmount} MAD sur {formData.appLicenseInstallmentCount} mois
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {formData.appLicenseEnabled && !formData.appLicenseHasInstallments && (
-                    <div className="bg-white rounded p-2 text-xs text-slate-600 border border-slate-200">
-                      {formData.appLicenseType === 'one-time' ? (
-                        <p>✓ Paiement unique de <strong>{formData.appLicenseAmount} MAD</strong></p>
-                      ) : (
-                        <p>✓ <strong>{formData.appLicenseAmount} MAD/an</strong> (renouvellement annuel)</p>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Subscription Card */}
-              <Card className={cn(
-                "border-2 transition-all",
-                formData.subscriptionEnabled 
-                  ? "border-green-300 bg-green-50/30 shadow-sm" 
-                  : "border-slate-200 bg-slate-50/30 opacity-60"
-              )}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <RefreshCw className="h-4 w-4 text-green-600" />
-                      Abonnement Récurrent
-                    </CardTitle>
-                    <Switch
-                      checked={formData.subscriptionEnabled}
-                      onCheckedChange={(checked) => setFormData({ ...formData, subscriptionEnabled: checked })}
-                    />
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="subscription" className="text-xs">Montant Initial (MAD)</Label>
-                    <Input
-                      id="subscription"
-                      type="number"
-                      value={formData.subscriptionAmount}
-                      onChange={(e) => setFormData({ ...formData, subscriptionAmount: parseInt(e.target.value) || 0 })}
-                      min={0}
-                      disabled={!formData.subscriptionEnabled}
-                      className="text-lg font-semibold"
-                      placeholder="0 pour gratuit"
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className="text-xs">Cycle de facturation</Label>
-                    <Select
-                      value={formData.subscriptionCycle}
-                      onValueChange={(v: 'monthly' | 'yearly') => setFormData({ ...formData, subscriptionCycle: v })}
-                      disabled={!formData.subscriptionEnabled}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="monthly">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                              Mensuel
-                            </Badge>
-                            <span className="text-xs">Facture chaque mois</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="yearly">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
-                              Annuel
-                            </Badge>
-                            <span className="text-xs">Facture chaque année</span>
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* 🆕 Progressive Pricing Toggle */}
-                  {formData.subscriptionEnabled && (
-                    <div className="space-y-3 pt-2 border-t border-slate-200">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-3 w-3 text-purple-600" />
-                          <Label className="text-xs font-semibold">Pricing Progressif</Label>
-                        </div>
-                        <Switch
-                          checked={formData.subscriptionHasProgressivePricing}
-                          onCheckedChange={(checked) => setFormData({ ...formData, subscriptionHasProgressivePricing: checked })}
-                        />
-                      </div>
-
-                      {formData.subscriptionHasProgressivePricing && (
-                        <div className="bg-purple-50 rounded-lg p-3 space-y-3 border border-purple-200">
-                          <div className="space-y-2">
-                            <Label className="text-xs">Période de grâce (mois)</Label>
-                            <Input
-                              type="number"
-                              value={formData.subscriptionGracePeriodMonths}
-                              onChange={(e) => setFormData({ ...formData, subscriptionGracePeriodMonths: parseInt(e.target.value) || 1 })}
-                              min={1}
-                              max={36}
-                              className="h-8 text-sm"
-                            />
-                            <p className="text-xs text-purple-700">
-                              Durée avant que le prix change
-                            </p>
-                          </div>
-
-                          <div className="space-y-2">
-                            <Label className="text-xs">Prix après période de grâce (MAD)</Label>
-                            <Input
-                              type="number"
-                              value={formData.subscriptionPriceAfterGrace}
-                              onChange={(e) => setFormData({ ...formData, subscriptionPriceAfterGrace: parseInt(e.target.value) || 0 })}
-                              min={0}
-                              className="h-8 text-sm font-semibold"
-                            />
-                          </div>
-
-                          <div className="bg-white rounded p-2 text-xs text-purple-800 border border-purple-300">
-                            <strong>Exemple:</strong>
-                            <br />
-                            • Premiers {formData.subscriptionGracePeriodMonths} mois: {formData.subscriptionAmount} MAD
-                            <br />
-                            • Après: {formData.subscriptionPriceAfterGrace} MAD{formData.subscriptionCycle === 'monthly' ? '/mois' : '/an'}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {formData.subscriptionEnabled && !formData.subscriptionHasProgressivePricing && (
-                    <div className="bg-white rounded p-2 text-xs text-slate-600 border border-slate-200">
-                      {formData.subscriptionCycle === 'monthly' ? (
-                        <p>✓ <strong>{formData.subscriptionAmount} MAD/mois</strong> ({formData.subscriptionAmount * 12} MAD/an)</p>
-                      ) : (
-                        <p>✓ <strong>{formData.subscriptionAmount} MAD/an</strong> (facturé annuellement)</p>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Trial Period */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="trial">Période d'essai gratuite</Label>
-                <p className="text-xs text-slate-600">Offrir un essai avant facturation</p>
-              </div>
-              <Switch
-                id="trial"
-                checked={formData.trialEnabled}
-                onCheckedChange={(checked) => setFormData({ ...formData, trialEnabled: checked })}
-              />
-            </div>
-            {formData.trialEnabled && (
-              <div className="ml-6 space-y-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <Label>Durée de l'essai (jours)</Label>
-                <Input
-                  type="number"
-                  value={formData.trialDays}
-                  onChange={(e) => setFormData({ ...formData, trialDays: parseInt(e.target.value) || 14 })}
-                  min={1}
-                  max={90}
-                  className="w-32"
-                />
-                <p className="text-xs text-blue-700">
-                  🎁 L'essai se termine le: <strong>{getTrialEndDate()}</strong>
-                </p>
-              </div>
-            )}
-          </div>
-
-          <Separator />
-
-          {/* Features - Independent */}
-          <div className="space-y-3">
-            <div>
-              <Label>Fonctionnalités activées</Label>
-              <p className="text-xs text-slate-600">Totalement indépendant du pricing</p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {FEATURES.map((feature) => (
-                <div key={feature.id} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={feature.id}
-                    checked={formData.features.includes(feature.id)}
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        setFormData({
-                          ...formData,
-                          features: [...formData.features, feature.id]
-                        });
-                      } else {
-                        setFormData({
-                          ...formData,
-                          features: formData.features.filter(f => f !== feature.id)
-                        });
-                      }
-                    }}
-                  />
-                  <Label htmlFor={feature.id} className="cursor-pointer text-sm font-normal">
-                    {feature.name}
-                  </Label>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Usage Limits */}
-          <div className="space-y-3">
-            <Label>Limites d'utilisation</Label>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="maxUsers" className="text-xs">Max Utilisateurs</Label>
-                <Input
-                  id="maxUsers"
-                  type="number"
-                  value={formData.limits.maxUsers}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    limits: { ...formData.limits, maxUsers: parseInt(e.target.value) || 1 }
-                  })}
-                  min={1}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="maxStorage" className="text-xs">Stockage (GB)</Label>
-                <Input
-                  id="maxStorage"
-                  type="number"
-                  value={formData.limits.maxStorageGB}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    limits: { ...formData.limits, maxStorageGB: parseInt(e.target.value) || 1 }
-                  })}
-                  min={1}
-                />
-              </div>
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Summary */}
-          <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-5 rounded-lg space-y-3">
-            <h4 className="font-semibold flex items-center gap-2">
-              📊 Récapitulatif Financier
-            </h4>
-            
-            {/* Components Breakdown */}
-            <div className="space-y-2 text-sm">
-              {formData.appLicenseEnabled && (
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center bg-white/10 p-2 rounded">
-                    <span className="text-slate-200">
-                      License Application ({formData.appLicenseType === 'one-time' ? 'One-Time' : 'Annuel'}):
-                    </span>
-                    <span className="font-bold">{formData.appLicenseAmount} MAD</span>
-                  </div>
-                  {formData.appLicenseHasInstallments && formData.appLicenseType === 'one-time' && (
-                    <div className="flex justify-between items-center bg-blue-500/20 px-2 py-1 rounded text-xs border border-blue-400/30">
-                      <span className="text-blue-200">Paiement échelonné:</span>
-                      <span className="text-blue-100 font-semibold">
-                        {Math.ceil(formData.appLicenseAmount / formData.appLicenseInstallmentCount)} MAD × {formData.appLicenseInstallmentCount} mois
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {formData.subscriptionEnabled && (
-                <>
-                  <div className="flex justify-between items-center bg-white/10 p-2 rounded">
-                    <span className="text-slate-200">
-                      Abonnement Initial ({formData.subscriptionCycle === 'monthly' ? 'Mensuel' : 'Annuel'}):
-                    </span>
-                    <span className="font-bold">
-                      {formData.subscriptionAmount} MAD{formData.subscriptionCycle === 'monthly' ? '/mo' : '/an'}
-                    </span>
-                  </div>
-                  
-                  {formData.subscriptionHasProgressivePricing && (
-                    <div className="flex justify-between items-center bg-purple-500/20 p-2 rounded border border-purple-400/30">
-                      <span className="text-purple-200">
-                        Après {formData.subscriptionGracePeriodMonths} mois:
-                      </span>
-                      <span className="font-bold text-purple-100">
-                        {formData.subscriptionPriceAfterGrace} MAD{formData.subscriptionCycle === 'monthly' ? '/mo' : '/an'}
-                      </span>
-                    </div>
-                  )}
-                </>
-              )}
-              
-              {!formData.appLicenseEnabled && !formData.subscriptionEnabled && (
-                <div className="text-center text-slate-400 py-4">
-                  Aucun composant de pricing activé
-                </div>
-              )}
-            </div>
-
-            <Separator className="bg-white/20" />
-
-            {/* Totals */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-300">Total Première Année:</span>
-                <span className="text-2xl font-bold text-green-400">{getTotalFirstYear()} MAD</span>
-              </div>
-              
-              {(formData.appLicenseType === 'annual' || formData.subscriptionEnabled) && (
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-300">Renouvellement Annuel:</span>
-                  <span className="font-semibold text-blue-300">{getTotalRecurring()} MAD/an</span>
-                </div>
-              )}
-              
-              {formData.appLicenseType === 'one-time' && !formData.subscriptionEnabled && (
-                <div className="text-center text-sm text-green-400">
-                  ✨ Deal Lifetime - Aucun renouvellement
-                </div>
-              )}
-            </div>
-
-            {formData.trialEnabled && (
-              <div className="bg-blue-500/20 border border-blue-400/30 text-blue-200 px-3 py-2 rounded text-xs mt-2">
-                🎁 Essai gratuit de {formData.trialDays} jours inclus
-              </div>
-            )}
-            
-            <div className="pt-2 text-xs text-slate-400 border-t border-white/10">
-              • {formData.features.length} fonctionnalités activées
-              <br />
-              • Limites: {formData.limits.maxUsers} users, {formData.limits.maxStorageGB}GB storage
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Annuler
+        {/* Navigation Footer */}
+        <div className="flex justify-between items-center pt-4 border-t mt-4">
+          {currentStep > 1 ? (
+            <Button type="button" variant="outline" onClick={goBack}>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Précédent
             </Button>
-            <Button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-700">
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Créer l'offre
+          ) : (
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Annuler</Button>
+          )}
+
+          {currentStep < 4 ? (
+            <Button type="button" onClick={goNext} disabled={!canProceed()} className="bg-blue-600 hover:bg-blue-700">
+              Suivant <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
-          </DialogFooter>
-        </form>
+          ) : (
+            <Button type="button" onClick={handleSubmit} disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700">
+              {isSubmitting && <BrandLoader size="xs" className="mr-2 inline-flex" />}
+              <Check className="mr-2 h-4 w-4" /> Confirmer la création
+            </Button>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

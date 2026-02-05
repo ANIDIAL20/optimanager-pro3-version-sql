@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, RotateCcw, AlertCircle } from 'lucide-react';
+import { RotateCcw, AlertCircle } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import { processReturn } from '@/app/actions/sales-actions';
 import { Sale, SaleItem } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -184,7 +185,7 @@ export function ReturnItemsDialog({ sale, open, onOpenChange, onReturnSuccess }:
                         disabled={isLoading || totalRefund <= 0}
                         className="bg-orange-600 hover:bg-orange-700 text-white"
                     >
-                        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {isLoading && <BrandLoader size="xs" className="mr-2 inline-flex" />}
                         Confirmer le Retour
                     </Button>
                 </DialogFooter>

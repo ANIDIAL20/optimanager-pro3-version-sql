@@ -3,7 +3,8 @@
 import * as React from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Loader2, AlertCircle, Database, RefreshCw } from 'lucide-react';
+import { PlusCircle, AlertCircle, Database, RefreshCw } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ManageItem } from './manage-item';
@@ -221,7 +222,7 @@ export function ManageGeneric({
         </Dialog>
         {seedData && (
           <Button variant="outline" onClick={handleSeedDatabase} disabled={isSeeding}>
-            {isSeeding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Database className="mr-2 h-4 w-4" />}
+            {isSeeding ? <BrandLoader size="xs" className="mr-2 inline-flex" /> : <Database className="mr-2 h-4 w-4" />}
             {isSeeding ? 'Import en cours...' : (seedButtonText || 'Importer les données')}
           </Button>
         )}

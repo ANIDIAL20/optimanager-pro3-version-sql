@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/ui/submit-button';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -23,7 +24,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Upload, Image as ImageIcon, X, Check, Loader2, Plus } from 'lucide-react';
+import { Upload, Image as ImageIcon, X, Check, Plus } from 'lucide-react';
 // TODO: Migrate settings (brands/categories/materials/colors) to SQL
 // import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, useFirebase } from '@/firebase';
 // import { collection, doc, query, orderBy } from 'firebase/firestore';
@@ -835,24 +836,22 @@ export function ProductForm({ product }: ProductFormProps) {
 
         {/* Action Buttons */}
         <div className="flex justify-end items-center gap-3 mt-6">
-          <Button
+          <SubmitButton
             type="button"
             variant="outline"
-            disabled={isSubmitting}
+            isLoading={isSubmitting}
             onClick={form.handleSubmit((data) => onSubmit(data, false))}
-          >
-            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Enregistrer
-          </Button>
+            label="Enregistrer"
+            loadingLabel="Enregistrement..."
+          />
 
-          <Button
+          <SubmitButton
             type="button"
-            disabled={isSubmitting}
+            isLoading={isSubmitting}
             onClick={form.handleSubmit((data) => onSubmit(data, true))}
-          >
-            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Enregistrer & Créer un nouveau
-          </Button>
+            label="Enregistrer & Créer un nouveau"
+            loadingLabel="Enregistrement..."
+          />
         </div>
       </form>
     </Form>

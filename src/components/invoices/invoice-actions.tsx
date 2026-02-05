@@ -1,7 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { FileText, Printer, Download, Share2, Loader2 } from 'lucide-react';
+import { FileText, Printer, Download, Share2 } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -173,7 +174,7 @@ export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsPro
                     <Button variant="outline" disabled={isGenerating}>
                         {isGenerating ? (
                             <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                <BrandLoader size="xs" className="mr-2 inline-flex" />
                                 Génération...
                                 Facture
                             </>

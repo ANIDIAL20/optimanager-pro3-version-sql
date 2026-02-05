@@ -13,7 +13,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Scan, Upload, CheckCircle, Trash2, FileText } from 'lucide-react';
+import { Scan, Upload, CheckCircle, Trash2, FileText } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import { useToast } from '@/hooks/use-toast';
 // TODO: Migrate to SQL products actions
 // import { useFirestore, useFirebase } from '@/firebase';
@@ -233,7 +234,7 @@ export function InvoiceScannerDialog() {
                             onClick={handleScan}
                             disabled={isProcessing || !previewUrl}
                         >
-                            {isProcessing ? <Loader2 className="animate-spin mr-2" /> : <Scan className="mr-2" />}
+                            {isProcessing ? <BrandLoader size="xs" className="mr-2 inline-flex" /> : <Scan className="mr-2" />}
                             {isProcessing ? 'Traitement...' : 'Scanner'}
                         </Button>
 
@@ -316,7 +317,7 @@ export function InvoiceScannerDialog() {
                 <div className="flex justify-end gap-2 pt-4 border-t">
                     <Button variant="outline" onClick={() => setIsOpen(false)}>Fermer</Button>
                     <Button onClick={handleSave} disabled={isSaving || !invoiceData || invoiceData.products.length === 0} className="bg-green-600 hover:bg-green-700">
-                        {isSaving ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle className="mr-2" />}
+                        {isSaving ? <BrandLoader size="xs" className="mr-2 inline-flex" /> : <CheckCircle className="mr-2" />}
                         Confirmer Import
                     </Button>
                 </div>
