@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { createClient } from "@/app/actions/adminActions";
-import { Loader2, Plus, UserPlus } from "lucide-react";
+import { UserPlus } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import {
@@ -165,7 +166,7 @@ export default function CreateClientForm({ onSuccess }: { onSuccess?: () => void
                     </div>
                     <DialogFooter className="mt-4">
                         <Button type="submit" disabled={isSubmitting}>
-                            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            {isSubmitting && <BrandLoader size="xs" className="mr-2 inline-flex" />}
                             Créer le compte
                         </Button>
                     </DialogFooter>

@@ -32,7 +32,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Pencil, Trash2, Download } from 'lucide-react';
+import { Plus, Pencil, Trash2, Download } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import {
   getSettings,
   createSetting,
@@ -340,7 +341,7 @@ export function ManageSettings({
                   disabled={isSeeding}
                 >
                   {isSeeding ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <BrandLoader size="xs" className="mr-2 inline-flex" />
                   ) : (
                     <Download className="h-4 w-4 mr-2" />
                   )}
@@ -357,7 +358,7 @@ export function ManageSettings({
         <CardContent>
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+              <BrandLoader size="md" className="mx-auto" />
             </div>
           ) : items.length === 0 ? (
             <div className="text-center py-12 text-slate-500">
@@ -498,7 +499,7 @@ export function ManageSettings({
               Annuler
             </Button>
             <Button onClick={handleSave} disabled={isSaving}>
-              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isSaving && <BrandLoader size="xs" className="mr-2 inline-flex" />}
               {editingItem ? 'Enregistrer' : 'Ajouter'}
             </Button>
           </DialogFooter>

@@ -16,7 +16,9 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Plus, Trash2, Loader2, Search, ShoppingCart, User, X, Box } from 'lucide-react';
+import { Plus, Trash2, Search, ShoppingCart, User, X, Box } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
+import { SubmitButton } from '@/components/ui/submit-button';
 import { ClientSelector } from '@/components/sales/client-selector';
 import { Client, Product, Category } from '@/lib/types'; // Add Category type if needed
 import { cn } from '@/lib/utils';
@@ -237,7 +239,7 @@ export function CreateDevisModal({ children, onSuccess }: CreateDevisModalProps)
                    <ScrollArea className="flex-1 p-4">
                         {isLoading ? (
                             <div className="flex justify-center items-center h-40">
-                                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                                <Spinner size="lg" />
                             </div>
                         ) : filteredProducts.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-40 text-muted-foreground space-y-2">
@@ -410,13 +412,17 @@ export function CreateDevisModal({ children, onSuccess }: CreateDevisModalProps)
                         </div>
 
                         <div className="grid grid-cols-2 gap-3 pt-2">
-                             <Button variant="outline" onClick={() => setIsOpen(false)} className="w-full">
+                            <Button type="button" variant="outline" onClick={() => setIsOpen(false)} className="w-full">
                                 Annuler
                             </Button>
-                             <Button onClick={handleSave} disabled={isSaving || items.length === 0} className="w-full">
-                                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Créer Devis
-                            </Button>
+                             <SubmitButton
+                                onClick={handleSave}
+                                disabled={isSaving || items.length === 0}
+                                className="w-full"
+                                isLoading={isSaving}
+                                label="Créer Devis"
+                                loadingLabel="Création..."
+                             />
                         </div>
                     </div>
                 </div>

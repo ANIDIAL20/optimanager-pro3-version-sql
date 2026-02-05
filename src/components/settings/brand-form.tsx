@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import type { Brand, BrandCategory } from '@/lib/types';
-import { Loader2 } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import { createSetting, updateSetting } from '@/app/actions/settings-actions';
 
 const brandCategories = ['Premium', 'Populaire', 'Française', 'Autre'] as const;
@@ -125,7 +125,7 @@ export function BrandForm({ brand, onSuccess }: BrandFormProps) {
           )}
         />
         <Button type="submit" disabled={isSubmitting} className="w-full">
-          {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          {isSubmitting ? <BrandLoader size="xs" className="mr-2 inline-flex" /> : null}
           {brand ? 'Enregistrer les modifications' : 'Ajouter la marque'}
         </Button>
       </form>

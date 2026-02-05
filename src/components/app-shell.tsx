@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./app-sidebar";
-import { Loader2 } from "lucide-react";
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 export default function AppShell({ children, banner }: { children: React.ReactNode, banner?: any }) {
     const { data: session, status } = useSession();
@@ -116,7 +116,7 @@ export default function AppShell({ children, banner }: { children: React.ReactNo
     return (
         <div className="h-screen w-full flex flex-col items-center justify-center bg-gray-50 gap-4">
             <div className="bg-white p-4 rounded-2xl shadow-sm">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                <BrandLoader size="lg" className="mx-auto" />
             </div>
             <p className="text-sm text-gray-400 font-medium animate-pulse">
                 {status === 'loading' ? "Vérification de l'accès..." : "Redirection..."}

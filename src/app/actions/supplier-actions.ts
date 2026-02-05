@@ -7,6 +7,7 @@ import { eq, and, desc, sql } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { revalidatePath } from 'next/cache';
 import { unstable_noStore as noStore } from 'next/cache';
+import { getClientUsageStats } from './adminActions';
 
 
 // Helper to serialize contact info into notes
@@ -182,6 +183,12 @@ export const getSupplier = secureAction(async (userId, user, id: string) => {
  */
 export const createSupplier = secureAction(async (userId, user, data: any) => {
   console.log('📝 Creating supplier with data:', JSON.stringify(data, null, 2));
+
+  // 🛡️ CHECK QUOTAS
+  const usage = await getClientUsageStats(userId);
+  if (usage.suppliers.count >= usage.suppliers.limit) {
+       throw new Error(`Vous avez atteint la limite de fournisseurs pour votre plan (${usage.suppliers.limit}). Veuillez mettre à niveau.`);
+  }
 
   // Serialize contact info into notes
   const notesWithContact = serializeContactInfo(data);

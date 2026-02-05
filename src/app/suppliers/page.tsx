@@ -15,6 +15,8 @@ import Link from 'next/link';
 import { Separator } from '@/components/ui/separator';
 import { SuppliersClientView } from './_components/suppliers-client-view';
 
+export const dynamic = 'force-dynamic';
+
 export default async function SuppliersPage() {
   // Fetch suppliers on the server
   const suppliers = await getSuppliersList();

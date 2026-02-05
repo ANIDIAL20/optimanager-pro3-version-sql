@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/ui/submit-button';
 import {
   Select,
   SelectContent,
@@ -28,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Check, ChevronsUpDown } from 'lucide-react';
+import { Check, ChevronsUpDown } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
@@ -414,10 +415,12 @@ export function SupplierForm({ supplier }: SupplierFormProps) {
         </div>
         <div className="flex justify-end gap-2 mt-4">
           <Button type="button" variant="outline" onClick={() => router.back()}>Annuler</Button>
-          <Button type="submit" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {supplier ? 'Enregistrer les modifications' : 'Enregistrer le fournisseur'}
-          </Button>
+          <SubmitButton
+            type="submit"
+            isLoading={form.formState.isSubmitting}
+            label={supplier ? 'Enregistrer les modifications' : 'Enregistrer le fournisseur'}
+            loadingLabel={supplier ? 'Enregistrement...' : 'Enregistrement...'}
+          />
         </div>
       </form>
     </Form>

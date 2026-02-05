@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getReminders } from '@/app/actions/reminder-actions';
-import { Loader2, FilterX } from 'lucide-react';
+import { FilterX } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import { useToast } from '@/hooks/use-toast';
 
 export function ReminderList() {
@@ -70,7 +71,7 @@ export function ReminderList() {
 
       {isLoading ? (
         <div className="flex justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+          <BrandLoader size="md" className="mx-auto text-gray-400" />
         </div>
       ) : reminders.length === 0 ? (
         <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-200">

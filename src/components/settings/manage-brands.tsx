@@ -15,12 +15,11 @@ import {
   PlusCircle,
   AlertCircle,
   Database,
-  Loader2,
-  Loader2,
   RefreshCw,
   Trash2,
   Download
 } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,7 +44,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { BrandForm } from './brand-form';
 import { seedBrands } from '@/lib/brands-seed';
-import { ManageItem } from './manage-item';
 import { ManageItem } from './manage-item';
 import { getSettings, createSetting, deleteAllSettings } from '@/app/actions/settings-actions';
 
@@ -264,7 +262,7 @@ export function ManageBrands() {
             {(!brands || brands.length < 2) && (
                 <Button variant="outline" onClick={handleSeedDatabase} disabled={isSeeding}>
                 {isSeeding ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <BrandLoader size="xs" className="mr-2 inline-flex" />
                 ) : (
                     <Download className="mr-2 h-4 w-4" />
                 )}
@@ -278,7 +276,7 @@ export function ManageBrands() {
             <AlertDialog>
                 <AlertDialogTrigger asChild>
                     <Button variant="destructive" disabled={isDeletingAll}>
-                        {isDeletingAll ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Trash2 className="mr-2 h-4 w-4"/>}
+                        {isDeletingAll ? <BrandLoader size="xs" className="mr-2 inline-flex" /> : <Trash2 className="mr-2 h-4 w-4"/>}
                         Tout supprimer
                     </Button>
                 </AlertDialogTrigger>

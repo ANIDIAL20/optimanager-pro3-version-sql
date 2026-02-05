@@ -9,7 +9,8 @@ import {
     DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Loader2, Printer } from 'lucide-react';
+import { X, Printer, Download } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 interface PrintPreviewDialogProps {
     open: boolean;
@@ -54,7 +55,7 @@ export function PrintPreviewDialog({ open, onOpenChange, url, title = "Aperçu a
                 <div className="flex-1 relative bg-slate-100 w-full">
                     {isLoading && (
                         <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                            <BrandLoader size="lg" className="mx-auto" />
                         </div>
                     )}
                     <iframe

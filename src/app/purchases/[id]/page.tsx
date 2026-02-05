@@ -5,9 +5,12 @@ export function generateStaticParams() {
   return [{ id: "static" }];
 }
 
-export default function Page({ params }: { params: { id: string } }) {
+import { BrandLoader } from '@/components/ui/loader-brand';
+
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   return (
-    <Suspense fallback={<div>Loading purchase...</div>}>
+    <Suspense fallback={<BrandLoader size="lg" className="mx-auto my-12" />}>
       <PurchaseView />
     </Suspense>
   );

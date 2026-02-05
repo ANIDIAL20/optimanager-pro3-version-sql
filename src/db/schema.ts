@@ -394,6 +394,26 @@ export const users = pgTable("users", {
     .default(0)
     .notNull(), // Count of consecutive failures
   lockoutUntil: timestamp("lockout_until"), // Time until unlock
+
+  // 🛡️ QUOTAS & LIMITS
+  maxProducts: integer("max_products").default(50).notNull(),
+  maxClients: integer("max_clients").default(20).notNull(),
+  maxSuppliers: integer("max_suppliers").default(10).notNull(),
+
+  // 💰 SUBSCRIPTION DATES
+  lastPaymentDate: timestamp("last_payment_date"),
+  nextPaymentDate: timestamp("next_payment_date"),
+  subscriptionExpiry: timestamp("subscription_expiry"),
+
+  // 💳 FINANCIAL TRACKING
+  paymentMode: text("payment_mode").$type<"subscription" | "lifetime">().default("subscription"), 
+  billingCycle: text("billing_cycle").$type<"monthly" | "yearly">().default("monthly"),
+  agreedPrice: decimal("agreed_price", { precision: 10, scale: 2 }),
+  trainingPrice: decimal("training_price", { precision: 10, scale: 2 }).default("0"),
+  setupPrice: decimal("setup_price", { precision: 10, scale: 2 }).default("0"),
+  amountPaid: decimal("amount_paid", { precision: 10, scale: 2 }).default("0"),
+  installmentsCount: integer("installments_count").default(1),
+  nextInstallmentDate: timestamp("next_installment_date"),
   
   // 📅 ACTIVITY TRACKING
   lastLoginAt: timestamp("last_login_at"),

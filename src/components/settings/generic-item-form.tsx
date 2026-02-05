@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { createSetting, updateSetting } from '@/app/actions/settings-actions';
-import { Loader2 } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import { useState } from 'react';
 
 const GenericItemSchema = z.object({
@@ -112,7 +112,7 @@ export function GenericItemForm({ item, collectionName, itemName, onSuccess }: G
           )}
         />
         <Button type="submit" disabled={isSubmitting} className="w-full">
-          {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {isSubmitting && <BrandLoader size="xs" className="mr-2 inline-flex" />}
           {item ? 'Enregistrer' : `Ajouter`}
         </Button>
       </form>

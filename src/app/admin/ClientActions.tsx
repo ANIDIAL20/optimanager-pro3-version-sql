@@ -20,7 +20,8 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { MoreHorizontal, Lock, Unlock, CalendarPlus, Trash2, Loader2 } from 'lucide-react';
+import { MoreHorizontal, Trash2, Edit, Eye } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { toggleClientStatus, extendSubscription, deleteClient as serverDeleteClient } from '@/app/actions/adminActions';
@@ -37,6 +38,7 @@ interface ClientActionsProps {
 export function ClientActions({ client }: ClientActionsProps) {
     const [isPending, startTransition] = React.useTransition();
     const [isLoading, setIsLoading] = React.useState(false);
+    const [isDeleting, setIsDeleting] = React.useState(false); // New state for delete action
     const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
     const { toast } = useToast();
     const router = useRouter();
@@ -98,7 +100,7 @@ export function ClientActions({ client }: ClientActionsProps) {
 
     // Simplified deletion for SQL version
     const handleDeepDelete = async () => {
-        setIsLoading(true);
+        setIsDeleting(true); // Use isDeleting for this action
         startTransition(async () => {
             try {
                 // Call server action to delete Auth user and client profile
@@ -124,7 +126,7 @@ export function ClientActions({ client }: ClientActionsProps) {
                     description: error.message || 'Impossible de supprimer le client.',
                 });
             } finally {
-                setIsLoading(false);
+                setIsDeleting(false); // Use isDeleting for this action
             }
         });
     };
@@ -134,9 +136,9 @@ export function ClientActions({ client }: ClientActionsProps) {
             {/* DropdownMenu with modal={false} to prevent UI freeze */}
             <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-8 w-8 p-0" disabled={isLoading || isPending}>
-                        {isLoading || isPending ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                    <Button variant="ghost" className="h-8 w-8 p-0" disabled={isLoading || isPending || isDeleting}>
+                        {isLoading || isPending || isDeleting ? (
+                            <BrandLoader size="xs" className="h-4 w-4 animate-spin" />
                         ) : (
                             <MoreHorizontal className="h-4 w-4" />
                         )}
@@ -147,28 +149,28 @@ export function ClientActions({ client }: ClientActionsProps) {
                     <DropdownMenuSeparator />
 
                     {/* Toggle Status */}
-                    <DropdownMenuItem onClick={handleToggleStatus} disabled={isLoading}>
+                    <DropdownMenuItem onClick={handleToggleStatus} disabled={isLoading || isDeleting}>
                         {client.status === 'active' ? (
                             <>
-                                <Lock className="mr-2 h-4 w-4" />
+                                <Eye className="mr-2 h-4 w-4" /> {/* Changed from Lock */}
                                 <span>Suspendre</span>
                             </>
                         ) : (
                             <>
-                                <Unlock className="mr-2 h-4 w-4" />
+                                <Edit className="mr-2 h-4 w-4" /> {/* Changed from Unlock */}
                                 <span>Activer</span>
                             </>
                         )}
                     </DropdownMenuItem>
 
                     {/* Extend Subscription */}
-                    <DropdownMenuItem onClick={() => handleExtend('monthly')} disabled={isLoading}>
-                        <CalendarPlus className="mr-2 h-4 w-4" />
+                    <DropdownMenuItem onClick={() => handleExtend('monthly')} disabled={isLoading || isDeleting}>
+                        <Edit className="mr-2 h-4 w-4" /> {/* Changed from CalendarPlus */}
                         <span>Prolonger 1 mois</span>
                     </DropdownMenuItem>
 
-                    <DropdownMenuItem onClick={() => handleExtend('yearly')} disabled={isLoading}>
-                        <CalendarPlus className="mr-2 h-4 w-4" />
+                    <DropdownMenuItem onClick={() => handleExtend('yearly')} disabled={isLoading || isDeleting}>
+                        <Edit className="mr-2 h-4 w-4" /> {/* Changed from CalendarPlus */}
                         <span>Prolonger 1 an</span>
                     </DropdownMenuItem>
 
@@ -177,7 +179,7 @@ export function ClientActions({ client }: ClientActionsProps) {
                     {/* Delete Client */}
                     <DropdownMenuItem
                         onClick={() => setShowDeleteDialog(true)}
-                        disabled={isLoading}
+                        disabled={isLoading || isDeleting}
                         className="text-red-600 focus:text-red-600"
                     >
                         <Trash2 className="mr-2 h-4 w-4" />
@@ -214,18 +216,18 @@ export function ClientActions({ client }: ClientActionsProps) {
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isLoading}>Annuler</AlertDialogCancel>
+                        <AlertDialogCancel disabled={isLoading || isDeleting}>Annuler</AlertDialogCancel>
                         <AlertDialogAction
                             onClick={(e) => {
                                 e.preventDefault();
                                 handleDeepDelete();
                             }}
-                            disabled={isLoading}
+                            disabled={isDeleting}
                             className="bg-red-600 hover:bg-red-700"
                         >
-                            {isLoading ? (
+                            {isDeleting ? (
                                 <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  {isDeleting && <BrandLoader size="xs" className="mr-2 inline-flex" />}
                                     Suppression...
                                 </>
                             ) : (

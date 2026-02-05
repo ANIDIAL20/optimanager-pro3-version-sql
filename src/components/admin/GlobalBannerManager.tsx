@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from 'sonner';
-import { Megaphone, Save, Loader2 } from 'lucide-react';
+import { Megaphone } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 export function GlobalBannerManager({ initialData }: { initialData?: any }) {
     const [message, setMessage] = useState(initialData?.message || '');
@@ -64,7 +65,7 @@ export function GlobalBannerManager({ initialData }: { initialData?: any }) {
             </div>
 
             <Button onClick={handleSave} disabled={isLoading} className="w-full mt-2">
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isLoading && <BrandLoader size="xs" className="inline-flex" />}
                 Publier
             </Button>
         </div>

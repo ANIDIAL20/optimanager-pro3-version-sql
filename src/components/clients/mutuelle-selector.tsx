@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronsUpDown, Loader2 } from "lucide-react"
+import { Check, ChevronsUpDown } from "lucide-react"
+import { BrandLoader } from '@/components/ui/loader-brand';
 import { Command as CommandPrimitive } from "cmdk"
 
 import { cn } from "@/lib/utils"
@@ -95,7 +96,7 @@ export function MutuelleSelector({ value, onSelect }: MutuelleSelectorProps) {
                         tabIndex={-1}
                     >
                         {isLoading ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <BrandLoader size="xs" />
                         ) : (
                             <ChevronsUpDown className="h-4 w-4" />
                         )}

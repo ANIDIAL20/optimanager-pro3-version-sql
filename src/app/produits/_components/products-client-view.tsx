@@ -26,9 +26,10 @@ import { useToast } from '@/hooks/use-toast';
 interface ProductsClientViewProps {
     initialProducts: Product[];
     initialCategories: { id: string, name: string }[];
+    usageStats: { products: number, maxProducts: number };
 }
 
-export function ProductsClientView({ initialProducts, initialCategories }: ProductsClientViewProps) {
+export function ProductsClientView({ initialProducts, initialCategories, usageStats }: ProductsClientViewProps) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [categoryFilter, setCategoryFilter] = React.useState<string>('all');
   const [products, setProducts] = React.useState<Product[]>(initialProducts);
@@ -133,7 +134,17 @@ export function ProductsClientView({ initialProducts, initialCategories }: Produ
                 <Package className="h-4 w-4 text-white" />
               </div>
             </div>
-            <h3 className="text-3xl font-bold text-slate-900">{stats.total}</h3>
+            <h3 className="text-3xl font-bold text-slate-900">
+                {stats.total} <span className="text-sm text-slate-400 font-normal">/ {usageStats.maxProducts}</span>
+            </h3>
+            <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                <div 
+                    className={cn("h-full rounded-full transition-all duration-500", 
+                        (stats.total / usageStats.maxProducts) > 0.9 ? "bg-red-500" : "bg-blue-500"
+                    )}
+                    style={{ width: `${Math.min((stats.total / usageStats.maxProducts) * 100, 100)}%` }}
+                />
+            </div>
           </div>
         </SpotlightCard>
 
