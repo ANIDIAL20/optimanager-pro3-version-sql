@@ -226,6 +226,7 @@ export function ProductForm({ product }: ProductFormProps) {
             // Lookup names using the IDs
             categorie: categories?.find(c => c.id === data.categorieId)?.name,
             marque: brands?.find(b => b.id === data.marqueId)?.name,
+            shouldRedirect: !stayOnPage
         };
 
         let result;
@@ -236,7 +237,7 @@ export function ProductForm({ product }: ProductFormProps) {
             result = await createProduct(payload);
         }
 
-        if (result.success) {
+        if (result && result.success) {
              toast({
               title: product ? 'Produit modifié' : 'Produit ajouté',
               description: result.message || `Le produit "${data.nomProduit}" a été enregistré.`,
@@ -259,15 +260,16 @@ export function ProductForm({ product }: ProductFormProps) {
                   matiereId: ''
                 });
                 setImagePreview(null);
-            } else {
-                router.push('/produits');
-                router.refresh();
             }
+            // If redirecting, server action handles it via redirect() which throws NEXT_REDIRECT
         } else {
-            throw new Error(result.error);
+            if (result?.error) throw new Error(result.error);
         }
 
     } catch (error: any) {
+      if (error.message === 'NEXT_REDIRECT' || error.digest === 'NEXT_REDIRECT') {
+          return;
+      }
       console.error("Submit Error:", error);
       toast({
         variant: 'destructive',

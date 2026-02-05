@@ -174,13 +174,13 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
                 description={`Effectuée le ${format(new Date(sale.date || sale.createdAt), "d MMMM yyyy 'à' HH:mm", { locale: fr })}`}
             >
                 <div className="flex gap-2">
+                    {client && shopSettings && (
+                        <InvoiceActions sale={sale} client={client} shopSettings={shopSettings} />
+                    )}
                     <Button variant="outline" className="gap-2 text-orange-600 border-orange-200 hover:text-orange-700 hover:bg-orange-50" onClick={() => setShowReturnDialog(true)}>
                         <RotateCcw className="h-4 w-4" />
                         Retourner
                     </Button>
-                    {client && shopSettings && (
-                        <InvoiceActions sale={sale} client={client} shopSettings={shopSettings} />
-                    )}
                     {sale && (
                         <>
                             <ReturnItemsDialog
@@ -233,35 +233,20 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
                             <div className="space-y-3">
                                 <div className="flex items-center gap-2 font-semibold text-lg">
                                     <User className="h-5 w-5 text-blue-600" />
-                                    {client ? (
-                                        <span>{client.nom ? `${client.prenom} ${client.nom}` : client.name}</span>
-                                    ) : (
-                                        <span className="italic text-muted-foreground">
-                                            {sale.clientName || 'Client Anonyme'}
-                                        </span>
-                                    )}
+                                    <span>
+                                        {client ? (client.nom ? `${client.prenom} ${client.nom}` : client.name) : (sale.clientName || 'Client Anonyme')}
+                                    </span>
                                 </div>
-                                {client ? (
-                                    <div className="flex gap-6 text-sm">
-                                        <div className="flex items-center gap-2 text-muted-foreground">
-                                            <Phone className="h-4 w-4" />
-                                            {client.telephone1 || client.phone || 'N/A'}
-                                        </div>
-                                        {(client.assuranceId || client.mutuelle) && (
-                                            <div className="flex items-center gap-2 text-muted-foreground">
-                                                <Building2 className="h-4 w-4" />
-                                                {client.assuranceId || client.mutuelle}
-                                            </div>
-                                        )}
+                                <div className="flex gap-6 text-sm">
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <Phone className="h-4 w-4" />
+                                        {client ? (client.telephone1 || client.phone || 'N/A') : (sale.clientPhone || 'N/A')}
                                     </div>
-                                ) : (
-                                     <div className="flex gap-6 text-sm">
-                                        <div className="flex items-center gap-2 text-muted-foreground">
-                                            <Phone className="h-4 w-4" />
-                                            {sale.clientPhone || 'N/A'}
-                                        </div>
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <Building2 className="h-4 w-4" />
+                                        <span>Client</span>
                                     </div>
-                                )}
+                                </div>
                             </div>
                         </div>
                     </CardContent>

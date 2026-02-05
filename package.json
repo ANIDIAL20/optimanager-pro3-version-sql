@@ -13,7 +13,8 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:migrate": "tsx scripts/migrate-firebase-to-neon.ts",
-    "db:migrate:all": "tsx scripts/migrate-all-collections.ts"
+    "db:migrate:all": "tsx scripts/migrate-all-collections.ts",
+    "set-admin": "tsx scripts/set-admin.ts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.1",

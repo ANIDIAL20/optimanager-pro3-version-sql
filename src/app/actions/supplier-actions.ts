@@ -4,8 +4,7 @@
 import { db } from '@/db';
 import { suppliers } from '@/db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
-
-import { auth } from '@/auth';
+import { secureAction } from '@/lib/secure-action';
 import { revalidatePath } from 'next/cache';
 import { unstable_noStore as noStore } from 'next/cache';
 
@@ -45,22 +44,16 @@ function parseContactInfo(notes: string | null) {
 /**
  * Get all suppliers for the current user
  */
-export async function getSuppliersList() {
+export const getSuppliersList = secureAction(async (userId, user) => {
   noStore();
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    throw new Error('Non authentifié');
-  }
   
-  console.log('⚡ [v2] Fetching suppliers list for user:', session.user.id);
-
+  console.log('⚡ [v2] Fetching suppliers list for user:', userId);
 
   try {
     // Fallback to raw SQL since query builder is failing
     const query = sql`
       SELECT * FROM "suppliers"
-      WHERE "user_id"::text = ${session.user.id}
+      WHERE "user_id"::text = ${userId}
       ORDER BY "created_at" DESC
     `;
     
@@ -114,46 +107,80 @@ export async function getSuppliersList() {
     console.error('[getSuppliersList] CRITICAL SQL ERROR:', error);
     throw new Error(`Erreur récupération fournisseurs (SQL): ${error.message}`);
   }
-}
+});
 
 /**
  * Get a single supplier by ID
  */
-export async function getSupplier(id: string) {
+export const getSupplier = secureAction(async (userId, user, id: string) => {
   noStore();
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    throw new Error('Non authentifié');
-  }
 
   try {
     // Reuse the working getSuppliersList query to ensure consistency and prevent "Failed query" errors
     // This is safer than running a separate ad-hoc query that might differ in subtle ways
-    const allSuppliers = await getSuppliersList();
+    // Note: Calling secureAction from within secureAction is tricky with args.
+    // We'll just call the implementation logic if possible, or just re-run the query efficiently.
     
-    // Find specific supplier in memory
-    const supplier = allSuppliers.find((s: any) => String(s.id) === String(id));
+    // Efficient query for single item
+    const query = sql`
+      SELECT * FROM "suppliers"
+      WHERE "id"::text = ${id} AND "user_id"::text = ${userId}
+      LIMIT 1
+    `;
+    
+    const result = await db.execute(query);
+    const row = result.rows[0];
 
-    if (!supplier) return null;
+    if (!row) return null;
 
-    return supplier;
+    // Map single item
+    const contactInfo = parseContactInfo((row as any).notes);
+    return {
+        id: (row as any).id,
+        userId: (row as any).user_id,
+        name: (row as any).name,
+        email: (row as any).email,
+        phone: (row as any).phone,
+        address: (row as any).address,
+        city: (row as any).city,
+        ice: (row as any).ice,
+        if: (row as any).if,
+        rc: (row as any).rc,
+        taxId: (row as any).tax_id,
+        category: (row as any).category,
+        paymentTerms: (row as any).payment_terms,
+        paymentMethod: (row as any).payment_method,
+        bank: (row as any).bank,
+        rib: (row as any).rib,
+        notes: contactInfo.cleanNotes,
+        status: (row as any).status,
+        createdAt: (row as any).created_at,
+        updatedAt: (row as any).updated_at,
+        
+        // UI Keys
+        nomCommercial: (row as any).name,
+        telephone: (row as any).phone,
+        typeProduits: (row as any).category ? (row as any).category.split(', ') : [],
+        adresse: (row as any).address,
+        ville: (row as any).city,
+        delaiPaiement: (row as any).payment_terms,
+        modePaiement: (row as any).payment_method,
+        banque: (row as any).bank,
+        contactNom: contactInfo.nom,
+        contactTelephone: contactInfo.tel,
+        contactEmail: contactInfo.email,
+    };
+
   } catch (error: any) {
     console.error('❌ Error fetching supplier:', error);
     throw new Error(`Erreur lors de la récupération du fournisseur: ${error.message}`);
   }
-}
+});
 
 /**
  * Create a new supplier
  */
-export async function createSupplier(data: any) {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    throw new Error('Non authentifié');
-  }
-
+export const createSupplier = secureAction(async (userId, user, data: any) => {
   console.log('📝 Creating supplier with data:', JSON.stringify(data, null, 2));
 
   // Serialize contact info into notes
@@ -163,7 +190,7 @@ export async function createSupplier(data: any) {
     const [created] = await db
       .insert(suppliers)
       .values({
-        userId: session.user.id,
+        userId, // from secureAction
         name: data.nomCommercial, // Key from payload
         email: data.email || null,
         phone: data.phone || null,
@@ -195,18 +222,12 @@ export async function createSupplier(data: any) {
     });
     throw new Error(`Erreur lors de la création: ${error.message}`);
   }
-}
+});
 
 /**
  * Update a supplier
  */
-export async function updateSupplier(id: string, data: any) {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    throw new Error('Non authentifié');
-  }
-
+export const updateSupplier = secureAction(async (userId, user, id: string, data: any) => {
   console.log('📝 [updateSupplier] Processing update for:', id);
 
   // 1. Build Payload explicitly to exclude non-schema fields
@@ -267,7 +288,7 @@ export async function updateSupplier(id: string, data: any) {
   const query = sql`
     UPDATE "suppliers"
     SET ${sql.join(explicitSetClauses, sql`, `)}
-    WHERE "id"::text = ${id} AND "user_id" = ${session.user.id}
+    WHERE "id"::text = ${id} AND "user_id" = ${userId}
     RETURNING *
   `;
 
@@ -284,27 +305,21 @@ export async function updateSupplier(id: string, data: any) {
      console.error("❌ SQL Update Error:", err);
      throw new Error("Erreur mise à jour fournisseur: " + err.message);
   }
-}
+});
 
 /**
  * Delete a supplier
  */
-export async function deleteSupplier(id: string) {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    throw new Error('Non authentifié');
-  }
-
+export const deleteSupplier = secureAction(async (userId, user, id: string) => {
   await db
     .delete(suppliers)
     .where(
       and(
         eq(suppliers.id, id),
-        eq(suppliers.userId, session.user.id)
+        eq(suppliers.userId, userId)
       )
     );
 
   revalidatePath('/dashboard/fournisseurs');
   return { success: true };
-}
+});

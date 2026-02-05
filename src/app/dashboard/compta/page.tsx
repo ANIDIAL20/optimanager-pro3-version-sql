@@ -1,170 +1,129 @@
 'use client';
 
 import * as React from 'react';
-// TODO: Migrate accounting to SQL - fetch from sales-actions.ts
-// import { useFirebase, useFirestore } from '@/firebase';
-// import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Loader2, TrendingUp, ShoppingCart, DollarSign, FileText, Users, Package, ArrowUpRight } from 'lucide-react';
-import { format, startOfDay, startOfMonth, startOfYear, subMonths } from 'date-fns';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { SensitiveData } from '@/components/ui/sensitive-data';
 import { useToast } from '@/hooks/use-toast';
+import { getAccountingMetrics, exportSalesData, exportClientsData, exportStockData, type AccountingMetrics } from '@/app/actions/accounting-actions';
+
+// Constants
+const CARD_COLORS = {
+    revenue: {
+        spotlight: "rgba(16, 185, 129, 0.15)",
+        gradient: "from-emerald-500 to-teal-600",
+        text: "text-emerald-600"
+    },
+    sales: {
+        spotlight: "rgba(139, 92, 246, 0.15)",
+        gradient: "from-purple-500 to-pink-600",
+        text: "text-purple-600"
+    },
+    cart: {
+        spotlight: "rgba(59, 130, 246, 0.15)",
+        gradient: "from-blue-500 to-cyan-600",
+        text: "text-blue-600"
+    }
+};
 
 export default function AccountingPage() {
-    // const { user } = useFirebase();
-    // const firestore = useFirestore();
-
     const [dateRange, setDateRange] = React.useState('thisMonth');
     const { toast } = useToast();
-    const [sales, setSales] = React.useState<any[]>([]);
-    const [isLoading, setIsLoading] = React.useState(false);
-    const [isExporting, setIsExporting] = React.useState(false);
+    
+    // Data State
+    const [metrics, setMetrics] = React.useState<AccountingMetrics | null>(null);
+    const [isLoading, setIsLoading] = React.useState(true);
+    const [isExporting, setIsExporting] = React.useState<string | null>(null); // 'sales' | 'clients' | 'stock' | null
 
-    // TODO: Replace with SQL queries from sales-actions.ts
-    /* Firebase version
-    const getStartDate = (range: string) => {
-        const now = new Date();
-        switch (range) {
-            case 'today': return startOfDay(now);
-            case 'thisMonth': return startOfMonth(now);
-            case 'lastMonth': return startOfMonth(subMonths(now, 1));
-            case 'thisYear': return startOfYear(now);
-            default: return startOfMonth(now);
-        }
-    };
-
+    // Fetch Data
     React.useEffect(() => {
-        const fetchData = async () => {
-            if (!user || !firestore) return;
+        let isMounted = true;
+
+        async function loadData() {
             setIsLoading(true);
             try {
-                const startDate = getStartDate(dateRange);
-                const salesRef = collection(firestore, `stores/${user.uid}/sales`);
-                const q = query(
-                    salesRef,
-                    where('date', '>=', startDate.toISOString()),
-                    orderBy('date', 'desc')
-                );
-                const snapshot = await getDocs(q);
-                const salesData = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                    date: doc.data().date?.toDate ? doc.data().date.toDate().toISOString() : doc.data().date,
-                }));
-                setSales(salesData);
+                const result = await getAccountingMetrics(dateRange);
+                if (isMounted) {
+                    if (result.success && result.data) {
+                        setMetrics(result.data);
+                    } else {
+                        console.error("Failed to load metrics:", result.error);
+                        toast({
+                            variant: "destructive",
+                            title: "Erreur",
+                            description: "Impossible de charger les données comptables."
+                        });
+                    }
+                }
             } catch (error) {
-                console.error("Error fetching accounting data:", error);
+                console.error("Error loading metrics:", error);
             } finally {
-                setIsLoading(false);
+                if (isMounted) setIsLoading(false);
             }
-        };
-        fetchData();
-    }, [user, firestore, dateRange]);
-    */
-
-    // KPI Calculations
-    const totalRevenue = sales.reduce((acc, sale) => acc + (sale.totalTTC || 0), 0);
-    const totalSalesCount = sales.length;
-    const averageCart = totalSalesCount > 0 ? totalRevenue / totalSalesCount : 0;
-
-    // Chart Data Preparation
-    const chartData = React.useMemo(() => {
-        const dataMap = new Map();
-        sales.forEach(sale => {
-            const dateKey = format(new Date(sale.date), "dd/MM");
-            const current = dataMap.get(dateKey) || 0;
-            dataMap.set(dateKey, current + (sale.totalTTC || 0));
-        });
-
-        return Array.from(dataMap.entries())
-            .map(([date, amount]) => ({ date, amount }))
-            .reverse();
-    }, [sales]);
-
-    // Export Handler - Disabled pending SQL migration
-    const handleExport = async (type: 'sales' | 'clients' | 'stock') => {
-        toast({
-            title: "Fonctionnalité désactivée",
-            description: "Les exports sont temporairement indisponibles en attente de migration.",
-        });
-        return;
-        
-        /* Firebase version
-        if (!user || !firestore) return;
-        setIsExporting(true);
-        try {
-            let data: any[] = [];
-            let headers: string[] = [];
-            let filename = `${type}_export_${format(new Date(), 'yyyy-MM-dd')}.csv`;
-            if (type === 'sales') {
-                const allSalesSnap = await getDocs(collection(firestore, `stores/${user.uid}/sales`));
-                data = allSalesSnap.docs.map(doc => {
-                    const d = doc.data();
-                    const dateValue = d.date?.toDate ? d.date.toDate() : new Date(d.date);
-                    return {
-                        ID: doc.id,
-                        Date: format(dateValue, 'dd/MM/yyyy HH:mm'),
-                        Client: d.clientName || 'Inconnu',
-                        Total_TTC: d.totalTTC || 0,
-                        Status: d.status || 'Validé'
-                    };
-                });
-                headers = ['ID', 'Date', 'Client', 'Total_TTC', 'Status'];
-            }
-            else if (type === 'clients') {
-                const clientsSnap = await getDocs(collection(firestore, `stores/${user.uid}/clients`));
-                data = clientsSnap.docs.map(doc => {
-                    const d = doc.data();
-                    return {
-                        Nom: d.nom,
-                        Prenom: d.prenom,
-                        Telephone: d.telephone1 || d.phone,
-                        Email: d.email || ''
-                    };
-                });
-                headers = ['Nom', 'Prenom', 'Telephone', 'Email'];
-            }
-            else if (type === 'stock') {
-                const stockSnap = await getDocs(collection(firestore, `stores/${user.uid}/products`));
-                data = stockSnap.docs.map(doc => {
-                    const d = doc.data();
-                    return {
-                        Référence: d.reference,
-                        Nom: d.nom,
-                        Prix_Achat: d.prixAchat || 0,
-                        Prix_Vente: d.prixVente || 0,
-                        Stock: d.stock || 0
-                    };
-                });
-                headers = ['Référence', 'Nom', 'Prix_Achat', 'Prix_Vente', 'Stock'];
-            }
-            const csvContent = [
-                headers.join(','),
-                ...data.map(row => headers.map(fieldName => `"${String(row[fieldName]).replace(/"/g, '""')}"`).join(','))
-            ].join('\n');
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', filename);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        } catch (error) {
-            console.error("Export failed:", error);
-        } finally {
-            setIsExporting(false);
         }
-        */
+
+        loadData();
+
+        return () => { isMounted = false; };
+    }, [dateRange, toast]);
+
+
+    // Export Handler
+    const handleExport = async (type: 'sales' | 'clients' | 'stock') => {
+        setIsExporting(type);
+        try {
+            let result;
+            
+            switch (type) {
+                case 'sales':
+                    result = await exportSalesData();
+                    break;
+                case 'clients':
+                    result = await exportClientsData();
+                    break;
+                case 'stock':
+                    result = await exportStockData();
+                    break;
+            }
+
+            if (result && result.success && result.data) {
+                // Create Blob and Download
+                const blob = new Blob([result.data], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', result.filename || `${type}_export.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                toast({
+                    title: "Export réussi",
+                    description: `Le fichier ${type} a été téléchargé.`
+                });
+            } else {
+                throw new Error(result?.error || "Erreur inconnue");
+            }
+            
+        } catch (error: any) {
+            console.error("Export failed:", error);
+             toast({
+                variant: "destructive",
+                title: "Erreur d'export",
+                description: error.message || "Une erreur est survenue lors de l'export."
+            });
+        } finally {
+            setIsExporting(null);
+        }
     };
 
     return (
         <div className="container mx-auto p-6 space-y-8">
             {/* Header */}
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Exports & Rapports</h1>
                     <p className="text-muted-foreground">Analysez vos performances et exportez vos données.</p>
@@ -175,6 +134,7 @@ export default function AccountingPage() {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="today">Aujourd'hui</SelectItem>
+                        <SelectItem value="yesterday">Hier</SelectItem>
                         <SelectItem value="thisMonth">Ce Mois</SelectItem>
                         <SelectItem value="lastMonth">Mois Dernier</SelectItem>
                         <SelectItem value="thisYear">Cette Année</SelectItem>
@@ -182,14 +142,15 @@ export default function AccountingPage() {
                 </Select>
             </div>
 
-            {/* KPI Cards - Sales Page Style */}
+            {/* KPI Cards */}
             <div className="grid gap-6 md:grid-cols-3">
-                {/* Revenue Card */}
-                <SpotlightCard className="p-6" spotlightColor="rgba(16, 185, 129, 0.15)">
+                
+                {/* Revenue */}
+                <SpotlightCard className="p-6" spotlightColor={CARD_COLORS.revenue.spotlight}>
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
                             <p className="text-sm font-medium text-slate-600">Chiffre d'Affaires</p>
-                            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+                            <div className={`h-8 w-8 rounded-lg bg-gradient-to-br ${CARD_COLORS.revenue.gradient} flex items-center justify-center`}>
                                 <DollarSign className="h-4 w-4 text-white" />
                             </div>
                         </div>
@@ -198,9 +159,9 @@ export default function AccountingPage() {
                         ) : (
                             <div className="space-y-1">
                                 <h3 className="text-3xl font-bold text-slate-900">
-                                    <SensitiveData value={totalRevenue} type="currency" />
+                                    <SensitiveData value={metrics?.totalRevenue || 0} type="currency" />
                                 </h3>
-                                <div className="flex items-center gap-1 text-sm text-emerald-600">
+                                <div className={`flex items-center gap-1 text-sm ${CARD_COLORS.revenue.text}`}>
                                     <ArrowUpRight className="h-4 w-4" />
                                     <span className="font-medium">Sur la période</span>
                                 </div>
@@ -209,12 +170,12 @@ export default function AccountingPage() {
                     </div>
                 </SpotlightCard>
 
-                {/* Sales Card */}
-                <SpotlightCard className="p-6" spotlightColor="rgba(139, 92, 246, 0.15)">
+                {/* Sales Count */}
+                <SpotlightCard className="p-6" spotlightColor={CARD_COLORS.sales.spotlight}>
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
                             <p className="text-sm font-medium text-slate-600">Ventes Réalisées</p>
-                            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
+                            <div className={`h-8 w-8 rounded-lg bg-gradient-to-br ${CARD_COLORS.sales.gradient} flex items-center justify-center`}>
                                 <ShoppingCart className="h-4 w-4 text-white" />
                             </div>
                         </div>
@@ -223,9 +184,9 @@ export default function AccountingPage() {
                         ) : (
                             <div className="space-y-1">
                                 <h3 className="text-3xl font-bold text-slate-900">
-                                    {totalSalesCount}
+                                    {metrics?.salesCount || 0}
                                 </h3>
-                                <div className="flex items-center gap-1 text-sm text-purple-600">
+                                <div className={`flex items-center gap-1 text-sm ${CARD_COLORS.sales.text}`}>
                                     <ArrowUpRight className="h-4 w-4" />
                                     <span className="font-medium">Total factures</span>
                                 </div>
@@ -234,12 +195,12 @@ export default function AccountingPage() {
                     </div>
                 </SpotlightCard>
 
-                {/* Average Cart Card */}
-                <SpotlightCard className="p-6" spotlightColor="rgba(59, 130, 246, 0.15)">
+                {/* Average Cart */}
+                <SpotlightCard className="p-6" spotlightColor={CARD_COLORS.cart.spotlight}>
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
                             <p className="text-sm font-medium text-slate-600">Panier Moyen</p>
-                            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center">
+                            <div className={`h-8 w-8 rounded-lg bg-gradient-to-br ${CARD_COLORS.cart.gradient} flex items-center justify-center`}>
                                 <TrendingUp className="h-4 w-4 text-white" />
                             </div>
                         </div>
@@ -248,9 +209,9 @@ export default function AccountingPage() {
                         ) : (
                             <div className="space-y-1">
                                 <h3 className="text-3xl font-bold text-slate-900">
-                                    <SensitiveData value={averageCart} type="currency" />
+                                    <SensitiveData value={metrics?.averageCart || 0} type="currency" />
                                 </h3>
-                                <div className="flex items-center gap-1 text-sm text-blue-600">
+                                <div className={`flex items-center gap-1 text-sm ${CARD_COLORS.cart.text}`}>
                                     <ArrowUpRight className="h-4 w-4" />
                                     <span className="font-medium">Moyenne par vente</span>
                                 </div>
@@ -260,8 +221,8 @@ export default function AccountingPage() {
                 </SpotlightCard>
             </div>
 
-            {/* Premium Chart Card */}
-            <Card className="rounded-xl shadow-lg">
+            {/* Chart */}
+            <Card className="rounded-xl shadow-lg border-slate-200">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <TrendingUp className="h-5 w-5 text-primary" />
@@ -276,7 +237,7 @@ export default function AccountingPage() {
                         </div>
                     ) : (
                         <ResponsiveContainer width="100%" height={350}>
-                            <AreaChart data={chartData}>
+                            <AreaChart data={metrics?.chartData || []}>
                                 <defs>
                                     <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                                         <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
@@ -306,7 +267,7 @@ export default function AccountingPage() {
                                         padding: '12px'
                                     }}
                                     labelStyle={{ fontWeight: 'bold', marginBottom: '4px' }}
-                                    formatter={(value: any) => [`${value} DH`, 'Chiffre d\'Affaires']}
+                                    formatter={(value: any) => [`${Number(value).toFixed(2)} DH`, 'Chiffre d\'Affaires']}
                                 />
                                 <Area
                                     type="monotone"
@@ -321,75 +282,76 @@ export default function AccountingPage() {
                 </CardContent>
             </Card>
 
-            {/* Premium Export Cards Grid */}
+            {/* Exports Section */}
             <div>
                 <h2 className="text-2xl font-bold mb-4">Exporter vos Données</h2>
                 <p className="text-muted-foreground mb-6">Téléchargez vos données au format CSV pour une analyse approfondie.</p>
 
                 <div className="grid gap-6 md:grid-cols-3">
-                    {/* Sales Export Card */}
+                    
+                    {/* Sales Export */}
                     <Card
-                        className="cursor-pointer p-6 border border-slate-200 hover:border-primary/50 hover:shadow-md transition-all"
-                        onClick={() => handleExport('sales')}
+                        className="cursor-pointer p-6 border border-slate-200 hover:border-primary/50 hover:shadow-md transition-all group"
+                        onClick={() => !isExporting && handleExport('sales')}
                     >
                         <div className="flex flex-col items-center justify-center text-center space-y-4">
-                            <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm">
+                            <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
                                 <FileText className="h-8 w-8 text-white" />
                             </div>
                             <div>
                                 <h3 className="font-bold text-lg text-slate-900 mb-1">Exporter Ventes</h3>
                                 <p className="text-sm text-slate-600">Historique complet des ventes</p>
                             </div>
-                            {isExporting ? (
+                            {isExporting === 'sales' ? (
                                 <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
                             ) : (
-                                <div className="text-xs text-blue-600 font-medium">
+                                <div className="text-xs text-blue-600 font-medium group-hover:underline">
                                     Cliquer pour télécharger
                                 </div>
                             )}
                         </div>
                     </Card>
 
-                    {/* Clients Export Card */}
+                    {/* Clients Export */}
                     <Card
-                        className="cursor-pointer p-6 border border-slate-200 hover:border-primary/50 hover:shadow-md transition-all"
-                        onClick={() => handleExport('clients')}
+                        className="cursor-pointer p-6 border border-slate-200 hover:border-primary/50 hover:shadow-md transition-all group"
+                        onClick={() => !isExporting && handleExport('clients')}
                     >
                         <div className="flex flex-col items-center justify-center text-center space-y-4">
-                            <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-sm">
+                            <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
                                 <Users className="h-8 w-8 text-white" />
                             </div>
                             <div>
                                 <h3 className="font-bold text-lg text-slate-900 mb-1">Exporter Clients</h3>
                                 <p className="text-sm text-slate-600">Base de données clients</p>
                             </div>
-                            {isExporting ? (
+                            {isExporting === 'clients' ? (
                                 <Loader2 className="h-5 w-5 animate-spin text-emerald-500" />
                             ) : (
-                                <div className="text-xs text-emerald-600 font-medium">
+                                <div className="text-xs text-emerald-600 font-medium group-hover:underline">
                                     Cliquer pour télécharger
                                 </div>
                             )}
                         </div>
                     </Card>
 
-                    {/* Stock Export Card */}
+                    {/* Stock Export */}
                     <Card
-                        className="cursor-pointer p-6 border border-slate-200 hover:border-primary/50 hover:shadow-md transition-all"
-                        onClick={() => handleExport('stock')}
+                        className="cursor-pointer p-6 border border-slate-200 hover:border-primary/50 hover:shadow-md transition-all group"
+                        onClick={() => !isExporting && handleExport('stock')}
                     >
                         <div className="flex flex-col items-center justify-center text-center space-y-4">
-                            <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-sm">
+                            <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
                                 <Package className="h-8 w-8 text-white" />
                             </div>
                             <div>
                                 <h3 className="font-bold text-lg text-slate-900 mb-1">Exporter Stock</h3>
                                 <p className="text-sm text-slate-600">État actuel de l'inventaire</p>
                             </div>
-                            {isExporting ? (
+                            {isExporting === 'stock' ? (
                                 <Loader2 className="h-5 w-5 animate-spin text-violet-500" />
                             ) : (
-                                <div className="text-xs text-violet-600 font-medium">
+                                <div className="text-xs text-violet-600 font-medium group-hover:underline">
                                     Cliquer pour télécharger
                                 </div>
                             )}

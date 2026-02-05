@@ -10,196 +10,10 @@ import {
 import type { Devis } from '@/app/actions/devis-actions';
 import type { Client } from '@/lib/types';
 
-// Reuse InvoicePDF styles for consistency
-const styles = StyleSheet.create({
-    page: {
-        padding: 40,
-        fontSize: 10,
-        fontFamily: 'Helvetica',
-        backgroundColor: '#ffffff',
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 30,
-        paddingBottom: 20,
-        borderBottom: '2 solid #e2e8f0',
-    },
-    logoSection: {
-        width: '40%',
-    },
-    logo: {
-        width: 120,
-        height: 120,
-        objectFit: 'contain',
-    },
-    shopDetailsSection: {
-        width: '55%',
-        textAlign: 'right',
-    },
-    shopName: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1e293b',
-        marginBottom: 8,
-    },
-    shopDetail: {
-        fontSize: 9,
-        color: '#64748b',
-        marginBottom: 3,
-    },
-    invoiceTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#0f172a',
-        marginBottom: 20,
-        textTransform: 'uppercase',
-        letterSpacing: 1,
-    },
-    infoBar: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 25,
-        padding: 15,
-        backgroundColor: '#f8fafc',
-        borderRadius: 4,
-    },
-    infoItem: {
-        flexDirection: 'column',
-    },
-    infoLabel: {
-        fontSize: 8,
-        color: '#64748b',
-        marginBottom: 4,
-        textTransform: 'uppercase',
-    },
-    infoValue: {
-        fontSize: 11,
-        color: '#1e293b',
-        fontWeight: 'bold',
-    },
-    clientSection: {
-        marginBottom: 25,
-        padding: 15,
-        backgroundColor: '#f1f5f9',
-        borderLeft: '4 solid #3b82f6',
-        borderRadius: 2,
-    },
-    sectionTitle: {
-        fontSize: 11,
-        fontWeight: 'bold',
-        color: '#1e293b',
-        marginBottom: 8,
-        textTransform: 'uppercase',
-    },
-    clientDetail: {
-        fontSize: 10,
-        color: '#475569',
-        marginBottom: 3,
-    },
-    table: {
-        marginBottom: 25,
-    },
-    tableHeader: {
-        flexDirection: 'row',
-        backgroundColor: '#1e293b',
-        padding: 10,
-        fontWeight: 'bold',
-        color: '#ffffff',
-    },
-    tableRow: {
-        flexDirection: 'row',
-        padding: 10,
-        borderBottom: '1 solid #e2e8f0',
-    },
-    tableRowAlt: {
-        backgroundColor: '#f8fafc',
-    },
-    colDescription: {
-        width: '50%',
-    },
-    colQty: {
-        width: '15%',
-        textAlign: 'center',
-    },
-    colPrice: {
-        width: '17.5%',
-        textAlign: 'right',
-    },
-    colTotal: {
-        width: '17.5%',
-        textAlign: 'right',
-    },
-    totalsSection: {
-        marginLeft: 'auto',
-        width: '50%',
-        marginBottom: 30,
-    },
-    totalRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        padding: 8,
-        borderBottom: '1 solid #e2e8f0',
-    },
-    totalLabel: {
-        fontSize: 10,
-        color: '#64748b',
-    },
-    totalValue: {
-        fontSize: 10,
-        color: '#1e293b',
-        fontWeight: 'bold',
-    },
-    grandTotalRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        padding: 12,
-        backgroundColor: '#1e293b',
-        marginTop: 5,
-    },
-    grandTotalLabel: {
-        fontSize: 12,
-        color: '#ffffff',
-        fontWeight: 'bold',
-    },
-    grandTotalValue: {
-        fontSize: 14,
-        color: '#ffffff',
-        fontWeight: 'bold',
-    },
-    footer: {
-        marginTop: 'auto',
-        paddingTop: 20,
-        borderTop: '2 solid #e2e8f0',
-    },
-    footerText: {
-        fontSize: 8,
-        color: '#64748b',
-        textAlign: 'center',
-        marginBottom: 3,
-    },
-    footerBold: {
-        fontWeight: 'bold',
-        color: '#1e293b',
-    },
-    notesSection: {
-        marginBottom: 20,
-        padding: 12,
-        backgroundColor: '#fef3c7',
-        borderRadius: 4,
-    },
-    notesTitle: {
-        fontSize: 9,
-        fontWeight: 'bold',
-        color: '#92400e',
-        marginBottom: 5,
-    },
-    notesText: {
-        fontSize: 8,
-        color: '#78350f',
-        lineHeight: 1.4,
-    },
-});
+import { pdfStyles } from '@/lib/pdf-styles';
+import { formatCurrencyToWords } from '@/lib/format-number-to-words';
+
+// Styles moved to shared file
 
 interface ShopSettings {
     shopName: string;
@@ -227,104 +41,153 @@ export const QuotePDF: React.FC<QuotePDFProps> = ({ devis, shopSettings, client 
     const tva = totalTTC - totalHT;
 
     const formattedDate = devis.createdAt ? new Date(devis.createdAt).toLocaleDateString('fr-FR') : 'N/A';
+    const formattedTTC = Number(totalTTC).toFixed(2);
+    const amountInWords = formatCurrencyToWords(totalTTC);
+
+    // Client info resolution (prefer direct client object if available, else devis snapshot)
+    const clientName = client?.prenom ? `${client.prenom} ${client.nom}` : devis.clientName;
+    const clientPhone = client?.telephone1 || devis.clientPhone;
+    const clientAddress = client?.adresse || client?.ville || '';
 
     return (
         <Document>
-            <Page size="A4" style={styles.page}>
+            <Page size="A4" style={pdfStyles.page}>
                  {/* Header */}
-                 <View style={styles.header}>
-                    <View style={styles.logoSection}>
-                        {shopSettings.logoUrl ? (
-                            <PDFImage src={shopSettings.logoUrl} style={styles.logo} />
-                        ) : (
-                            <Text style={styles.shopName}>{shopSettings.shopName}</Text>
+                 <View style={pdfStyles.headerContainer}>
+                    <View style={pdfStyles.headerLeft}>
+                        {shopSettings.logoUrl && (
+                            <View style={pdfStyles.logoContainer}>
+                                <PDFImage src={shopSettings.logoUrl} style={pdfStyles.logo} />
+                            </View>
                         )}
+                        <View style={pdfStyles.shopInfo}>
+                            <Text style={pdfStyles.shopName}>{shopSettings.shopName}</Text>
+                            <Text style={pdfStyles.shopDetail}>{shopSettings.address || 'Adresse non renseignée'}</Text>
+                            {shopSettings.phone && <Text style={pdfStyles.shopDetail}>Tél: {shopSettings.phone}</Text>}
+                            <View style={pdfStyles.legalRow}>
+                                {shopSettings.ice && <Text style={pdfStyles.legalText}>ICE: {shopSettings.ice}</Text>}
+                                {shopSettings.rib && <Text style={pdfStyles.legalText}>RIB: {shopSettings.rib}</Text>}
+                            </View>
+                        </View>
                     </View>
-                    <View style={styles.shopDetailsSection}>
-                        <Text style={styles.shopName}>{shopSettings.shopName}</Text>
-                        {shopSettings.address && <Text style={styles.shopDetail}>{shopSettings.address}</Text>}
-                        {shopSettings.phone && <Text style={styles.shopDetail}>Tél: {shopSettings.phone}</Text>}
-                        {shopSettings.ice && <Text style={styles.shopDetail}>ICE: {shopSettings.ice}</Text>}
+
+                    <View style={pdfStyles.headerRight}>
+                         <View style={pdfStyles.docBadge}>
+                            <Text style={pdfStyles.docTitle}>DEVIS</Text>
+                        </View>
+                        <Text style={pdfStyles.docMetaItem}>N° {String(devis.id || '').substring(0, 8).toUpperCase()}</Text>
+                        <Text style={pdfStyles.docMetaItem}>Date: <Text style={pdfStyles.docMetaValue}>{formattedDate}</Text></Text>
+                        <Text style={pdfStyles.docMetaItem}>Validité: <Text style={pdfStyles.docMetaValue}>15 Jours</Text></Text>
+                        <Text style={pdfStyles.docMetaItem}>Distribution: <Text style={pdfStyles.docMetaValue}>{devis.status}</Text></Text>
                     </View>
                 </View>
 
-                {/* Title */}
-                <Text style={styles.invoiceTitle}>DEVIS</Text>
-
-                {/* Info Bar */}
-                <View style={styles.infoBar}>
-                    <View style={styles.infoItem}>
-                        <Text style={styles.infoLabel}>Numéro</Text>
-                        <Text style={styles.infoValue}>#{devis.id?.substring(0, 8).toUpperCase()}</Text>
-                    </View>
-                    <View style={styles.infoItem}>
-                        <Text style={styles.infoLabel}>Date</Text>
-                        <Text style={styles.infoValue}>{formattedDate}</Text>
-                    </View>
-                    <View style={styles.infoItem}>
-                        <Text style={styles.infoLabel}>Validité</Text>
-                        <Text style={styles.infoValue}>15 Jours</Text>
-                    </View>
-                    <View style={styles.infoItem}>
-                        <Text style={styles.infoLabel}>Statut</Text>
-                        <Text style={styles.infoValue}>{devis.status}</Text>
-                    </View>
-                </View>
+                {/* Info Bar - Removed in favor of print-like Header Right, but can keep if needed. 
+                    Print template puts everything in header. We follow print template. */}
 
                 {/* Client Info */}
-                <View style={styles.clientSection}>
-                    <Text style={styles.sectionTitle}>Client</Text>
-                    <Text style={styles.clientDetail}>{devis.clientName}</Text>
-                    {devis.clientPhone && <Text style={styles.clientDetail}>Tél: {devis.clientPhone}</Text>}
-                    {/* If full client object passed, show more */}
-                    {client?.adresse && <Text style={styles.clientDetail}>{client.adresse}</Text>}
-                    {client?.ville && <Text style={styles.clientDetail}>{client.ville}</Text>}
+                <View style={pdfStyles.clientContainer}>
+                    <View style={pdfStyles.clientBox}>
+                        <Text style={pdfStyles.clientLabel}>Client</Text>
+                        <Text style={pdfStyles.clientName}>{clientName}</Text>
+                        {clientPhone && <Text style={pdfStyles.clientDetail}>Tél: {clientPhone}</Text>}
+                        {clientAddress && <Text style={pdfStyles.clientDetail}>{clientAddress}</Text>}
+                    </View>
                 </View>
 
                 {/* Table */}
-                <View style={styles.table}>
-                    <View style={styles.tableHeader}>
-                        <Text style={styles.colDescription}>Désignation</Text>
-                        <Text style={styles.colQty}>Qté</Text>
-                        <Text style={styles.colPrice}>Prix U.</Text>
-                        <Text style={styles.colTotal}>Total</Text>
+                <View style={pdfStyles.table}>
+                    <View style={pdfStyles.tableHeader}>
+                        <Text style={[pdfStyles.th, pdfStyles.colDesc]}>Désignation</Text>
+                        <Text style={[pdfStyles.th, pdfStyles.colBrand]}>Marque</Text>
+                        <Text style={[pdfStyles.th, pdfStyles.colModel]}>Modèle</Text>
+                        <Text style={[pdfStyles.th, pdfStyles.colQty]}>Qté</Text>
+                        <Text style={[pdfStyles.th, pdfStyles.colPrice]}>P.U. HT</Text>
+                        <Text style={[pdfStyles.th, { width: '13%', textAlign: 'right' }]}>Total HT</Text>
                     </View>
 
-                    {items.map((item, idx) => (
-                        <View key={idx} style={[styles.tableRow, idx % 2 === 1 ? styles.tableRowAlt : {}]}>
-                            <Text style={styles.colDescription}>{item.designation}</Text>
-                            <Text style={styles.colQty}>{item.quantite}</Text>
-                            <Text style={styles.colPrice}>{Number(item.prixUnitaire).toFixed(2)}</Text>
-                            <Text style={styles.colTotal}>{(item.quantite * item.prixUnitaire).toFixed(2)}</Text>
-                        </View>
-                    ))}
+                    {items.map((item, idx) => {
+                         const itemAny = item as any;
+                         // Handle potential devis item structure
+                         const name = item.designation || itemAny.nomProduit || 'Produit';
+                         const marque = itemAny.marque || itemAny.brand || '-';
+                         const modele = itemAny.modele || itemAny.model || '-';
+                         const price = Number(item.prixUnitaire);
+                         const qty = Number(item.quantite);
+                         const total = price * qty;
+
+                        return (
+                            <View key={idx} style={[pdfStyles.tableRow, idx % 2 !== 0 ? pdfStyles.tableRowAlt : {}]}>
+                                <Text style={[pdfStyles.clientDetail, pdfStyles.colDesc]}>{name}</Text>
+                                <Text style={[pdfStyles.clientDetail, pdfStyles.colBrand]}>{marque}</Text>
+                                <Text style={[pdfStyles.clientDetail, pdfStyles.colModel]}>{modele}</Text>
+                                <Text style={[pdfStyles.clientDetail, pdfStyles.colQty]}>{qty}</Text>
+                                <Text style={[pdfStyles.clientDetail, pdfStyles.colPrice]}>{price.toFixed(2)}</Text>
+                                <Text style={[pdfStyles.docMetaValue, { width: '13%', textAlign: 'right', fontSize: 9 }]}>{total.toFixed(2)}</Text>
+                            </View>
+                        );
+                    })}
                 </View>
 
                 {/* Totals */}
-                <View style={styles.totalsSection}>
-                     <View style={styles.totalRow}>
-                        <Text style={styles.totalLabel}>Total HT</Text>
-                        <Text style={styles.totalValue}>{Number(totalHT).toFixed(2)} MAD</Text>
+                <View style={pdfStyles.totalsContainer}>
+                    <View style={pdfStyles.totalsBox}>
+                        <View style={pdfStyles.totalRow}>
+                            <Text style={pdfStyles.totalLabel}>Total HT</Text>
+                            <Text style={pdfStyles.totalValue}>{Number(totalHT).toFixed(2)} DH</Text>
+                        </View>
+                        <View style={pdfStyles.totalRow}>
+                            <Text style={pdfStyles.totalLabel}>TVA (20%)</Text>
+                            <Text style={pdfStyles.totalValue}>{Number(tva).toFixed(2)} DH</Text>
+                        </View>
+                        <View style={pdfStyles.totalTTCBox}>
+                            <Text style={pdfStyles.totalTTCLabel}>Total TTC</Text>
+                            <Text style={pdfStyles.totalTTCValue}>{formattedTTC} <Text style={{ fontSize: 9, fontWeight: 'normal' }}>DH</Text></Text>
+                        </View>
                     </View>
-                    <View style={styles.totalRow}>
-                        <Text style={styles.totalLabel}>TVA (20%)</Text>
-                        <Text style={styles.totalValue}>{Number(tva).toFixed(2)} MAD</Text>
+                </View>
+                
+                 {/* Amount in Words */}
+                 <View style={pdfStyles.wordsContainer}>
+                    <Text style={pdfStyles.wordsLabel}>Arrêté le présent devis à la somme de :</Text>
+                    <Text style={pdfStyles.wordsValue}>{formattedTTC} DH ({amountInWords})</Text>
+                </View>
+
+                {/* Signatures */}
+                <View style={pdfStyles.signaturesContainer}>
+                    <View style={pdfStyles.signatureBox}>
+                        <Text style={pdfStyles.signatureLabel}>Signature du Client</Text>
+                        <Text style={pdfStyles.signatureSubLabel}>Bon pour accord</Text>
                     </View>
-                    <View style={styles.grandTotalRow}>
-                        <Text style={styles.grandTotalLabel}>TOTAL TTC</Text>
-                        <Text style={styles.grandTotalValue}>{Number(totalTTC).toFixed(2)} MAD</Text>
+                    <View style={pdfStyles.signatureBox}>
+                        <Text style={pdfStyles.signatureLabel}>Cachet et Signature</Text>
+                        <Text style={pdfStyles.signatureSubLabel}>{shopSettings.shopName || 'OptiManager'}</Text>
                     </View>
                 </View>
 
                 {/* Footer */}
-                <View style={styles.footer}>
-                     <Text style={styles.footerText}>
-                        <Text style={styles.footerBold}>Merci de votre confiance!</Text>
+                <View style={pdfStyles.footerSection}>
+                     <View style={pdfStyles.footerRow}>
+                        <View style={pdfStyles.footerCol}>
+                            <Text style={pdfStyles.footerLabel}>Conditions</Text>
+                            <Text style={pdfStyles.footerText}>Ce devis est valable 15 jours.</Text>
+                            <Text style={pdfStyles.footerText}>Pour accord, merci de retourner ce devis signé.</Text>
+                        </View>
+                         {shopSettings.rib && (
+                             <View style={[pdfStyles.footerCol, { alignItems: 'flex-end' }]}>
+                                <Text style={pdfStyles.footerLabel}>Coordonnées Bancaires</Text>
+                                <Text style={[pdfStyles.footerText, { fontFamily: 'Courier' }]}>{shopSettings.rib}</Text>
+                            </View>
+                        )}
+                    </View>
+                     <Text style={[pdfStyles.footerText, { textAlign: 'center', marginTop: 10, fontStyle: 'italic' }]}>
+                        "Merci de votre confiance"
                     </Text>
-                     <Text style={styles.footerText}>Devis valable 15 jours</Text>
-                     {shopSettings.rib && <Text style={styles.footerText}>RIB: {shopSettings.rib}</Text>}
-                     {shopSettings.ice && <Text style={styles.footerText}>ICE: {shopSettings.ice}</Text>}
                 </View>
+                
+                 <Text style={pdfStyles.pagination} render={({ pageNumber, totalPages }) => (
+                    `${pageNumber} / ${totalPages}`
+                )} fixed />
             </Page>
         </Document>
     );

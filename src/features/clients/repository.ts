@@ -34,45 +34,44 @@ export class ClientRepository extends BaseRepository<Client, typeof clients> {
     }
 
     // 3. DB Query
-    let results: Client[];
-
-    // Define columns explicitly to map snake_case DB columns to camelCase Drizzle schema properties
-    const selectColumns = sql`
-        "id", "firebase_id" AS "firebaseId", "user_id" AS "userId", "full_name" AS "fullName",
-        "prenom", "nom", "email", "phone", "phone_2" AS "phone2", "address", "city", "gender", "cin",
-        "date_of_birth" AS "dateOfBirth", "mutuelle", "notes", "balance", "total_spent" AS "totalSpent",
-        "is_active" AS "isActive", "last_visit" AS "lastVisit", "created_at" AS "createdAt", 
-        "updated_at" AS "updatedAt"
-    `;
-
     try {
-        let query; 
+        let results: Client[];
+        
         if (role === 'admin') {
-            query = sql`SELECT ${selectColumns} FROM "clients" WHERE "is_active" = true ORDER BY "created_at" DESC`;
+            results = await db
+                .select()
+                .from(clients)
+                .where(eq(clients.isActive, true))
+                .orderBy(desc(clients.createdAt));
         } else {
-            query = sql`SELECT ${selectColumns} FROM "clients" WHERE "user_id" = ${userId} AND "is_active" = true ORDER BY "created_at" DESC`;
+            results = await db
+                .select()
+                .from(clients)
+                .where(and(
+                    eq(clients.userId, userId),
+                    eq(clients.isActive, true)
+                ))
+                .orderBy(desc(clients.createdAt));
         }
 
-        const { rows } = await db.execute(query);
-        results = rows as unknown as Client[];
+        // 4. Set Cache
+        if (redis) {
+            try {
+                await redis.set(cacheKey, JSON.stringify(results), { ex: 300 });
+            } catch (e) {
+                console.warn('Redis error:', e);
+            }
+        }
+
+        return results;
 
     } catch (err: any) {
         console.error('❌ DB_QUERY_ERROR:', err);
-        console.error('❌ ERROR_CODE:', err.code);
-        console.error('❌ ERROR_MESSAGE:', err.message);
+        // Log extra details if possible
+        if (err.code) console.error('SQL Code:', err.code);
+        if (err.detail) console.error('Error Detail:', err.detail);
         throw err;
     }
-
-    // 4. Set Cache
-    if (redis) {
-      try {
-        await redis.set(cacheKey, JSON.stringify(results), { ex: 300 });
-      } catch (e) {
-        console.warn('Redis error:', e);
-      }
-    }
-
-    return results;
   }
 
   /**

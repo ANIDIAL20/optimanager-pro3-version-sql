@@ -14,6 +14,9 @@ import { getGlobalBanner } from "@/app/actions/adminActions";
 export const metadata: Metadata = {
   title: "OptiManager Pro",
   description: "Advanced Optician Management System",
+  icons: {
+    icon: "/logo-icon.png",
+  },
 };
 
 export default async function RootLayout({

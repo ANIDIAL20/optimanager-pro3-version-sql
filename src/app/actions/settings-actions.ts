@@ -87,15 +87,17 @@ import { unstable_noStore as noStore, revalidatePath } from 'next/cache';
 /**
  * Get all items from a settings table
  */
-export async function getSettings(type: SettingType) {
+import { secureAction } from '@/lib/secure-action';
+
+// ... (keep imports)
+
+/**
+ * Get all items from a settings table
+ */
+export const getSettings = secureAction(async (userId, user, type: SettingType) => {
   noStore();
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    throw new Error('Non authentifié');
-  }
-
-  // Raw SQL Table mapping to ensure safety
+  
+  // Table mapping verification
   let tableName: string;
   switch (type) {
     case 'brands': tableName = 'brands'; break;
@@ -111,21 +113,12 @@ export async function getSettings(type: SettingType) {
   }
 
   try {
-    // ⚡ Raw SQL bypass for stability
-    // Use proper parameterization for user_id to prevent injection
-    // Table name is inserted safely from our switch whitelist above
-    // Note: Drizzle `sql` tag usage with dynamic table name is tricky safely without `sql.raw`. 
-    // We will use standard string interpolation for the table name strictly because it comes from our whitelist.
-    
-    // Using sql.raw for table name, regular param for userId
-    const query = sql.raw(`SELECT * FROM "${tableName}" WHERE "user_id" = '${session.user.id}' ORDER BY "name" ASC`);
+    // 🔒 SECURE: Use parameterized query for userId
+    // tableName is safe because it comes from the whitelist switch above
+    const query = sql`SELECT * FROM ${sql.raw(`"${tableName}"`)} WHERE "user_id" = ${userId} ORDER BY "name" ASC`;
     
     const result = await db.execute(query);
 
-    // Map result rows to ensure camelCase matches what UI expects if needed.
-    // Drizzle schema defines 'userId' but DB has 'user_id'. 
-    // The UI likely uses 'id' and 'name' which match. 'category' matches.
-    // 'mounting_types' table has 'name'.
     return result.rows.map((row: any) => ({
       ...row,
       userId: row.user_id, // Ensure camelCase availability
@@ -134,53 +127,47 @@ export async function getSettings(type: SettingType) {
     }));
 
   } catch (error: any) {
-    console.error(`[getSettings] Raw SQL Error fetching ${type}:`, error);
-    if (error.code) console.error('DB Error Code:', error.code);
+    console.error(`[getSettings] Error fetching ${type}:`, error);
     throw new Error(`Failed to fetch ${type}: ${error.message}`);
   }
-}
+});
 
 /**
  * Create a new setting item
  */
-export async function createSetting(type: SettingType, data: SettingItemInput) {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    throw new Error('Non authentifié');
-  }
-
+/**
+ * Create a new setting item
+ */
+export const createSetting = secureAction(async (userId, user, type: SettingType, data: SettingItemInput) => {
   const validated = settingItemSchema.parse(data);
   const table = tableMap[type];
+
+  // Whitelist check to prevent arbitrary table insertion effectively
+  if (!table) throw new Error("Invalid table type");
 
   const [created] = await db
     .insert(table)
     .values({
-      userId: session.user.id,
+      userId, // Injected from secureAction
       ...validated,
     } as any)
     .returning();
 
   console.log(`[createSetting] Created ${type}:`, created);
   return created;
-}
+});
 
 /**
  * Update a setting item
  */
-export async function updateSetting(
-  type: SettingType,
-  id: number,
-  data: SettingItemInput
-) {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    throw new Error('Non authentifié');
-  }
-
+/**
+ * Update a setting item
+ */
+export const updateSetting = secureAction(async (userId, user, type: SettingType, id: number, data: SettingItemInput) => {
   const validated = settingItemSchema.parse(data);
   const table = tableMap[type];
+
+  if (!table) throw new Error("Invalid table type");
 
   const [updated] = await db
     .update(table)
@@ -191,7 +178,7 @@ export async function updateSetting(
     .where(
       and(
         eq(table.id, id),
-        eq(table.userId, session.user.id) // Security: user can only update their own
+        eq(table.userId, userId) // Security: user can only update their own
       )
     )
     .returning();
@@ -202,26 +189,24 @@ export async function updateSetting(
 
   console.log(`[updateSetting] Updated ${type}:`, updated);
   return updated;
-}
+});
 
 /**
  * Delete a setting item
  */
-export async function deleteSetting(type: SettingType, id: number) {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    throw new Error('Non authentifié');
-  }
-
+/**
+ * Delete a setting item
+ */
+export const deleteSetting = secureAction(async (userId, user, type: SettingType, id: number) => {
   const table = tableMap[type];
+  if (!table) throw new Error("Invalid table type");
 
   const [deleted] = await db
     .delete(table)
     .where(
       and(
         eq(table.id, id),
-        eq(table.userId, session.user.id) // Security: user can only delete their own
+        eq(table.userId, userId) // Security: user can only delete their own
       )
     )
     .returning();
@@ -232,30 +217,28 @@ export async function deleteSetting(type: SettingType, id: number) {
 
   console.log(`[deleteSetting] Deleted ${type}:`, deleted);
   return deleted;
-}
+});
 
 /**
  * Delete multiple settings
  */
-export async function deleteSettings(type: SettingType, ids: number[]) {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    throw new Error('Non authentifié');
-  }
-
+/**
+ * Delete multiple settings
+ */
+export const deleteSettings = secureAction(async (userId, user, type: SettingType, ids: number[]) => {
   if (!ids || ids.length === 0) {
       return { success: true, count: 0 };
   }
 
   const table = tableMap[type];
+  if (!table) throw new Error("Invalid table type");
 
   // Verify ownership and delete in one go
   const deleted = await db
     .delete(table)
     .where(
         and(
-            eq(table.userId, session.user.id),
+            eq(table.userId, userId),
             inArray(table.id, ids)
         )
     )
@@ -263,29 +246,27 @@ export async function deleteSettings(type: SettingType, ids: number[]) {
 
   revalidatePath('/dashboard/parametres');
   return { success: true, count: deleted.length };
-}
+});
 
 /**
  * Delete ALL items of a specific type (Destructive)
  */
-export async function deleteAllSettings(type: SettingType) {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    throw new Error('Non authentifié');
-  }
-
+/**
+ * Delete ALL items of a specific type (Destructive)
+ */
+export const deleteAllSettings = secureAction(async (userId, user, type: SettingType) => {
   const table = tableMap[type];
+  if (!table) throw new Error("Invalid table type");
 
   // Bulk delete for this user
   const deleted = await db
     .delete(table)
-    .where(eq(table.userId, session.user.id))
+    .where(eq(table.userId, userId))
     .returning();
 
-  console.log(`[deleteAllSettings] Deleted ALL ${type} for user ${session.user.id}:`, deleted.length);
+  console.log(`[deleteAllSettings] Deleted ALL ${type} for user ${userId}:`, deleted.length);
   return { success: true, count: deleted.length };
-}
+});
 
 // ========================================
 // SPECIFIC HELPERS

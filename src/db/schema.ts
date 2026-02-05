@@ -365,23 +365,44 @@ export const devisRelations = relations(devis, ({ one }) => ({
 // AUTH.JS TABLES
 // ========================================
 
-export const users = pgTable("user", {
+// ========================================
+// AUTH.JS TABLES (ENHANCED SECURITY)
+// ========================================
+
+export const users = pgTable("users", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
   name: text("name"),
-  email: text("email").unique(),
+  email: text("email").unique().notNull(),
   emailVerified: timestamp("emailVerified", { mode: "date" }),
   image: text("image"),
   password: text("password"),
-  role: text("role").default("user"),
   
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
+  // 🔐 ROLE-BASED ACCESS CONTROL
+  role: text("role").$type<"ADMIN" | "USER">()
+    .default("USER")
+    .notNull(),
+  
+  // 🔐 ACCOUNT STATUS
+  isActive: boolean("is_active")
+    .default(true)
+    .notNull(),
+  
+  // 🔐 ACCOUNT LOCKOUT (Native DB Anti-Brute Force)
+  failedLoginAttempts: integer("failed_login_attempts")
+    .default(0)
+    .notNull(), // Count of consecutive failures
+  lockoutUntil: timestamp("lockout_until"), // Time until unlock
+  
+  // 📅 ACTIVITY TRACKING
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").$onUpdate(() => new Date()).notNull(),
 });
 
 export const accounts = pgTable(
-  "account",
+  "accounts",
   {
     userId: text("userId")
       .notNull()
@@ -404,16 +425,24 @@ export const accounts = pgTable(
   })
 );
 
-export const sessions = pgTable("session", {
+export const sessions = pgTable("sessions", {
   sessionToken: text("sessionToken").primaryKey(),
   userId: text("userId")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   expires: timestamp("expires", { mode: "date" }).notNull(),
+  
+  // 🔍 SESSION SECURITY (New fields)
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  fingerprint: text("fingerprint"), // SHA-256(IP + UA)
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastActivityAt: timestamp("last_activity_at").defaultNow(),
 });
 
 export const verificationTokens = pgTable(
-  "verificationToken",
+  "verification_tokens",
   {
     identifier: text("identifier").notNull(),
     token: text("token").notNull(),
@@ -594,3 +623,27 @@ export const reminders = pgTable('reminders', {
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
 });
 
+
+// ========================================
+// AUDIT LOGS - Complete Security Trail
+// ========================================
+export const auditLogs = pgTable("audit_log", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id"), // Can be null for anonymous
+  action: text("action").notNull(), 
+  resource: text("resource"), 
+  success: boolean("success").notNull(),
+  
+  // 🌐 REQUEST CONTEXT
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  fingerprint: text("fingerprint"), 
+  
+  // 🚨 SEVERITY LEVEL
+  severity: text("severity").$type<"INFO" | "WARNING" | "CRITICAL">()
+    .default("INFO"),
+  
+  // 📝 METADATA
+  metadata: text("metadata"), // JSON string
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+});

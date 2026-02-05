@@ -361,8 +361,7 @@ export async function checkDeadlines(shouldRevalidate = true) {
     .where(
       and(
         eq(sales.userId, session.user.id),
-        // @ts-ignore
-        gt(sales.resteAPayer, 0)
+        gt(sales.resteAPayer, '0')
       )
     );
 
@@ -414,8 +413,7 @@ export async function checkDeadlines(shouldRevalidate = true) {
     .where(
       and(
         eq(supplierOrders.userId, session.user.id),
-        // @ts-ignore
-        gt(supplierOrders.resteAPayer, 0)
+        gt(supplierOrders.resteAPayer, '0')
       )
     );
 

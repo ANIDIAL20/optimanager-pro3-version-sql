@@ -245,9 +245,16 @@ export const createProduct = secureAction(async (userId, user, data: ProductInpu
         // ⚡ Update cache
         revalidatePath('/produits');
 
+        if (data.shouldRedirect) {
+            redirect('/produits');
+        }
+
         return { success: true, data: { id: newId.toString() }, message: 'Produit créé avec succès' };
 
     } catch (error: any) {
+        if (error.digest === 'NEXT_REDIRECT') {
+            throw error;
+        }
 
         console.error('💥 Error creating product (Raw SQL):', error);
         console.error('Details:', {

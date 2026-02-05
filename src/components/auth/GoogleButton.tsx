@@ -13,20 +13,14 @@ export default function GoogleButton() {
     const handleGoogleSignIn = async () => {
         setIsLoading(true);
         try {
-            const result = await signIn('google', {
+            // Auth.js will handle the redirect to /dashboard
+            await signIn('google', {
                 callbackUrl: '/dashboard',
-                redirect: false,
+                redirect: true,
             });
-
-            if (result?.error) {
-                throw new Error(result.error);
-            }
-
-            if (result?.ok) {
-                toast.success("Connexion avec Google réussie");
-                router.push("/dashboard");
-                router.refresh();
-            }
+            
+            // This code might not run due to redirect, but keeping toast for good measure if SPA nav happens
+            toast.success("Redirection vers le dashboard...");
         } catch (error: any) {
             console.error("Google Sign In Error", error);
             toast.error("Échec de la connexion avec Google.");
