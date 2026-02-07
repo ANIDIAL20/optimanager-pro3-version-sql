@@ -66,7 +66,7 @@ export function UserProfile() {
 
     const handleLogout = async () => {
         try {
-            await signOut({ callbackUrl: '/login' });
+            await signOut({ callbackUrl: window.location.origin + '/login' });
         } catch (error) {
             console.error("Erreur logout:", error);
         }
