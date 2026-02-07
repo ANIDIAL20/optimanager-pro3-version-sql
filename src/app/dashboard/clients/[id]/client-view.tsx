@@ -43,6 +43,7 @@ export default function ClientDetailView() {
     const [client, setClient] = React.useState<Client | null>(null);
     const [isLoading, setIsLoading] = React.useState(true);
     const [error, setError] = React.useState<string | null>(null);
+    const [refreshKey, setRefreshKey] = React.useState(0);
     
     React.useEffect(() => {
         async function fetchClient() {
@@ -184,23 +185,23 @@ export default function ClientDetailView() {
                             </TabsTrigger>
                         </TabsList>
                         <TabsContent value="glasses" className="space-y-6 mt-6">
-                            <PrescriptionForm clientId={id} />
+                            <PrescriptionForm clientId={id} onSuccess={() => setRefreshKey(prev => prev + 1)} />
                             <Separator />
-                            <PrescriptionList clientId={id} />
+                            <PrescriptionList key={refreshKey} clientId={id} />
                         </TabsContent>
                         <TabsContent value="contacts" className="space-y-6 mt-6">
-                            <ContactLensPrescriptionForm clientId={id} />
+                            <ContactLensPrescriptionForm clientId={id} onSuccess={() => setRefreshKey(prev => prev + 1)} />
                             <Separator />
-                            <ContactLensPrescriptionList clientId={id} />
+                            <ContactLensPrescriptionList key={refreshKey} clientId={id} />
                         </TabsContent>
                     </Tabs>
                 </TabsContent>
 
                 {/* Lens Orders Tab */}
                 <TabsContent value="lens-orders" className="space-y-6">
-                    <LensOrderForm clientId={id} />
+                    <LensOrderForm clientId={id} onSuccess={() => setRefreshKey(prev => prev + 1)} />
                     <Separator />
-                    <LensOrderList clientId={id} clientName={`${client?.prenom || ''} ${client?.nom || ''}`} />
+                    <LensOrderList key={`lens-orders-${refreshKey}`} clientId={id} clientName={`${client?.prenom || ''} ${client?.nom || ''}`} />
                 </TabsContent>
 
                 {/* Purchase History Tab */}

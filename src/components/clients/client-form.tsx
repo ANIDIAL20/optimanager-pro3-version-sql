@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Loader2, User, Phone, MapPin, Calendar, FileText, Mail } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Client } from '@/app/actions/clients-actions';
@@ -150,22 +151,19 @@ export function ClientForm({
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="mutuelle">Mutuelle</Label>
-                        <Select
+                        <SearchableSelect
+                            options={[
+                                { label: 'Aucune', value: 'AUCUNE' },
+                                ...mutuellesList.map((m) => ({
+                                    label: m.name,
+                                    value: m.name,
+                                }))
+                            ]}
                             value={formData.mutuelle}
-                            onValueChange={(value) => handleChange('mutuelle', value)}
-                        >
-                            <SelectTrigger id="mutuelle">
-                                <SelectValue placeholder="Sélectionner..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="AUCUNE">Aucune</SelectItem>
-                                {mutuellesList.map((m) => (
-                                    <SelectItem key={m.id} value={m.name}>
-                                        {m.name}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                            onChange={(value) => handleChange('mutuelle', value)}
+                            placeholder="Sélectionner..."
+                            searchPlaceholder="Rechercher une mutuelle..."
+                        />
                     </div>
                 </CardContent>
             </Card>

@@ -91,6 +91,8 @@ export function ContactLensPrescriptionList({ clientId }: ContactLensPrescriptio
                 <TableHead>Date</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Marque</TableHead>
+                <TableHead>Docteur</TableHead>
+                <TableHead>Durée/Exp</TableHead>
                 <TableHead>OD Sph/BC/Dia</TableHead>
                 <TableHead>OG Sph/BC/Dia</TableHead>
               </TableRow>
@@ -103,6 +105,13 @@ export function ContactLensPrescriptionList({ clientId }: ContactLensPrescriptio
                     <TableCell>{p.date ? format(new Date(p.date), 'dd/MM/yyyy') : '-'}</TableCell>
                     <TableCell>{data?.lensType || '-'}</TableCell>
                     <TableCell>{data?.brand || '-'}</TableCell>
+                    <TableCell>{data?.doctorName || '-'}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-col text-xs">
+                        <span>{data?.duration || '-'}</span>
+                        <span className="text-muted-foreground">{data?.expirationDate ? format(new Date(data.expirationDate), 'dd/MM/yyyy') : '-'}</span>
+                      </div>
+                    </TableCell>
                     <TableCell>{`${data?.rightEye?.power || '-'} / ${data?.rightEye?.baseCurve || '-'} / ${data?.rightEye?.diameter || '-'}`}</TableCell>
                     <TableCell>{`${data?.leftEye?.power || '-'} / ${data?.leftEye?.baseCurve || '-'} / ${data?.leftEye?.diameter || '-'}`}</TableCell>
                   </TableRow>

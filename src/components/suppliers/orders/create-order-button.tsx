@@ -35,6 +35,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Textarea } from '@/components/ui/textarea';
@@ -235,20 +236,17 @@ export function CreateOrderButton() {
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Fournisseur</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                            <FormControl>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder={isLoadingSuppliers ? "Chargement..." : "Sélectionner un fournisseur"} />
-                                                </SelectTrigger>
-                                            </FormControl>
-                                            <SelectContent>
-                                                {suppliers.map((s) => (
-                                                    <SelectItem key={s.id} value={s.id}>
-                                                        {s.nomCommercial}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
+                                        <SearchableSelect
+                                            options={suppliers.map((s) => ({
+                                                label: s.nomCommercial,
+                                                value: s.id,
+                                            }))}
+                                            value={field.value}
+                                            onChange={field.onChange}
+                                            placeholder={isLoadingSuppliers ? "Chargement..." : "Sélectionner un fournisseur"}
+                                            searchPlaceholder="Rechercher un fournisseur..."
+                                            disabled={isLoadingSuppliers}
+                                        />
                                         <FormMessage />
                                     </FormItem>
                                 )}

@@ -281,7 +281,27 @@ export const lensOrders = pgTable('lens_orders', {
   rightEye: json('right_eye'),
   leftEye: json('left_eye'),
   
-  // Pricing
+  // ========================================
+  // PROFESSIONAL PRICING WORKFLOW
+  // ========================================
+  
+  // Prix de Vente Client (fixé à la commande - OBLIGATOIRE)
+  sellingPrice: decimal('selling_price', { precision: 10, scale: 2 }).notNull().default('0'),
+  
+  // Prix d'Achat Estimé (depuis catalogue - optionnel à la commande)
+  estimatedBuyingPrice: decimal('estimated_buying_price', { precision: 10, scale: 2 }),
+  
+  // Prix d'Achat Final (validé à la réception du BL)
+  finalBuyingPrice: decimal('final_buying_price', { precision: 10, scale: 2 }),
+  
+  // Référence BL/Facture Fournisseur
+  supplierInvoiceRef: text('supplier_invoice_ref'),
+  
+  // Marges calculées
+  estimatedMargin: decimal('estimated_margin', { precision: 10, scale: 2 }), // sellingPrice - estimatedBuyingPrice
+  finalMargin: decimal('final_margin', { precision: 10, scale: 2 }),         // sellingPrice - finalBuyingPrice
+  
+  // Legacy pricing (kept for backwards compatibility)
   unitPrice: decimal('unit_price', { precision: 10, scale: 2 }).notNull(),
   quantity: integer('quantity').default(1).notNull(),
   totalPrice: decimal('total_price', { precision: 10, scale: 2 }).notNull(),
@@ -577,6 +597,37 @@ export const materials = pgTable('materials', {
   userId: text('user_id').notNull(),
   name: text('name').notNull(),
   category: text('category'), // Monture, Verre, Lentille
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+// ========================================
+// 11. PURCHASES TABLE (Achats / Dettes Fournisseurs)
+// ========================================
+export const purchases = pgTable('purchases', {
+  id: serial('id').primaryKey(),
+  firebaseId: text('firebase_id').unique(),
+  userId: text('user_id').notNull(),
+  
+  // Link to Supplier
+  supplierId: uuid('supplier_id').references(() => suppliers.id),
+  supplierName: text('supplier_name').notNull(), // Fallback if ID deleted
+  
+  // Transaction Details
+  type: text('type').notNull(), // 'LENS_ORDER', 'FRAME_ORDER', 'STOCK_ORDER', 'OTHER'
+  reference: text('reference'), // BL Ref / Invoice Ref
+  
+  // Financials
+  totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull(),
+  amountPaid: decimal('amount_paid', { precision: 10, scale: 2 }).default('0'),
+  status: text('status').default('UNPAID').notNull(), // 'UNPAID', 'PARTIAL', 'PAID'
+  
+  // Dates
+  date: timestamp('date').defaultNow(),
+  dueDate: timestamp('due_date'),
+  
+  // Audit
+  notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
 });

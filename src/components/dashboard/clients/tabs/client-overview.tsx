@@ -1,5 +1,7 @@
 'use client';
 
+import { getPrescriptions } from '@/app/actions/prescriptions-actions';
+
 import * as React from 'react';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { Badge } from '@/components/ui/badge';
@@ -19,11 +21,12 @@ interface ClientOverviewProps {
 }
 
 // Updated type to match CamelCase from PrescriptionForm
-type Prescription = {
+// Updated type to match CamelCase from PrescriptionForm
+type PrescriptionDisplay = {
     id: string;
     date: string | Date;
     odSphere?: string;
-    odCylindre?: string; // Note: 'Cylindre' not 'Cylinder' based on form
+    odCylindre?: string;
     odAxe?: string;
     ogSphere?: string;
     ogCylindre?: string;
@@ -46,8 +49,32 @@ export function ClientOverview({ client, clientId }: ClientOverviewProps) {
         }
     }, [client.notes, isEditingNotes]);
 
-    // Prescription fetching disabled - needs migration to Server Actions
-    const latestPrescription = null; // Temporarily disabled
+    const [latestPrescription, setLatestPrescription] = React.useState<PrescriptionDisplay | null>(null);
+
+     React.useEffect(() => {
+        async function fetchLatestPrescription() {
+            try {
+                const result = await getPrescriptions(clientId);
+                if (result.success && result.data && result.data.length > 0) {
+                    const latest = result.data[0];
+                    // Map server data structure to UI structure
+                    setLatestPrescription({
+                        id: latest.id,
+                        date: latest.date,
+                        odSphere: latest.data.od.sphere,
+                        odCylindre: latest.data.od.cylinder, // map cylinder -> cylindre
+                        odAxe: latest.data.od.axis,
+                        ogSphere: latest.data.og.sphere,
+                        ogCylindre: latest.data.og.cylinder,
+                        ogAxe: latest.data.og.axis
+                    });
+                }
+            } catch (error) {
+                console.error("Failed to fetch prescriptions", error);
+            }
+        }
+        if (clientId) fetchLatestPrescription();
+    }, [clientId]);
 
     // Mock financial data - replace with actual data from your schema
     const totalSpent = client.totalSpent || 0;

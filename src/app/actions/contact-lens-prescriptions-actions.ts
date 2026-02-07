@@ -36,6 +36,8 @@ export interface ContactLensPrescriptionData {
   brand?: string;
   lensType?: string;
   doctorName?: string;
+  duration?: string;
+  expirationDate?: string;
 }
 
 export interface ContactLensPrescriptionInput {

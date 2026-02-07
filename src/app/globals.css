@@ -64,3 +64,20 @@
     print-color-adjust: exact !important;
   }
 }
+
+/* Custom scrollbar utilities */
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Fix for Radix UI Popover z-index - ensures dropdowns appear above dialogs/sheets */
+[data-radix-popper-content-wrapper] {
+  z-index: 9999 !important;
+}

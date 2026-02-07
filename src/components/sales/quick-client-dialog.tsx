@@ -11,7 +11,8 @@ import { createClient } from '@/app/actions/clients-actions';
 import { Client } from '@/lib/types';
 // import { useFirebase } from '@/firebase'; // No longer needed - secureAction handles auth
 import { useToast } from '@/hooks/use-toast';
-import { MutuelleSelector } from '@/components/clients/mutuelle-selector';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { getInsurances } from '@/app/actions/settings-actions';
 
 interface QuickClientDialogProps {
     onClientCreated: (client: Client) => void;
@@ -27,7 +28,26 @@ export function QuickClientDialog({ onClientCreated }: QuickClientDialogProps) {
     const [nom, setNom] = React.useState('');
     const [prenom, setPrenom] = React.useState('');
     const [telephone, setTelephone] = React.useState('');
-    const [mutuelle, setMutuelle] = React.useState('Sans');
+    const [mutuelle, setMutuelle] = React.useState('');
+    const [mutuellesList, setMutuellesList] = React.useState<Array<{ id: string; name: string }>>([]);
+    const [isLoadingMutuelles, setIsLoadingMutuelles] = React.useState(true);
+
+    // Fetch mutuelles on mount
+    React.useEffect(() => {
+        async function fetchMutuelles() {
+            try {
+                const result = await getInsurances();
+                if (Array.isArray(result)) {
+                    setMutuellesList(result);
+                }
+            } catch (error) {
+                console.error('Error fetching mutuelles:', error);
+            } finally {
+                setIsLoadingMutuelles(false);
+            }
+        }
+        fetchMutuelles();
+    }, []);
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -80,8 +100,8 @@ export function QuickClientDialog({ onClientCreated }: QuickClientDialogProps) {
                 prenom,
                 telephone1: telephone,
                 email: '', // Not asked for in quick form
-                mutuelle: mutuelle === 'Sans' ? '' : mutuelle,
-                assuranceId: mutuelle === 'Sans' ? '' : mutuelle, // Mapping to assuranceId as used in selector
+                mutuelle: mutuelle || '',
+                assuranceId: mutuelle || '',
                 // Legacy fields
                 name: `${prenom} ${nom}`,
                 phone: telephone
@@ -121,7 +141,7 @@ export function QuickClientDialog({ onClientCreated }: QuickClientDialogProps) {
         setNom('');
         setPrenom('');
         setTelephone('');
-        setMutuelle('Sans');
+        setMutuelle('');
     };
 
     return (
@@ -177,9 +197,19 @@ export function QuickClientDialog({ onClientCreated }: QuickClientDialogProps) {
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="mutuelle">Mutuelle (Optionnel)</Label>
-                            <MutuelleSelector
-                                value={mutuelle === 'Sans' ? '' : mutuelle}
-                                onSelect={(val) => setMutuelle(val || 'Sans')}
+                            <SearchableSelect
+                                options={[
+                                    { label: 'Aucune', value: 'AUCUNE' },
+                                    ...mutuellesList.map((m) => ({
+                                        label: m.name,
+                                        value: m.name,
+                                    }))
+                                ]}
+                                value={mutuelle}
+                                onChange={(val) => setMutuelle(val)}
+                                placeholder="Sélectionner..."
+                                searchPlaceholder="Rechercher une mutuelle..."
+                                disabled={isLoadingMutuelles}
                             />
                         </div>
                     </div>

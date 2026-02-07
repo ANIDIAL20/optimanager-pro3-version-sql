@@ -21,13 +21,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
@@ -36,6 +30,13 @@ import { format } from 'date-fns';
 import { createContactLensPrescription } from '@/app/actions/contact-lens-prescriptions-actions';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const ContactLensPrescriptionSchema = z.object({
   date: z.date({ required_error: 'La date est requise.' }),
@@ -66,9 +67,10 @@ type FormValues = z.infer<typeof ContactLensPrescriptionSchema>;
 
 interface ContactLensPrescriptionFormProps {
   clientId: string;
+  onSuccess?: () => void;
 }
 
-export function ContactLensPrescriptionForm({ clientId }: ContactLensPrescriptionFormProps) {
+export function ContactLensPrescriptionForm({ clientId, onSuccess }: ContactLensPrescriptionFormProps) {
   const form = useForm<FormValues>({
     resolver: zodResolver(ContactLensPrescriptionSchema),
     defaultValues: {
@@ -117,7 +119,9 @@ export function ContactLensPrescriptionForm({ clientId }: ContactLensPrescriptio
         },
         brand: data.lensBrand || '',
         lensType: data.lensType,
-        doctorName: data.prescripteur
+        doctorName: data.prescripteur,
+        duration: data.portDuree,
+        expirationDate: data.dateExpiration ? data.dateExpiration.toISOString() : undefined
       };
 
       const result = await createContactLensPrescription({
@@ -133,6 +137,7 @@ export function ContactLensPrescriptionForm({ clientId }: ContactLensPrescriptio
           description: 'Les nouvelles mesures de lentilles de contact ont été enregistrées.',
         });
         form.reset();
+        if (onSuccess) onSuccess();
       } else {
         toast({
           variant: 'destructive',
@@ -312,7 +317,21 @@ export function ContactLensPrescriptionForm({ clientId }: ContactLensPrescriptio
               <h3 className="font-headline text-lg">Informations Complémentaires</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 <FormField control={form.control} name="portDuree" render={({ field }) => (
-                  <FormItem><FormLabel>Durée de port</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="-- Choisir --" /></SelectTrigger></FormControl><SelectContent><SelectItem value="Journalière">Journalière</SelectItem><SelectItem value="Hebdomadaire">Hebdomadaire</SelectItem><SelectItem value="Mensuelle">Mensuelle</SelectItem></SelectContent></Select><FormMessage /></FormItem>
+                  <FormItem>
+                    <FormLabel>Durée de port</FormLabel>
+                    <SearchableSelect
+                      options={[
+                        { label: 'Journalière', value: 'Journalière' },
+                        { label: 'Hebdomadaire', value: 'Hebdomadaire' },
+                        { label: 'Mensuelle', value: 'Mensuelle' }
+                      ]}
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="-- Choisir --"
+                      searchPlaceholder="Rechercher..."
+                    />
+                    <FormMessage />
+                  </FormItem>
                 )} />
                 <FormField control={form.control} name="dateExpiration" render={({ field }) => (
                   <FormItem><FormLabel>Date d'expiration</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={'outline'} className={cn('w-full h-10 justify-start text-left font-normal', !field.value && 'text-muted-foreground')}>{field.value ? (format(field.value, 'dd/MM/yyyy')) : (<span>JJ/MM/AAAA</span>)}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>
