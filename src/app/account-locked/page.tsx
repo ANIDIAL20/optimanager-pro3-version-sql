@@ -1,8 +1,7 @@
 import { BrandLoader } from '@/components/ui/loader-brand';
 import { Suspense } from 'react';
-import LockedContent from './locked-content';
+import { ShieldAlert } from 'lucide-react';
 import Link from "next/link";
-import { headers } from "next/headers";
 
 export const metadata = {
   title: "Account Locked | OptiManager",
