@@ -38,9 +38,14 @@ interface DevisClientPageProps {
     initialError: string | null;
 }
 
+
 export function DevisClientPage({ initialDevis, initialError }: DevisClientPageProps) {
     const [devisList, setDevisList] = React.useState<Devis[]>(initialDevis);
     const [error] = React.useState<string | null>(initialError);
+
+    React.useEffect(() => {
+        setDevisList(initialDevis);
+    }, [initialDevis]);
 
     // --- State ---
     const [viewMode, setViewMode] = React.useState<'grid' | 'list' | 'table'>('table');
