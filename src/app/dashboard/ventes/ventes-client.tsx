@@ -338,8 +338,8 @@ function KanbanGrid({ sales, clientsMap }: { sales: Sale[], clientsMap: Map<stri
                             <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs text-slate-500">
                                 <span className="font-mono">#{sale.id.slice(0, 6)}</span>
                                 <div className="flex gap-2">
-                                    <Link href={`/clients/${sale.clientId}`} className="hover:text-blue-600 transition-colors">Profil</Link>
-                                    <Link href={`/clients/${sale.clientId}/invoice/${sale.id}`} className="hover:text-blue-600 transition-colors">Facture</Link>
+                                    <Link href={`/dashboard/clients/${sale.clientId}`} className="hover:text-blue-600 transition-colors">Profil</Link>
+                                    <Link href={`/dashboard/ventes/${sale.id}/invoice`} className="hover:text-blue-600 transition-colors">Facture</Link>
                                 </div>
                             </div>
                         </div>
@@ -384,7 +384,7 @@ function EnhancedListView({ sales, clientsMap }: { sales: Sale[], clientsMap: Ma
                                 <Avatar className="h-8 w-8">
                                     <AvatarFallback className="text-xs bg-blue-100 text-blue-600">{client?.prenom?.[0]}{client?.nom?.[0]}</AvatarFallback>
                                 </Avatar>
-                                <Link href={`/clients/${client?.id}`} className="font-medium text-sm hover:text-blue-600 transition-colors truncate">
+                                <Link href={`/dashboard/clients/${client?.id}`} className="font-medium text-sm hover:text-blue-600 transition-colors truncate">
                                     {client ? `${client.prenom} ${client.nom}` : 'Inconnu'}
                                 </Link>
                             </div>

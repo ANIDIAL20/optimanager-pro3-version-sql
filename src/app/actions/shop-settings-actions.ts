@@ -71,7 +71,7 @@ export const updateShopSettings = secureAction(async (userId, user, data: ShopSe
         }
 
         await logSuccess(userId, 'UPDATE', 'shop_profiles', 'settings');
-        revalidatePath('/parametres');
+        revalidatePath('/dashboard/parametres');
         
         return { success: true, message: 'Paramètres mis à jour avec succès' };
 

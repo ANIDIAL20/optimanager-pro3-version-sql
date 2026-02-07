@@ -60,8 +60,8 @@ export async function requireAdmin() {
 
   // 1. Authentication Check
   if (!session?.user?.email) {
-    await logSecurityEvent(null, "ADMIN_ACCESS_DENIED", false, "/dashboard/admin", "INFO", { reason: "Not authenticated" });
-    redirect("/api/auth/signin?callbackUrl=/dashboard/admin");
+    await logSecurityEvent(null, "ADMIN_ACCESS_DENIED", false, "/admin", "INFO", { reason: "Not authenticated" });
+    redirect("/api/auth/signin?callbackUrl=/admin");
   }
 
   // 2. Real-time DB Check
@@ -96,7 +96,7 @@ export async function requireAdmin() {
       user.id.toString(),
       "ADMIN_ACCESS_DENIED",
       false,
-      "/dashboard/admin",
+      "/admin",
       shouldLock ? "CRITICAL" : "WARNING",
       { reason: "Insufficient permissions", userRole: user.role, failedAttempts: newAttempts }
     );
@@ -117,7 +117,7 @@ export async function requireAdmin() {
       user.id.toString(),
       "SESSION_MISMATCH",
       false,
-      "/dashboard/admin",
+      "/admin",
       "WARNING",
       { expected: storedSession.fingerprint, actual: currentFingerprint }
     );

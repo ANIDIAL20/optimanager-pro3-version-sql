@@ -11,10 +11,10 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Receipt, Search, Package, Plus, ShoppingCart, Minus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Receipt, Search, Package, Plus, ShoppingCart, Minus, Trash2, UserPlus } from 'lucide-react';
 import Link from 'next/link';
 import { ClientSelector } from '@/components/sales/client-selector';
-import { QuickClientDialog } from '@/components/sales/quick-client-dialog';
+import { QuickClientDialog } from '@/components/clients/quick-client-dialog';
 import { cn } from '@/lib/utils';
 import { getCategoryIcon } from '@/lib/category-icons';
 import { PaymentSection } from '@/app/dashboard/clients/[id]/_components/pos/payment-section';
@@ -360,7 +360,15 @@ export default function NewSalePage() {
                                 )}
                             </div>
                             <div className="pt-0.5">
-                                <QuickClientDialog onClientCreated={setSelectedClient} />
+                                <QuickClientDialog
+                                    onClientCreated={setSelectedClient}
+                                    trigger={
+                                        <Button className="h-10 gap-2 px-4 shadow-sm" title="Créer un nouveau client">
+                                            <UserPlus className="h-4 w-4" />
+                                            <span className="hidden sm:inline">Nouveau Client</span>
+                                        </Button>
+                                    }
+                                />
                             </div>
                         </div>
                     </CardContent>

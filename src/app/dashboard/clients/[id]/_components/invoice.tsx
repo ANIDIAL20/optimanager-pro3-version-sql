@@ -58,7 +58,7 @@ export function Invoice({ sale, client }: InvoiceProps) {
 
   const handleShare = () => {
     // Use origin to construct a clean shareable URL
-    const shareUrl = `${window.location.origin}/clients/${client.id}/invoice/${sale.id}`;
+    const shareUrl = `${window.location.origin}/print/facture/${sale.id}`;
     navigator.clipboard.writeText(shareUrl);
     toast({
       title: "Lien copié !",
@@ -68,7 +68,7 @@ export function Invoice({ sale, client }: InvoiceProps) {
 
   const getShareableQRCodeValue = () => {
     if (typeof window !== 'undefined') {
-      return `${window.location.origin}/clients/${client.id}/invoice/${sale.id}`;
+      return `${window.location.origin}/print/facture/${sale.id}`;
     }
     return '';
   }

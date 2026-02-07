@@ -222,11 +222,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         <SidebarMenuItem>
                             <SidebarMenuButton
                                 asChild
-                                isActive={pathname?.startsWith('/dashboard/admin')}
+                                isActive={pathname?.startsWith('/admin')}
                                 tooltip="Admin Panel"
                                 className="mt-auto"
                             >
-                                <Link href="/dashboard/admin">
+                                <Link href="/admin">
                                     <ShieldCheck className="size-5" strokeWidth={1.5} />
                                     <span>Admin Panel</span>
                                 </Link>
