@@ -165,6 +165,15 @@ export const createDevis = secureAction(async (userId, user, data: CreateDevisIn
 /**
  * Update Devis Status
  */
+import { revalidatePath } from 'next/cache';
+
+// ... (other imports)
+
+// ...
+
+/**
+ * Update Devis Status
+ */
 export const updateDevisStatus = secureAction(async (userId, user, devisId: string, status: Devis['status']) => {
     try {
         const id = parseInt(devisId);
@@ -177,6 +186,8 @@ export const updateDevisStatus = secureAction(async (userId, user, devisId: stri
         if (result.length === 0) return { success: false, error: 'Devis introuvable' };
 
         await logSuccess(userId, 'UPDATE_STATUS', 'devis', devisId, { status });
+        
+        revalidatePath('/dashboard/devis');
         return { success: true, message: 'Statut mis à jour' };
 
     } catch (error: any) {
@@ -198,6 +209,8 @@ export const deleteDevis = secureAction(async (userId, user, devisId: string) =>
         if (result.length === 0) return { success: false, error: 'Devis introuvable' };
 
         await logSuccess(userId, 'DELETE', 'devis', devisId);
+        
+        revalidatePath('/dashboard/devis');
         return { success: true, message: 'Devis supprimé' };
 
     } catch (error: any) {
@@ -213,6 +226,7 @@ export const convertDevisToSale = secureAction(async (userId, user, devisId: str
         const id = parseInt(devisId);
 
         const result = await db.transaction(async (tx) => {
+            // ... (transaction logic remains same)
             // 1. Get Devis
             const devisData = await tx.query.devis.findFirst({
                 where: and(eq(devis.id, id), eq(devis.userId, userId))
@@ -305,6 +319,10 @@ export const convertDevisToSale = secureAction(async (userId, user, devisId: str
         });
 
         await logSuccess(userId, 'CONVERT_DEVIS', 'sales', result.toString());
+        
+        revalidatePath('/dashboard/devis');
+        revalidatePath('/dashboard/ventes'); // Also revalidate sales list
+        
         return { success: true, saleId: result.toString(), message: 'Transformé en vente' };
 
     } catch (error: any) {

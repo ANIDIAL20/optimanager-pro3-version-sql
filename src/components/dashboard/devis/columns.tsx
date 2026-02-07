@@ -4,7 +4,9 @@ import * as React from 'react';
 import { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MoreHorizontal, ArrowUpDown, Eye, Calendar, Trash2, Printer, FileText } from "lucide-react";
+import { deleteDevis, convertDevisToSale, updateDevisStatus } from "@/app/actions/devis-actions";
+import { useToast } from "@/hooks/use-toast";
+import { CheckCircle, MoreHorizontal, ArrowUpDown, Eye, Calendar, Trash2, Printer, FileText } from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -12,16 +14,26 @@ import {
     DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
+    DropdownMenuSub,
+    DropdownMenuSubTrigger,
+    DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"; // UI Components
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import type { Devis } from "@/app/actions/devis-actions";
 import { SensitiveData } from "@/components/ui/sensitive-data";
-import { QuoteActions } from "@/components/quotes/quote-actions";
-import { deleteDevis } from "@/app/actions/devis-actions";
-import { useToast } from "@/hooks/use-toast";
 
 // Extended Devis type if needed, but Devis usually has clientName directly
 export type DevisRow = Devis;
@@ -156,40 +168,143 @@ function DevisActions({ devis }: { devis: Devis }) {
     // Ah, line 271 checks `if (!isLoading && client && shopSettings)`. Since they are null, InvoiceActions is NOT Rendered!
     // So distinct actions (View, Delete) are what's shown.
     
-    const handleDelete = async () => {
-        if (!confirm(`Supprimer le devis #${devis.id?.slice(0,8)} ?`)) return;
+    const [deleteOpen, setDeleteOpen] = React.useState(false);
+    const [transformOpen, setTransformOpen] = React.useState(false);
 
+    const handleDelete = async () => {
         const result = await deleteDevis(devis.id!);
         if (result.success) {
             toast({ title: "Devis supprimé", description: "Le devis a été supprimé." });
-            router.refresh(); // Or invalidate query if using TanStack Query
-             // Since we use manual fetch in page, we might need a way to refresh.
-             // But if we switch to Server Component + Client Component, router.refresh() updates the server component.
+            router.refresh();
+        } else {
+            toast({ title: "Erreur", description: result.error, variant: "destructive" });
+        }
+        setDeleteOpen(false);
+    };
+
+    const handleStatusChange = async (newStatus: "EN_ATTENTE" | "VALIDE" | "REFUSE") => {
+        const result = await updateDevisStatus(devis.id!, newStatus);
+        if (result.success) {
+            toast({ title: "Statut mis à jour", description: `Le statut a été changé en ${newStatus}.` });
+            router.refresh();
         } else {
             toast({ title: "Erreur", description: result.error, variant: "destructive" });
         }
     };
 
+    const handleTransform = async () => {
+        const result = await convertDevisToSale(devis.id!);
+        if (result.success && result.saleId) {
+            toast({ title: "Succès", description: "Devis transformé en vente avec succès." });
+            router.push(`/dashboard/ventes/${result.saleId}`);
+            router.refresh();
+        } else {
+            toast({ title: "Erreur", description: result.error || "Erreur de transformation", variant: "destructive" });
+        }
+        setTransformOpen(false);
+    };
+
+    const [dropdownOpen, setDropdownOpen] = React.useState(false);
+
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0">
-                    <span className="sr-only">Menu</span>
-                    <MoreHorizontal className="h-4 w-4" />
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                <DropdownMenuItem onClick={() => router.push(`/dashboard/devis/${devis.id}`)}>
-                    <Eye className="mr-2 h-4 w-4" />
-                    Voir Détails
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleDelete} className="text-red-600">
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Supprimer
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
+        <>
+            <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="h-8 w-8 p-0">
+                        <span className="sr-only">Menu</span>
+                        <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                    <DropdownMenuItem onClick={() => router.push(`/dashboard/devis/${devis.id}`)}>
+                        <Eye className="mr-2 h-4 w-4" />
+                        Voir Détails
+                    </DropdownMenuItem>
+                    
+                    {devis.status !== 'TRANSFORME' && (
+                        <>
+                            <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                    <ArrowUpDown className="mr-2 h-4 w-4" />
+                                    Changer Statut
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                    <DropdownMenuItem onClick={() => handleStatusChange('EN_ATTENTE')} disabled={devis.status === 'EN_ATTENTE' || !devis.status}>
+                                        En Attente
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleStatusChange('VALIDE')} disabled={devis.status === 'VALIDE'}>
+                                        Validé
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleStatusChange('REFUSE')} disabled={devis.status === 'REFUSE'}>
+                                        Refusé
+                                    </DropdownMenuItem>
+                                </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                                onSelect={(e) => {
+                                    e.preventDefault();
+                                    setDropdownOpen(false);
+                                    setTransformOpen(true);
+                                }} 
+                                className="text-green-600 focus:text-green-700 focus:bg-green-50"
+                            >
+                                <CheckCircle className="mr-2 h-4 w-4" />
+                                Transformer en Vente
+                            </DropdownMenuItem>
+                        </>
+                    )}
+
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                        onSelect={(e) => {
+                            e.preventDefault();
+                            setDropdownOpen(false);
+                            setDeleteOpen(true);
+                        }} 
+                        className="text-red-600 focus:text-red-700 focus:bg-red-50"
+                    >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Supprimer
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+
+            <AlertDialog open={transformOpen} onOpenChange={setTransformOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Transformer en Vente ?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Voulez-vous vraiment transformer le devis #{devis.id?.slice(0,8).toUpperCase()} en vente ?
+                            Cela mettra à jour le stock et créera une nouvelle commande.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Annuler</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleTransform} className="bg-green-600 hover:bg-green-700">
+                            Confirmer
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Cette action est irréversible. Cela supprimera définitivement le devis #{devis.id?.slice(0,8).toUpperCase()}.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Annuler</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+                            Supprimer
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
     );
 }
