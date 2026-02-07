@@ -12,9 +12,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 
-import { Loader2, Upload, Building2, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Upload, Building2, Image as ImageIcon, Download, Database } from 'lucide-react';
 import Image from 'next/image';
 import { getShopSettings, updateShopSettings } from '@/app/actions/shop-settings-actions';
+import { exportUserData, getBackupStats } from '@/app/actions/backup-actions';
 
 const shopSettingsSchema = z.object({
     shopName: z.string().min(1, 'Le nom de la boutique est requis'),
@@ -31,6 +32,8 @@ export default function ParametresPage() {
     const { toast } = useToast();
     const [isLoading, setIsLoading] = React.useState(true);
     const [isUploading, setIsUploading] = React.useState(false);
+    const [isDownloadingBackup, setIsDownloadingBackup] = React.useState(false);
+    const [backupStats, setBackupStats] = React.useState<any>(null);
     const [logoPreview, setLogoPreview] = React.useState<string | null>(null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -68,6 +71,12 @@ export default function ParametresPage() {
                         setLogoPreview(data.logoUrl);
                     }
                 }
+
+                // Load backup stats
+                const stats = await getBackupStats();
+                if (stats) {
+                    setBackupStats(stats);
+                }
             } catch (error) {
                 console.error('Error loading settings:', error);
                 toast({
@@ -93,6 +102,47 @@ export default function ParametresPage() {
         /* 
         Legacy Firebase Upload Code Removed
         */
+    };
+
+    // Handle backup download
+    const handleBackupDownload = async () => {
+        try {
+            setIsDownloadingBackup(true);
+            
+            // Export user data
+            const backup = await exportUserData();
+            
+            // Create JSON blob
+            const jsonStr = JSON.stringify(backup, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            
+            // Create download link
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            const today = new Date().toISOString().split('T')[0];
+            link.href = url;
+            link.download = `backup_${today}.json`;
+            
+            // Trigger download
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            toast({
+                title: 'Backup téléchargé',
+                description: `Vos données ont été sauvegardées dans backup_${today}.json`,
+            });
+        } catch (error) {
+            console.error('Error downloading backup:', error);
+            toast({
+                variant: 'destructive',
+                title: 'Erreur',
+                description: 'Impossible de télécharger le backup.',
+            });
+        } finally {
+            setIsDownloadingBackup(false);
+        }
     };
 
     // Submit form
@@ -296,6 +346,69 @@ export default function ParametresPage() {
                                     </FormItem>
                                 )}
                             />
+                        </CardContent>
+                    </Card>
+
+                    {/* Data Backup */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Database className="h-5 w-5" />
+                                Sauvegarde de Données
+                            </CardTitle>
+                            <CardDescription>
+                                Téléchargez une copie complète de vos données pour plus de sécurité
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            {/* Stats Display */}
+                            {backupStats && (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                                    <div className="text-center">
+                                        <p className="text-2xl font-bold text-slate-900">{backupStats.clients}</p>
+                                        <p className="text-xs text-slate-600">Clients</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-2xl font-bold text-slate-900">{backupStats.products}</p>
+                                        <p className="text-xs text-slate-600">Produits</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-2xl font-bold text-slate-900">{backupStats.sales}</p>
+                                        <p className="text-xs text-slate-600">Ventes</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-2xl font-bold text-slate-900">{backupStats.totalRecords}</p>
+                                        <p className="text-xs text-slate-600">Total</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Download Button */}
+                            <div>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="lg"
+                                    onClick={handleBackupDownload}
+                                    disabled={isDownloadingBackup}
+                                    className="w-full md:w-auto"
+                                >
+                                    {isDownloadingBackup ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Téléchargement en cours...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Download className="mr-2 h-4 w-4" />
+                                            Télécharger une copie de mes données
+                                        </>
+                                    )}
+                                </Button>
+                                <p className="text-sm text-slate-500 mt-2">
+                                    Format: JSON • Inclut toutes vos données (clients, produits, ventes, etc.)
+                                </p>
+                            </div>
                         </CardContent>
                     </Card>
 

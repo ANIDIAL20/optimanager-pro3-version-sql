@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -30,10 +29,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Eye, Info } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 // Server Actions
 import { getPrescriptions } from '@/app/actions/prescriptions-actions';
@@ -44,7 +45,15 @@ import { createLensOrder, type LensOrderInput } from '@/app/actions/lens-orders-
 const LensOrderSchema = z.object({
   prescriptionId: z.string().min(1, 'Veuillez sélectionner une prescription.'),
   supplierId: z.string().min(1, 'Veuillez sélectionner un fournisseur.'),
+  orderType: z.enum(['unifocal', 'bifocal', 'progressive', 'contact'], {
+    required_error: "Le type de commande est requis.",
+  }),
   lensType: z.string().min(1, 'Le type de verre est requis.'),
+  
+  // Professional Pricing
+  sellingPrice: z.number().positive('Le prix de vente est obligatoire'),
+  estimatedBuyingPrice: z.number().min(0).optional(),
+  
   treatments: z.array(z.string()).optional(),
   notes: z.string().optional(),
 });
@@ -53,139 +62,126 @@ type LensOrderFormValues = z.infer<typeof LensOrderSchema>;
 
 interface LensOrderFormProps {
   clientId: string;
+  onSuccess?: () => void;
 }
 
-interface Prescription {
-  id: string;
-  date: string;
-  doctorName?: string;
-  data: any;
-}
+export function LensOrderForm({ clientId, onSuccess }: LensOrderFormProps) {
+  const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  
+  // Data State
+  const [prescriptions, setPrescriptions] = React.useState<any[]>([]);
+  const [suppliers, setSuppliers] = React.useState<any[]>([]);
+  const [treatments, setTreatments] = React.useState<any[]>([]);
+  const [isLoadingTreatments, setIsLoadingTreatments] = React.useState(true);
 
-interface Supplier {
-  id: number;
-  nomCommercial: string;
-}
-
-interface Treatment {
-  id: number;
-  name: string;
-}
-
-export function LensOrderForm({ clientId }: LensOrderFormProps) {
   const form = useForm<LensOrderFormValues>({
     resolver: zodResolver(LensOrderSchema),
     defaultValues: {
       prescriptionId: '',
       supplierId: '',
+      orderType: 'unifocal',
       lensType: '',
+      sellingPrice: 0,
+      estimatedBuyingPrice: undefined,
       treatments: [],
       notes: '',
     },
   });
 
-  const { toast } = useToast();
-
-  // State
-  const [prescriptions, setPrescriptions] = React.useState<Prescription[]>([]);
-  const [suppliers, setSuppliers] = React.useState<Supplier[]>([]);
-  const [treatments, setTreatments] = React.useState<Treatment[]>([]);
-  const [isLoadingPrescriptions, setIsLoadingPrescriptions] = React.useState(false);
-  const [isLoadingSuppliers, setIsLoadingSuppliers] = React.useState(false);
-  const [isLoadingTreatments, setIsLoadingTreatments] = React.useState(false);
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
-
-  // Fetch prescriptions
+  // Load Data
   React.useEffect(() => {
-    const loadPrescriptions = async () => {
-      setIsLoadingPrescriptions(true);
-      try {
-        const result = await getPrescriptions(clientId);
-        if (result.success && result.data) {
-          setPrescriptions(result.data as any);
-        }
-      } catch (error) {
-        console.error('Error loading prescriptions:', error);
-      } finally {
-        setIsLoadingPrescriptions(false);
-      }
-    };
-
-    loadPrescriptions();
-  }, [clientId]);
-
-  // Fetch suppliers
-  React.useEffect(() => {
-    const loadSuppliers = async () => {
-      setIsLoadingSuppliers(true);
-      try {
-        const result = await getSuppliersList();
-        if (result.success && result.data) {
-          setSuppliers(result.data as any);
-        }
-      } catch (error) {
-        console.error('Error loading suppliers:', error);
-      } finally {
-        setIsLoadingSuppliers(false);
-      }
-    };
-
-    loadSuppliers();
-  }, []);
-
-  // Fetch treatments
-  React.useEffect(() => {
-    const loadTreatments = async () => {
+    async function loadData() {
       setIsLoadingTreatments(true);
       try {
-        const result = await getSettings('treatments');
-        if (result.success && result.data) {
-          setTreatments(result.data as any);
+        const [prescriptionsRes, suppliersRes, treatmentsRes] = await Promise.all([
+          getPrescriptions(clientId),
+          getSuppliersList(undefined), // Assuming no args needed or userId injected
+          getSettings('treatments'),
+        ]);
+
+        if (prescriptionsRes.success) {
+          setPrescriptions(prescriptionsRes.data || []);
         }
+
+        // Handle Suppliers (returns Array directly or via wrapper?)
+        // Based on read: getSuppliersList returns Array. secureAction usage might var.
+        // Safety check
+        if (Array.isArray(suppliersRes)) {
+             setSuppliers(suppliersRes);
+        } else if ((suppliersRes as any).success && (suppliersRes as any).data) { // logic if wrapped
+             setSuppliers((suppliersRes as any).data);
+        } else {
+             // Fallback or empty
+             setSuppliers([]); 
+             // Note: if getSuppliersList returns array, we are good.
+        }
+
+        // Handle Treatments (returns Array directly)
+        if (Array.isArray(treatmentsRes)) {
+            setTreatments(treatmentsRes);
+        } else if ((treatmentsRes as any).data) {
+             setTreatments((treatmentsRes as any).data);
+        }
+        
       } catch (error) {
-        console.error('Error loading treatments:', error);
+        console.error("Failed to load form data", error);
+        toast({
+          variant: "destructive",
+          title: "Erreur de chargement",
+          description: "Impossible de charger les données nécessaires."
+        });
       } finally {
         setIsLoadingTreatments(false);
       }
-    };
+    }
+    loadData();
+  }, [clientId, toast]);
 
-    loadTreatments();
-  }, []);
-
+  // Derived State
   const selectedPrescriptionId = form.watch('prescriptionId');
-  const selectedPrescription = React.useMemo(
-    () => prescriptions?.find(p => p.id === selectedPrescriptionId),
-    [prescriptions, selectedPrescriptionId]
-  );
+  const fullSelectedPrescription = React.useMemo(() => {
+    return prescriptions.find(p => p.id === selectedPrescriptionId) || null;
+  }, [prescriptions, selectedPrescriptionId]);
+
+  // Auto-detect order type from lens type input (UX enhancement)
+  const lensTypeValue = form.watch('lensType');
+  React.useEffect(() => {
+    if (!lensTypeValue) return;
+    const lower = lensTypeValue.toLowerCase();
+    if (lower.includes('prog')) {
+      form.setValue('orderType', 'progressive');
+    } else if (lower.includes('bifo')) {
+      form.setValue('orderType', 'bifocal');
+    } else if (lower.includes('uni') || lower.includes('simple')) {
+      form.setValue('orderType', 'unifocal');
+    }
+  }, [lensTypeValue, form]);
 
   const onSubmit = async (data: LensOrderFormValues) => {
-    const fullSelectedPrescription = prescriptions?.find(p => p.id === data.prescriptionId);
-
-    if (!fullSelectedPrescription) {
-      toast({
-        variant: 'destructive',
-        title: 'Erreur',
-        description: "La prescription sélectionnée n'a pas pu être trouvée. Veuillez réessayer.",
-      });
-      return;
-    }
-
     setIsSubmitting(true);
     try {
-      const supplier = suppliers.find(s => s.id.toString() === data.supplierId);
+      const supplier = suppliers.find(s => s.id === data.supplierId);
       
       const orderInput: LensOrderInput = {
         clientId: parseInt(clientId),
         prescriptionId: parseInt(data.prescriptionId),
-        orderType: 'unifocal',
+        orderType: data.orderType,
         lensType: data.lensType,
         treatment: data.treatments?.join(', ') || null,
-        supplierName: supplier?.nomCommercial || 'Unknown',
-        rightEye: fullSelectedPrescription.data?.od || null,
-        leftEye: fullSelectedPrescription.data?.og || null,
-        unitPrice: 0,
+        supplierName: supplier?.nomCommercial || supplier?.name || 'Unknown',
+        rightEye: fullSelectedPrescription?.data?.od || null,
+        leftEye: fullSelectedPrescription?.data?.og || null,
+        
+        // Professional Pricing
+        sellingPrice: data.sellingPrice,
+        estimatedBuyingPrice: data.estimatedBuyingPrice,
+        
+        // Legacy (kept for compat)
+        unitPrice: data.sellingPrice,
         quantity: 1,
-        totalPrice: 0,
+        totalPrice: data.sellingPrice,
+        
         status: 'pending',
         notes: data.notes
       };
@@ -197,7 +193,15 @@ export function LensOrderForm({ clientId }: LensOrderFormProps) {
           title: 'Commande de verres créée',
           description: 'La nouvelle commande a été enregistrée en tant que brouillon.',
         });
-        form.reset();
+        form.reset({
+            prescriptionId: '',
+            supplierId: '',
+            orderType: 'unifocal',
+            lensType: '',
+            treatments: [],
+            notes: '',
+        });
+        if (onSuccess) onSuccess();
       } else {
         toast({
           variant: 'destructive',
@@ -221,89 +225,125 @@ export function LensOrderForm({ clientId }: LensOrderFormProps) {
     <Card>
       <CardHeader>
         <CardTitle>Nouvelle Commande de Verres</CardTitle>
-        <CardDescription>
-          Créez une nouvelle commande de verres pour ce client à partir d'une prescription existante.
-        </CardDescription>
+        <CardDescription>Configurez la commande pour le laboratoire.</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Prescription Selection */}
               <FormField
                 control={form.control}
                 name="prescriptionId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Prescription de référence</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingPrescriptions}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder={isLoadingPrescriptions ? "Chargement..." : "-- Sélectionner une prescription --"} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {prescriptions?.map(p => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {new Date(p.date).toLocaleDateString()} - {p.prescripteur} ({p.type})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormLabel>Prescription</FormLabel>
+                    <SearchableSelect
+                      options={prescriptions.map((p) => ({
+                        label: `${new Date(p.date).toLocaleDateString()} - ${p.clientName || 'Client'}`,
+                        value: p.id,
+                      }))}
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="Choisir une prescription"
+                      searchPlaceholder="Rechercher une prescription..."
+                    />
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
+              {/* Supplier Selection */}
               <FormField
                 control={form.control}
                 name="supplierId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Fournisseur de verres</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingSuppliers}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder={isLoadingSuppliers ? "Chargement..." : "-- Sélectionner un fournisseur --"} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {suppliers?.map(s => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.nomCommercial}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormLabel>Fournisseur</FormLabel>
+                    <SearchableSelect
+                      options={suppliers.map((s) => ({
+                        label: s.nomCommercial || s.name,
+                        value: s.id,
+                      }))}
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="Choisir un fournisseur"
+                      searchPlaceholder="Rechercher un fournisseur..."
+                    />
                     <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
 
-            {selectedPrescription && (
-              <Card className="bg-muted/50">
-                <CardHeader><CardTitle className="text-lg">Détails de la Prescription</CardTitle></CardHeader>
-                <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div><FormLabel>OD</FormLabel><p>{`${selectedPrescription.odSphere || '-'} (${selectedPrescription.odCylindre || '-'}) ${selectedPrescription.odAxe || '-'}`}</p></div>
-                  <div><FormLabel>OG</FormLabel><p>{`${selectedPrescription.ogSphere || '-'} (${selectedPrescription.ogCylindre || '-'}) ${selectedPrescription.ogAxe || '-'}`}</p></div>
-                  <div><FormLabel>Add</FormLabel><p>{`OD: ${selectedPrescription.odAddition || '-'} | OG: ${selectedPrescription.ogAddition || '-'}`}</p></div>
-                  <div><FormLabel>E.P</FormLabel><p>{selectedPrescription.ecartPupillaire || '-'}</p></div>
-                </CardContent>
-              </Card>
+            {/* Selected Prescription Details */}
+            {fullSelectedPrescription && (
+              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                <div className="flex items-center gap-2 mb-3">
+                    <Eye className="h-4 w-4 text-blue-600" />
+                    <h4 className="text-sm font-semibold text-slate-900">Détails de la correction</h4>
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span className="font-semibold text-blue-700 block mb-1">Œil Droit (OD)</span>
+                        <div className="grid grid-cols-3 gap-x-2 text-slate-600">
+                            <div>Sph: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.od?.sphere || '-'}</span></div>
+                            <div>Cyl: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.od?.cylinder || '-'}</span></div>
+                            <div>Axe: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.od?.axis || '-'}</span></div>
+                        </div>
+                    </div>
+                    <div>
+                        <span className="font-semibold text-blue-700 block mb-1">Œil Gauche (OG)</span>
+                        <div className="grid grid-cols-3 gap-x-2 text-slate-600">
+                            <div>Sph: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.sphere || '-'}</span></div>
+                            <div>Cyl: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.cylinder || '-'}</span></div>
+                            <div>Axe: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.axis || '-'}</span></div>
+                        </div>
+                    </div>
+                </div>
+              </div>
             )}
 
-            <FormField
-              control={form.control}
-              name="lensType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Type de verre</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Ex: Progressif, Unifocal, etc." {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField
+                control={form.control}
+                name="orderType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Type de commande (Géométrie)</FormLabel>
+                    <SearchableSelect
+                      options={[
+                        { label: 'Unifocal (Vision Simple)', value: 'unifocal' },
+                        { label: 'Progressif', value: 'progressive' },
+                        { label: 'Bifocal (Double Foyer)', value: 'bifocal' },
+                        { label: 'Lentilles de Contact', value: 'contact' },
+                      ]}
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="Sélectionner le type"
+                      searchPlaceholder="Rechercher un type..."
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="lensType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Type de verre (Marque/Modèle)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ex: Essilor Varilux, Nikon Presio..." {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+
 
             <FormField
               control={form.control}
@@ -317,8 +357,11 @@ export function LensOrderForm({ clientId }: LensOrderFormProps) {
                     </FormDescription>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {isLoadingTreatments && <p>Chargement...</p>}
-                    {treatments?.map((item) => (
+                    {isLoadingTreatments && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {!isLoadingTreatments && treatments.length === 0 && (
+                        <p className="text-sm text-slate-500 italic col-span-full">Aucun traitement configuré.</p>
+                    )}
+                    {treatments.map((item) => (
                       <FormField
                         key={item.id}
                         control={form.control}
@@ -343,7 +386,7 @@ export function LensOrderForm({ clientId }: LensOrderFormProps) {
                                   }}
                                 />
                               </FormControl>
-                              <FormLabel className="font-normal">
+                              <FormLabel className="font-normal cursor-pointer">
                                 {item.name}
                               </FormLabel>
                             </FormItem>
@@ -356,6 +399,186 @@ export function LensOrderForm({ clientId }: LensOrderFormProps) {
                 </FormItem>
               )}
             />
+
+            {/* ========================================
+                PROFESSIONAL PRICING SECTION
+               ======================================== */}
+            <div className="relative bg-gradient-to-br from-blue-50 via-indigo-50 to-slate-50 p-6 rounded-2xl border-2 border-blue-200/60 shadow-lg shadow-blue-100/50 space-y-5 overflow-hidden">
+              {/* Decorative background pattern */}
+              <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-blue-200/20 to-transparent rounded-full blur-3xl -z-0" />
+              <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-indigo-200/20 to-transparent rounded-full blur-2xl -z-0" />
+              
+              <div className="relative z-10 flex items-center gap-3 mb-3">
+                <div className="p-2.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-md">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h4 className="text-base font-bold bg-gradient-to-r from-blue-700 to-indigo-700 bg-clip-text text-transparent">
+                    Tarification Professionnelle
+                  </h4>
+                  <p className="text-xs text-blue-600/80">Gestion intelligente des marges</p>
+                </div>
+              </div>
+              
+              <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Prix de Vente Client (OBLIGATOIRE) */}
+                <FormField
+                  control={form.control}
+                  name="sellingPrice"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-2 text-blue-800 font-semibold text-sm">
+                        <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z" />
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clipRule="evenodd" />
+                        </svg>
+                        Prix de Vente Client (TTC) *
+                      </FormLabel>
+                      <FormControl>
+                        <div className="relative group">
+                          <Input 
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="Ex: 3500.00" 
+                            className="pr-14 h-11 border-2 border-blue-300/60 bg-white/80 backdrop-blur-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 group-hover:border-blue-400"
+                            {...field}
+                            onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                            value={field.value || ''}
+                          />
+                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded">DH</span>
+                        </div>
+                      </FormControl>
+                      <FormDescription className="flex items-center gap-1.5 text-blue-700 text-xs">
+                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                        Prix affiché sur la facture client
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Prix d'Achat Estimé (OPTIONNEL) */}
+                <FormField
+                  control={form.control}
+                  name="estimatedBuyingPrice"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-2 text-amber-800 font-semibold text-sm">
+                        <svg className="w-4 h-4 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+                          <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1v-5a1 1 0 00-.293-.707l-2-2A1 1 0 0015 7h-1z" />
+                        </svg>
+                        Prix d'Achat Estimé (Fournisseur)
+                      </FormLabel>
+                      <FormControl>
+                        <div className="relative group">
+                          <Input 
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="Ex: 2000.00 (optionnel)" 
+                            className="pr-14 h-11 border-2 border-amber-200/60 bg-white/80 backdrop-blur-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-200 transition-all duration-200 group-hover:border-amber-300"
+                            {...field}
+                            onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                            value={field.value || ''}
+                          />
+                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">DH</span>
+                        </div>
+                      </FormControl>
+                      <FormDescription className="flex items-center gap-1.5 text-amber-700 text-xs">
+                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clipRule="evenodd" />
+                        </svg>
+                        Validé à la réception du BL fournisseur
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Margin Preview - PREMIUM DESIGN */}
+              {(() => {
+                const sellingPrice = form.watch('sellingPrice') || 0;
+                const estimatedBuying = form.watch('estimatedBuyingPrice') || 0;
+                
+                if (sellingPrice > 0 && estimatedBuying > 0) {
+                  const margin = sellingPrice - estimatedBuying;
+                  const marginRate = (margin / sellingPrice) * 100;
+                  
+                  let bgGradient = 'from-red-500 to-rose-600';
+                  let borderColor = 'border-red-300';
+                  let textColor = 'text-red-900';
+                  let iconBg = 'bg-red-500';
+                  let icon = (
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                  );
+                  let status = 'Attention: Marge faible';
+                  
+                  if (marginRate >= 30) {
+                    bgGradient = 'from-emerald-500 to-teal-600';
+                    borderColor = 'border-emerald-300';
+                    textColor = 'text-emerald-900';
+                    iconBg = 'bg-emerald-500';
+                    status = 'Excellent !';
+                    icon = (
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                    );
+                  } else if (marginRate >= 15) {
+                    bgGradient = 'from-yellow-400 to-amber-500';
+                    borderColor = 'border-yellow-300';
+                    textColor = 'text-yellow-900';
+                    iconBg = 'bg-yellow-500';
+                    status = 'Correct';
+                    icon = (
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                    );
+                  } else if (marginRate < 0) {
+                    bgGradient = 'from-rose-600 to-red-700';
+                    status = 'Perte !';
+                  }
+                  
+                  return (
+                    <div className={`relative z-10 overflow-hidden rounded-xl border-2 ${borderColor} bg-white/60 backdrop-blur-md shadow-xl`}>
+                      <div className={`absolute inset-0 bg-gradient-to-r ${bgGradient} opacity-5`} />
+                      <div className="relative p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2.5 bg-gradient-to-br ${bgGradient} rounded-xl shadow-lg`}>
+                            <div className="text-white">
+                              {icon}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-slate-600">{status}</p>
+                            <p className="text-sm font-bold ${textColor}">Marge Prévisionnelle</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-2xl font-bold ${textColor}`}>
+                            {margin.toFixed(2)} <span className="text-lg">DH</span>
+                          </p>
+                          <p className={`text-sm font-semibold ${textColor} opacity-75`}>
+                            {marginRate.toFixed(1)}% de marge
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+            </div>
 
             <FormField
               control={form.control}

@@ -10,6 +10,7 @@ import { prescriptions, clients } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
+import { revalidatePath } from 'next/cache';
 
 // ========================================
 // TYPE DEFINITIONS
@@ -144,11 +145,15 @@ export const createPrescription = secureAction(async (userId, user, input: Presc
         }).returning();
 
         await logSuccess(userId, 'CREATE', 'prescriptions', result[0].id.toString());
+        
+        revalidatePath('/dashboard/clients');
+        revalidatePath(`/dashboard/clients/${clientId}`);
+
         return { success: true, message: 'Ordonnance créée', id: result[0].id.toString() };
 
     } catch (error: any) {
         await logFailure(userId, 'CREATE', 'prescriptions', error.message);
-        return { success: false, error: 'Erreur création' };
+        return { success: false, error: `Erreur création: ${error.message}` };
     }
 });
 

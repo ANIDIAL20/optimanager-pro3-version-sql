@@ -18,13 +18,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
@@ -200,7 +194,22 @@ export default function EditClientPage() {
                         <CardContent className="grid grid-cols-1 gap-6 md:grid-cols-2">
                             <FormField control={form.control} name="nom" render={({ field }) => (<FormItem><FormLabel>Nom</FormLabel><FormControl><Input placeholder="e.g., Dupont" {...field} /></FormControl><FormMessage /></FormItem>)} />
                             <FormField control={form.control} name="prenom" render={({ field }) => (<FormItem><FormLabel>Prénom</FormLabel><FormControl><Input placeholder="e.g., Jean" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                            <FormField control={form.control} name="sexe" render={({ field }) => (<FormItem><FormLabel>Sexe</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Choisir le sexe" /></SelectTrigger></FormControl><SelectContent><SelectItem value="Homme">Homme</SelectItem><SelectItem value="Femme">Femme</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
+                            <FormField control={form.control} name="sexe" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Sexe</FormLabel>
+                                    <SearchableSelect
+                                        options={[
+                                            { label: 'Homme', value: 'Homme' },
+                                            { label: 'Femme', value: 'Femme' }
+                                        ]}
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                        placeholder="Choisir le sexe"
+                                        searchPlaceholder="Rechercher..."
+                                    />
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
                             <FormField control={form.control} name="dateNaissance" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Date de Naissance</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={'outline'} className={cn('w-full justify-start text-left font-normal', !field.value && 'text-muted-foreground')}>{field.value ? (format(field.value, 'dd/MM/yyyy')) : (<span>jj/mm/aaaa</span>)}<CalendarIcon className="ml-2 h-4 w-4" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar
                                 mode="single"
                                 selected={field.value}

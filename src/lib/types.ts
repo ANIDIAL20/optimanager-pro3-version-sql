@@ -40,6 +40,7 @@ export interface Client {
   email?: string;
   adresse?: string;
   ville?: string;
+  notes?: string;
   assuranceId?: string;
   mutuelle?: string; // Added alias
   lastVisit?: string;

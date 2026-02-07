@@ -19,6 +19,8 @@ import { useToast } from '@/hooks/use-toast';
 import { createClient } from '@/app/actions/clients-actions';
 import { Loader2, UserPlus } from 'lucide-react';
 import type { Client } from '@/lib/types';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { getInsurances } from '@/app/actions/settings-actions';
 
 const quickClientSchema = z.object({
     nom: z.string().min(1, 'Le nom est requis'),
@@ -26,6 +28,7 @@ const quickClientSchema = z.object({
     telephone1: z.string().min(1, 'Le téléphone est requis'),
     cni: z.string().optional(),
     ville: z.string().optional(),
+    mutuelle: z.string().optional(),
 });
 
 type QuickClientFormValues = z.infer<typeof quickClientSchema>;
@@ -42,8 +45,25 @@ export function QuickClientDialog({
     onClientCreated,
 }: QuickClientDialogProps) {
     const { toast } = useToast();
-    const firestore = useFirestore();
-    const { user } = useFirebase();
+    const [mutuellesList, setMutuellesList] = React.useState<Array<{ id: string; name: string }>>([]);
+    const [isLoadingMutuelles, setIsLoadingMutuelles] = React.useState(true);
+
+    // Fetch mutuelles on mount
+    React.useEffect(() => {
+        async function fetchMutuelles() {
+            try {
+                const result = await getInsurances();
+                if (Array.isArray(result)) {
+                    setMutuellesList(result);
+                }
+            } catch (error) {
+                console.error('Error fetching mutuelles:', error);
+            } finally {
+                setIsLoadingMutuelles(false);
+            }
+        }
+        fetchMutuelles();
+    }, []);
 
     const form = useForm<QuickClientFormValues>({
         resolver: zodResolver(quickClientSchema),
@@ -53,6 +73,7 @@ export function QuickClientDialog({
             telephone1: '',
             cni: '',
             ville: '',
+            mutuelle: '',
         },
     });
 
@@ -60,10 +81,11 @@ export function QuickClientDialog({
         try {
             const result = await createClient({
                 fullName: `${data.prenom} ${data.nom}`,
-                phone: data.tel,
+                phone: data.telephone1,
                 email: '',
                 address: '',
                 city: data.ville || '',
+                mutuelle: data.mutuelle || '',
                 notes: ''
             });
 
@@ -196,6 +218,32 @@ export function QuickClientDialog({
                                     <FormControl>
                                         <Input placeholder="Casablanca" {...field} />
                                     </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        {/* Row 4: Mutuelle (Full width) */}
+                        <FormField
+                            control={form.control}
+                            name="mutuelle"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Mutuelle</FormLabel>
+                                    <SearchableSelect
+                                        options={[
+                                            { label: 'Aucune', value: 'AUCUNE' },
+                                            ...mutuellesList.map((m) => ({
+                                                label: m.name,
+                                                value: m.name,
+                                            }))
+                                        ]}
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                        placeholder="Sélectionner..."
+                                        searchPlaceholder="Rechercher une mutuelle..."
+                                        disabled={isLoadingMutuelles}
+                                    />
                                     <FormMessage />
                                 </FormItem>
                             )}

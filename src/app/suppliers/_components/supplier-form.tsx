@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -275,55 +276,17 @@ export function SupplierForm({ supplier }: SupplierFormProps) {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Banque</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant="outline"
-                              role="combobox"
-                              className={cn(
-                                "w-full justify-between",
-                                !field.value && "text-muted-foreground"
-                              )}
-                              disabled={isLoadingBanks}
-                            >
-                              {field.value
-                                ? (banksList.find(b => b.name === field.value)?.name || field.value)
-                                : "Sélectionner une banque"}
-                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[200px] p-0">
-                          <Command>
-                            <CommandInput placeholder="Rechercher banque..." />
-                            <CommandList>
-                              <CommandEmpty>Aucune banque trouvée.</CommandEmpty>
-                              <CommandGroup>
-                                {banksList.map((bank) => (
-                                  <CommandItem
-                                    value={bank.name}
-                                    key={bank.id}
-                                    onSelect={() => {
-                                      form.setValue("banque", bank.name);
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        bank.name === field.value
-                                          ? "opacity-100"
-                                          : "opacity-0"
-                                      )}
-                                    />
-                                    {bank.name}
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
+                      <SearchableSelect
+                        options={banksList.map((bank) => ({
+                          label: bank.name,
+                          value: bank.name,
+                        }))}
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder={isLoadingBanks ? "Chargement..." : "Sélectionner une banque"}
+                        searchPlaceholder="Rechercher banque..."
+                        disabled={isLoadingBanks}
+                      />
                       <FormMessage />
                     </FormItem>
                   )}
@@ -332,10 +295,40 @@ export function SupplierForm({ supplier }: SupplierFormProps) {
                   <FormItem><FormLabel>RIB / IBAN</FormLabel><FormControl><Input placeholder="Numéro de compte" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="delaiPaiement" render={({ field }) => (
-                  <FormItem><FormLabel>Délai de Paiement</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="-- Choisir --" /></SelectTrigger></FormControl><SelectContent><SelectItem value="Comptant">Comptant</SelectItem><SelectItem value="30 jours">30 jours</SelectItem><SelectItem value="60 jours">60 jours</SelectItem><SelectItem value="90 jours">90 jours</SelectItem></SelectContent></Select><FormMessage /></FormItem>
+                  <FormItem>
+                    <FormLabel>Délai de Paiement</FormLabel>
+                    <SearchableSelect
+                      options={[
+                        { label: 'Comptant', value: 'Comptant' },
+                        { label: '30 jours', value: '30 jours' },
+                        { label: '60 jours', value: '60 jours' },
+                        { label: '90 jours', value: '90 jours' },
+                      ]}
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="-- Choisir --"
+                      searchPlaceholder="Rechercher..."
+                    />
+                    <FormMessage />
+                  </FormItem>
                 )} />
                 <FormField control={form.control} name="modePaiement" render={({ field }) => (
-                  <FormItem><FormLabel>Mode de Paiement</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="-- Choisir --" /></SelectTrigger></FormControl><SelectContent><SelectItem value="Espèces">Espèces</SelectItem><SelectItem value="Chèque">Chèque</SelectItem><SelectItem value="Virement">Virement</SelectItem><SelectItem value="Carte">Carte</SelectItem></SelectContent></Select><FormMessage /></FormItem>
+                  <FormItem>
+                    <FormLabel>Mode de Paiement</FormLabel>
+                    <SearchableSelect
+                      options={[
+                        { label: 'Espèces', value: 'Espèces' },
+                        { label: 'Chèque', value: 'Chèque' },
+                        { label: 'Virement', value: 'Virement' },
+                        { label: 'Carte', value: 'Carte' },
+                      ]}
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="-- Choisir --"
+                      searchPlaceholder="Rechercher..."
+                    />
+                    <FormMessage />
+                  </FormItem>
                 )} />
                 <FormField control={form.control} name="remise" render={({ field }) => (
                   <FormItem><FormLabel>Remise Habituelle (%)</FormLabel><FormControl><Input type="number" placeholder="0" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
@@ -356,7 +349,20 @@ export function SupplierForm({ supplier }: SupplierFormProps) {
               <CardHeader><CardTitle>Statut</CardTitle></CardHeader>
               <CardContent>
                 <FormField control={form.control} name="statut" render={({ field }) => (
-                  <FormItem><FormLabel>Statut du fournisseur</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="-- Choisir un statut --" /></SelectTrigger></FormControl><SelectContent><SelectItem value="Actif">Actif</SelectItem><SelectItem value="Inactif">Inactif</SelectItem></SelectContent></Select><FormMessage /></FormItem>
+                  <FormItem>
+                    <FormLabel>Statut du fournisseur</FormLabel>
+                    <SearchableSelect
+                      options={[
+                        { label: 'Actif', value: 'Actif' },
+                        { label: 'Inactif', value: 'Inactif' },
+                      ]}
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="-- Choisir un statut --"
+                      searchPlaceholder="Rechercher..."
+                    />
+                    <FormMessage />
+                  </FormItem>
                 )} />
               </CardContent>
             </Card>

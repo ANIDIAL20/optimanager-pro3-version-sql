@@ -8,13 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { Product } from '@/lib/types';
 import { cn } from '@/lib/utils';
 // import { useDebounce } from '@/hooks/use-debounce'; // Assumption removed, inline used
@@ -101,19 +95,17 @@ export function ProductSearch({ onProductSelect }: ProductSearchProps) {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Catégorie" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Toutes les catégories</SelectItem>
-                        {categories?.map((cat) => (
-                            <SelectItem key={cat.id} value={cat.id}>
-                                {cat.name}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                <SearchableSelect
+                    options={[
+                        { label: 'Toutes les catégories', value: 'all' },
+                        ...categories.map(cat => ({ label: cat.name, value: cat.id }))
+                    ]}
+                    value={selectedCategory}
+                    onChange={setSelectedCategory}
+                    placeholder="Catégorie"
+                    searchPlaceholder="Rechercher une catégorie..."
+                    className="w-[180px]"
+                />
             </div>
 
             <ScrollArea className="flex-1 h-[400px] border rounded-md p-4">

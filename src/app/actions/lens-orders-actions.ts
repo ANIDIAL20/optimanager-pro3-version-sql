@@ -20,9 +20,16 @@ export interface LensOrderInput {
   supplierName: string;
   rightEye?: any;
   leftEye?: any;
+  
+  // Professional Pricing Workflow
+  sellingPrice: number;           // Prix de vente client (obligatoire)
+  estimatedBuyingPrice?: number;  // Prix d'achat estimé (optionnel)
+  
+  // Legacy fields (kept for compat)
   unitPrice: number;
   quantity: number;
   totalPrice: number;
+  
   status?: 'pending' | 'ordered' | 'received' | 'delivered';
   notes?: string;
 }
@@ -38,9 +45,20 @@ export interface LensOrder {
   supplierName: string;
   rightEye: any | null;
   leftEye: any | null;
+  
+  // Professional Pricing
+  sellingPrice: string;
+  estimatedBuyingPrice: string | null;
+  finalBuyingPrice: string | null;
+  supplierInvoiceRef: string | null;
+  estimatedMargin: string | null;
+  finalMargin: string | null;
+  
+  // Legacy
   unitPrice: string;
   quantity: number;
   totalPrice: string;
+  
   status: string;
   orderDate: Date | null;
   receivedDate: Date | null;
@@ -168,6 +186,11 @@ export const createLensOrder = secureAction(async (userId, user, input: LensOrde
       }
     }
 
+    // Calculate estimated margin if buying price provided
+    const estimatedMargin = input.estimatedBuyingPrice 
+      ? input.sellingPrice - input.estimatedBuyingPrice 
+      : null;
+
     const [created] = await db.insert(lensOrders)
       .values({
         userId,
@@ -179,9 +202,17 @@ export const createLensOrder = secureAction(async (userId, user, input: LensOrde
         supplierName: input.supplierName,
         rightEye: input.rightEye || null,
         leftEye: input.leftEye || null,
+        
+        // Professional Pricing
+        sellingPrice: input.sellingPrice.toString(),
+        estimatedBuyingPrice: input.estimatedBuyingPrice?.toString() || null,
+        estimatedMargin: estimatedMargin?.toString() || null,
+        
+        // Legacy pricing
         unitPrice: input.unitPrice.toString(),
         quantity: input.quantity,
-        totalPrice: input.totalPrice.toString(),
+        totalPrice: (input.sellingPrice * input.quantity).toString(), // Use sellingPrice for total
+        
         status: input.status || 'pending',
         orderDate: new Date(),
         notes: input.notes || null
@@ -263,38 +294,87 @@ export const updateLensOrder = secureAction(
 /**
  * Mark order as received
  */
-export const receiveLensOrder = secureAction(async (userId, user, orderId: string) => {
+// Add purchases to imports at the top (Line 4)
+import { purchases, suppliers } from '@/db/schema'; // Ensure these are imported
+
+/**
+ * Mark order as received (Smart Reception)
+ */
+export const receiveLensOrder = secureAction(async (userId, user, orderId: string, data?: { blRef: string, finalCost: number }) => {
   try {
     const orderIdNum = parseInt(orderId);
 
-    const [updated] = await db.update(lensOrders)
-      .set({
+    // 1. Fetch current order to check existence and get details
+    const existingOrder = await db.query.lensOrders.findFirst({
+        where: and(eq(lensOrders.id, orderIdNum), eq(lensOrders.userId, userId)),
+    });
+
+    if (!existingOrder) {
+        return { success: false, error: 'Commande de verres introuvable' };
+    }
+
+    // 2. Prepare Update Data
+    const updateData: any = {
         status: 'received',
         receivedDate: new Date(),
         updatedAt: new Date()
-      })
+    };
+
+    // If Smart Reception data provided
+    if (data) {
+        updateData.supplierInvoiceRef = data.blRef;
+        updateData.finalBuyingPrice = data.finalCost.toString();
+        
+        // Calculate realized margin
+        const sellingPrice = parseFloat(existingOrder.sellingPrice);
+        const finalMargin = sellingPrice - data.finalCost;
+        updateData.finalMargin = finalMargin.toString();
+    }
+
+    // 3. Update Lens Order
+    const [updated] = await db.update(lensOrders)
+      .set(updateData)
       .where(and(
         eq(lensOrders.id, orderIdNum),
         eq(lensOrders.userId, userId)
       ))
       .returning();
     
-    if (!updated) {
-      return { success: false, error: 'Commande de verres introuvable' };
+    // 4. Auto-Create Purchase Record (Debt)
+    if (data && updated) {
+        // Find supplier ID by name if possible (best effort), or store name
+        // Ideally lensOrder should store supplierId, but it stores name currently.
+        // We will try to find the supplier.
+        const supplier = await db.query.suppliers.findFirst({
+            where: and(eq(suppliers.name, existingOrder.supplierName), eq(suppliers.userId, userId))
+        });
+
+        await db.insert(purchases).values({
+            userId,
+            supplierId: supplier?.id, // Link if found
+            supplierName: existingOrder.supplierName, // Always store name
+            type: 'LENS_ORDER',
+            reference: data.blRef,
+            totalAmount: data.finalCost.toString(),
+            status: 'UNPAID', // Default to debt
+            date: new Date(),
+            notes: `Commande verres #${orderIdNum} - Client: ${existingOrder.clientId}` // We don't have client name easily here without join, using ID
+        });
     }
-    
-    await logSuccess(userId, 'UPDATE', 'lens_orders', orderId, { action: 'received' });
+
+    await logSuccess(userId, 'UPDATE', 'lens_orders', orderId, { action: 'received', smart: !!data });
 
     revalidatePath('/dashboard/clients');
     revalidatePath(`/dashboard/clients/${updated.clientId}`);
     
     return { 
       success: true, 
-      message: 'Commande marquée comme reçue',
+      message: 'Commande reçue et achat enregistré',
       data: updated 
     };
 
   } catch (error: any) {
+    console.error("Receive Order Error:", error);
     await logFailure(userId, 'UPDATE', 'lens_orders', error.message, orderId);
     return { 
       success: false, 

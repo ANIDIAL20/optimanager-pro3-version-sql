@@ -4,13 +4,7 @@ import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2 } from 'lucide-react';
 
@@ -61,17 +55,18 @@ export function PaymentSection({ total, onProcessSale, isProcessing }: PaymentSe
 
                 <div className="space-y-2">
                     <Label htmlFor="method">Mode de paiement</Label>
-                    <Select value={method} onValueChange={setMethod}>
-                        <SelectTrigger id="method">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="Especes">Espèces</SelectItem>
-                            <SelectItem value="Carte">Carte Bancaire</SelectItem>
-                            <SelectItem value="Cheque">Chèque</SelectItem>
-                            <SelectItem value="Virement">Virement</SelectItem>
-                        </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                        options={[
+                            { label: 'Espèces', value: 'Especes' },
+                            { label: 'Carte Bancaire', value: 'Carte' },
+                            { label: 'Chèque', value: 'Cheque' },
+                            { label: 'Virement', value: 'Virement' },
+                        ]}
+                        value={method}
+                        onChange={setMethod}
+                        placeholder="Choisir un mode"
+                        searchPlaceholder="Rechercher..."
+                    />
                 </div>
             </div>
 

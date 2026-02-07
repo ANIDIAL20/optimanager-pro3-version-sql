@@ -21,13 +21,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
@@ -69,9 +63,10 @@ type PrescriptionFormValues = z.infer<typeof PrescriptionSchema>;
 
 interface PrescriptionFormProps {
   clientId: string;
+  onSuccess?: () => void;
 }
 
-export function PrescriptionForm({ clientId }: PrescriptionFormProps) {
+export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps) {
   const form = useForm<PrescriptionFormValues>({
     resolver: zodResolver(PrescriptionSchema),
     defaultValues: {
@@ -134,6 +129,8 @@ export function PrescriptionForm({ clientId }: PrescriptionFormProps) {
           description: 'Les nouvelles mesures optiques ont été enregistrées avec succès.',
         });
         form.reset();
+        // Force refresh
+        if (onSuccess) onSuccess();
       } else {
         toast({
           variant: 'destructive',
@@ -211,18 +208,17 @@ export function PrescriptionForm({ clientId }: PrescriptionFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Type de Verres</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="-- Choisir un type --" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="Vision de loin">Vision de loin</SelectItem>
-                        <SelectItem value="Vision de pres">Vision de près</SelectItem>
-                        <SelectItem value="Progressif">Progressif</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      options={[
+                        { label: 'Vision de loin', value: 'Vision de loin' },
+                        { label: 'Vision de près', value: 'Vision de pres' },
+                        { label: 'Progressif', value: 'Progressif' },
+                      ]}
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="-- Choisir un type --"
+                      searchPlaceholder="Rechercher un type..."
+                    />
                     <FormMessage />
                   </FormItem>
                 )}
