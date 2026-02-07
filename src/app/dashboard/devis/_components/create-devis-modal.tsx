@@ -16,13 +16,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Plus, Trash2, Search, ShoppingCart, User, X, Box } from 'lucide-react';
+import { Plus, Trash2, Search, ShoppingCart, User, UserPlus, X, Box } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { SubmitButton } from '@/components/ui/submit-button';
 import { ClientSelector } from '@/components/sales/client-selector';
 import { Client, Product, Category } from '@/lib/types'; // Add Category type if needed
 import { cn } from '@/lib/utils';
-import { QuickClientDialog } from '@/components/sales/quick-client-dialog';
+import { QuickClientDialog } from '@/components/clients/quick-client-dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -322,7 +322,15 @@ export function CreateDevisModal({ children, onSuccess }: CreateDevisModalProps)
                                     onSelectClient={setSelectedClient}
                                 />
                             </div>
-                            <QuickClientDialog onClientCreated={setSelectedClient} />
+                            <QuickClientDialog
+                                onClientCreated={setSelectedClient}
+                                trigger={
+                                    <Button className="h-10 gap-2 px-4 shadow-sm" title="Créer un nouveau client">
+                                        <UserPlus className="h-4 w-4" />
+                                        <span className="hidden sm:inline">Nouveau Client</span>
+                                    </Button>
+                                }
+                            />
                         </div>
                          {selectedClient && (
                             <div className="mt-2 text-xs flex items-center gap-2 text-muted-foreground">

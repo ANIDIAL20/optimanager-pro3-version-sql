@@ -185,7 +185,7 @@ export function UserProfile() {
                         <DropdownMenuGroup>
                             <DropdownMenuItem
                                 className="gap-2 cursor-pointer hover:bg-slate-100 rounded-md mx-1"
-                                onClick={() => router.push('/settings')}
+                                onClick={() => router.push('/dashboard/parametres')}
                             >
                                 <Settings className="h-4 w-4 text-slate-500" />
                                 <span className="text-slate-700">Paramètres</span>

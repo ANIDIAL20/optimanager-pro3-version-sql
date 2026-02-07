@@ -252,40 +252,21 @@ export async function getGlobalBanner() {
 }
 
 export async function getClientUsageStats(uid: string) {
-  // await requireAdmin(); // Optional: depend de si on l'appelle depuis le dashboard client ou admin
-  
   try {
-    // 1. Get Product Count
-    const productCountResult = await db
-      .select({ count: count() })
-      .from(products)
-      .where(eq(products.userId, uid));
-      
+    // Run all 4 queries in parallel for faster response
+    const [productCountResult, clientCountResult, supplierCountResult, user] = await Promise.all([
+      db.select({ count: count() }).from(products).where(eq(products.userId, uid)),
+      db.select({ count: count() }).from(clients).where(eq(clients.userId, uid)),
+      db.select({ count: count() }).from(suppliers).where(eq(suppliers.userId, uid)),
+      db.query.users.findFirst({
+        where: eq(users.id, uid),
+        columns: { maxProducts: true, maxClients: true, maxSuppliers: true },
+      }),
+    ]);
+
     const productCount = productCountResult[0]?.count || 0;
-
-    // 2. Get Client Count
-    const clientCountResult = await db
-        .select({ count: count() })
-        .from(clients)
-        .where(eq(clients.userId, uid));
     const clientCount = clientCountResult[0]?.count || 0;
-
-    // 3. Get Supplier Count
-    const supplierCountResult = await db
-        .select({ count: count() })
-        .from(suppliers)
-        .where(eq(suppliers.userId, uid));
     const supplierCount = supplierCountResult[0]?.count || 0;
-
-    // 4. Get User Limits
-    const user = await db.query.users.findFirst({
-      where: eq(users.id, uid),
-      columns: {
-        maxProducts: true,
-        maxClients: true,
-        maxSuppliers: true,
-      }
-    });
 
     const maxProducts = user?.maxProducts || 50;
     const maxClients = user?.maxClients || 20;

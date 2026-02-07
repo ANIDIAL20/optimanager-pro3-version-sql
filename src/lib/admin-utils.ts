@@ -26,13 +26,18 @@ export async function requireAuth() {
 
 /**
  * Require admin role - redirects to /dashboard if not admin
+ * Accepts: role === 'ADMIN' (from DB) OR email matches NEXT_PUBLIC_ADMIN_EMAIL
  */
 export async function requireAdmin() {
   const session = await requireAuth();
   
+  const role = (session.user.role || '').toUpperCase();
   const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-  if (session.user.email !== ADMIN_EMAIL && session.user.role !== 'admin') {
-    redirect('/dashboard');
+  const isAdminByRole = role === 'ADMIN';
+  const isAdminByEmail = ADMIN_EMAIL && session.user.email === ADMIN_EMAIL;
+  
+  if (!isAdminByRole && !isAdminByEmail) {
+    redirect('/dashboard?error=unauthorized');
   }
   
   return session;

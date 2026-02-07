@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/popover';
 import { getClients } from '@/app/actions/clients-actions';
 import type { Client } from '@/lib/types';
-import { QuickClientDialog } from './quick-client-dialog';
+import { QuickClientDialog } from '@/components/clients/quick-client-dialog';
 
 interface ClientSelectorProps {
     onSelect: (client: Client | null) => void;

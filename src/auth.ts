@@ -136,8 +136,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.email = user.email;
       }
 
-      // 2. On every JWT check (navigation), sync with DB to get real Role and ID
-      if (token.email) {
+      // 2. PERFORMANCE FIX: Only sync with DB when necessary
+      // Query DB ONLY on sign-in, not on every navigation
+      const shouldSync = trigger === "signIn" || trigger === "signUp" || !token.sub || !token.role;
+
+      if (token.email && shouldSync) {
         try {
           // Use query builder for safer execution
           const dbUser = await db.query.users.findFirst({
@@ -166,7 +169,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return token;
     },
     async session({ session, token }) {
-      console.log("📋 Session Callback Triggered", { sub: token.sub, role: token.role });
+      // Session callback - avoid console in production
       if (token.sub && session.user) {
         session.user.id = token.sub;
         session.user.email = token.email as string;
