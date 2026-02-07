@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2 } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
+
 
 interface PaymentSectionProps {
     total: number;
@@ -87,7 +88,7 @@ export function PaymentSection({ total, onProcessSale, isProcessing }: PaymentSe
             </div>
 
             <Button type="submit" className="w-full" size="lg" disabled={isProcessing || total === 0}>
-                {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isProcessing && <BrandLoader size="sm" className="mr-2" />}
                 Valider la Vente ({total.toFixed(2)} MAD)
             </Button>
         </form>

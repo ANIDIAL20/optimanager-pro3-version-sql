@@ -11,17 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-    ArrowLeft,
-    Receipt,
-    Search,
-    Loader2,
-    Package,
-    Plus,
-    ShoppingCart,
-    Minus,
-    Trash2,
-} from 'lucide-react';
+import { ArrowLeft, Receipt, Search, Package, Plus, ShoppingCart, Minus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { ClientSelector } from '@/components/sales/client-selector';
 import { QuickClientDialog } from '@/components/sales/quick-client-dialog';
@@ -34,11 +24,14 @@ import { PaymentSection } from '@/app/dashboard/clients/[id]/_components/pos/pay
 import { getClients } from '@/features/clients/actions';
 import { getProducts, getCategories, type Product as ActionProduct } from '@/app/actions/products-actions'; // Still using this for POS products 
 import { createSale } from '@/features/sales/actions';
+import { getPendingLensOrders } from '@/app/actions/lens-orders-actions';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 // Use CartItem type definition
 interface CartItem {
     product: Product;
     quantity: number;
+    lensOrderId?: number;
 }
 
 
@@ -51,6 +44,7 @@ export default function NewSalePage() {
     const [searchQuery, setSearchQuery] = React.useState('');
     const [activeCategory, setActiveCategory] = React.useState('all');
     const [isLoadingProducts, setIsLoadingProducts] = React.useState(true);
+    const [pendingOrders, setPendingOrders] = React.useState<any[]>([]); // New State
 
     // const firestore = useFirestore(); // Removed
     // const { user } = useFirebase(); // Removed
@@ -135,6 +129,54 @@ export default function NewSalePage() {
 
         return () => { isMounted = false; };
     }, [toast]);
+
+    // Fetch pending orders when client changes
+    React.useEffect(() => {
+        if (selectedClient?.id) {
+            getPendingLensOrders(selectedClient.id).then(res => {
+                if (res.success && res.data) {
+                     setPendingOrders(res.data);
+                } else {
+                     setPendingOrders([]);
+                }
+            });
+        } else {
+            setPendingOrders([]);
+        }
+    }, [selectedClient]);
+
+    const handleAddLensOrder = (order: any) => {
+        // Prevent dupes
+        if (cartItems.some(item => item.lensOrderId === order.id)) {
+            toast({ description: "Cette commande est déjà dans le panier." });
+            return;
+        }
+
+        const mockProduct: Product = {
+            id: `LO-${order.id}`,
+            reference: `CMD-#${order.id}`,
+            nomProduit: `Verres: ${order.lensType}`,
+            prixVente: parseFloat(order.sellingPrice),
+            quantiteStock: 1, // unlimited effectively
+            categorie: 'Verres',
+            marque: order.supplierName,
+            modele: order.orderType,
+            couleur: '-',
+            description: order.notes || '',
+            prixAchat: parseFloat(order.finalBuyingPrice || order.estimatedBuyingPrice || '0'),
+            stockMin: 0,
+            categorieId: 'verres',
+            marqueId: 'supplier'
+        };
+
+        setCartItems(prev => [...prev, {
+            product: mockProduct,
+            quantity: 1, 
+            lensOrderId: order.id
+        }]);
+        
+        toast({ title: "Ajouté", description: "Commande ajoutée au panier." });
+    };
 
     // Filter Logic from ClientPOSTab
     const filteredProducts = React.useMemo(() => {
@@ -231,11 +273,17 @@ export default function NewSalePage() {
             const totalHT = totalTTC / 1.2; // Assuming 20% TVA for simplicity as default
             const totalTVA = totalTTC - totalHT;
             
+            // Extract lensOrderIds
+            const lensOrderIds = cartItems
+                .filter(item => item.lensOrderId !== undefined)
+                .map(item => item.lensOrderId as number);
+
             // Call New Feature Action
             const result = await createSale({
                 clientId: clientIdNum,
                 clientName: selectedClient?.name,
                 items: saleItems,
+                lensOrderIds, // Pass the IDs
                 
                 // Financials (Required by Zod Schema)
                 totalHT: parseFloat(totalHT.toFixed(2)),
@@ -318,6 +366,61 @@ export default function NewSalePage() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Step 1.5: Pending Orders (Smart Pro Logic) */}
+            {pendingOrders.length > 0 && (
+                <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
+                     <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-lg text-indigo-900">Commandes en attente ({pendingOrders.length})</h3>
+                    </div>
+                    <Card className="border-indigo-100 bg-indigo-50/30 shadow-sm">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-base font-medium flex items-center gap-2">
+                                <Package className="h-4 w-4 text-indigo-600" />
+                                Ce client a des commandes de verres prêtes à être facturées.
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="grid gap-3 pt-0">
+                            {pendingOrders.map(order => {
+                                const isAdded = cartItems.some(i => i.lensOrderId === order.id);
+                                return (
+                                    <div key={order.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-indigo-100 shadow-sm">
+                                        <div>
+                                            <p className="font-semibold text-slate-800">{order.lensType} <span className="text-slate-400 font-normal">({order.orderType})</span></p>
+                                            <p className="text-xs text-slate-500">
+                                                Commandée le {new Date(order.createdAt).toLocaleDateString()} • {parseFloat(order.sellingPrice).toFixed(2)} DH
+                                            </p>
+                                            <Badge variant="outline" className={cn("mt-1 text-[10px]", 
+                                                order.status === 'received' ? "bg-indigo-100 text-indigo-700 border-indigo-200" : "bg-yellow-100 text-yellow-700 border-yellow-200")}>
+                                                {order.status === 'received' ? 'Reçue (En Stock)' : 'Commandée (En cours)'}
+                                            </Badge>
+                                        </div>
+                                        <Button 
+                                            size="sm" 
+                                            variant={isAdded ? "secondary" : "default"}
+                                            className={cn("gap-2", isAdded ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-indigo-600 hover:bg-indigo-700")}
+                                            onClick={() => handleAddLensOrder(order)}
+                                            disabled={isAdded}
+                                        >
+                                            {isAdded ? (
+                                                <>
+                                                    <Package className="h-4 w-4" />
+                                                    Ajouté
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Plus className="h-4 w-4" />
+                                                    Ajouter
+                                                </>
+                                            )}
+                                        </Button>
+                                    </div>
+                                );
+                            })}
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
 
             {/* Step 2 & 3: POS Interface */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -460,7 +563,7 @@ function ProductList({ products, isLoading, cartItems, onAdd }: { products: Prod
     if (isLoading) {
         return (
             <div className="text-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-slate-400" />
+                <BrandLoader size="md" className="mx-auto mb-2 text-slate-400" />
                 <p className="text-sm text-slate-500">Chargement...</p>
             </div>
         );

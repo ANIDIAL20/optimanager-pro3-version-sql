@@ -11,8 +11,9 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Package, Plus } from 'lucide-react';
 import { createSale } from '@/app/actions/sales-actions';
+import { getPendingLensOrders } from '@/app/actions/lens-orders-actions';
 
 interface ClientPOSProps {
     client: Client;
@@ -25,6 +26,49 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
     const { toast } = useToast();
     // Simple state to force refresh history
     const [historyRefreshKey, setHistoryRefreshKey] = React.useState(0);
+    const [pendingOrders, setPendingOrders] = React.useState<any[]>([]);
+
+    React.useEffect(() => {
+        if (clientId) {
+            getPendingLensOrders(clientId).then(res => {
+                if (res.success && res.data) {
+                    setPendingOrders(res.data);
+                }
+            });
+        }
+    }, [clientId]);
+
+    const addLensOrderToCart = (order: any) => {
+        if (cartItems.some(item => item.lensOrderId === order.id)) {
+            toast({ description: "Cette commande est déjà dans le panier." });
+            return;
+        }
+
+        const mockProduct: Product = {
+            id: `LO-${order.id}`,
+            reference: `CMD-#${order.id}`,
+            nomProduit: `Verres: ${order.lensType}`,
+            prixVente: parseFloat(order.sellingPrice),
+            quantiteStock: 1,
+            categorie: 'Verres',
+            marque: order.supplierName,
+            modele: order.orderType,
+            couleur: '-',
+            description: order.notes || '',
+            prixAchat: parseFloat(order.finalBuyingPrice || order.estimatedBuyingPrice || '0'),
+            stockMin: 0,
+            categorieId: 'verres',
+            marqueId: 'supplier'
+        };
+
+        setCartItems(prev => [...prev, {
+            product: mockProduct,
+            quantity: 1, 
+            lensOrderId: order.id
+        }]);
+        
+        toast({ title: "Ajouté", description: "Commande ajoutée au panier." });
+    };
 
     const addToCart = (product: Product) => {
         setCartItems(prev => {
@@ -97,9 +141,14 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
             // For now, we'll pass it in 'notes' or we accept that it creates as 'impaye' and we might need a second call?
             // Wait, createSaleInput has 'notes' and 'paymentMethod'.
             
+            const lensOrderIds = cartItems
+                .filter(item => item.lensOrderId)
+                .map(item => item.lensOrderId as number);
+
             const result = await createSale({
                 clientId,
                 items: saleItems,
+                lensOrderIds,
                 paymentMethod: paymentData.method,
                 notes: paymentData.notes ? `${paymentData.notes} (Initial payment: ${paymentData.amountPaid})` : undefined,
                 // We'll trust the server to calc totals, but we could pass them if needed.
@@ -133,6 +182,53 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
 
     return (
         <div className="space-y-6">
+            {/* Pending Orders Block */}
+            {pendingOrders.length > 0 && (
+                <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
+                     <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-lg text-indigo-900">Commandes en attente ({pendingOrders.length})</h3>
+                    </div>
+                    <Card className="border-indigo-100 bg-indigo-50/30 shadow-sm">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-base font-medium flex items-center gap-2">
+                                <Package className="h-4 w-4 text-indigo-600" />
+                                Ce client a des commandes de verres prêtes à être facturées.
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="grid gap-3 pt-0">
+                            {pendingOrders.map(order => {
+                                const isAdded = cartItems.some(i => i.lensOrderId === order.id);
+                                return (
+                                    <div key={order.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-indigo-100 shadow-sm">
+                                        <div>
+                                            <p className="font-semibold text-slate-800">{order.lensType} <span className="text-slate-400 font-normal">({order.orderType})</span></p>
+                                            <p className="text-xs text-slate-500">
+                                                Commandée le {new Date(order.createdAt).toLocaleDateString()} • {parseFloat(order.sellingPrice).toFixed(2)} DH
+                                            </p>
+                                            <Badge variant="outline" className="mt-1 text-[10px] bg-indigo-100 text-indigo-700 border-indigo-200">
+                                                {order.status === 'received' ? 'Reçue' : 'En cours'}
+                                            </Badge>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-bold text-sm">{parseFloat(order.sellingPrice).toFixed(2)} DH</span>
+                                            <Button 
+                                                size="sm" 
+                                                variant={isAdded ? "secondary" : "default"}
+                                                className={isAdded ? "bg-green-100 text-green-700" : "bg-indigo-600 hover:bg-indigo-700"}
+                                                onClick={() => addLensOrderToCart(order)}
+                                                disabled={isAdded}
+                                            >
+                                                {isAdded ? "Ajouté" : "Ajouter"}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-5 gap-6 h-[600px]">
                 {/* Left Col: Product Search (40%) */}
                 <div className="md:col-span-2 flex flex-col gap-4 border-r pr-4">

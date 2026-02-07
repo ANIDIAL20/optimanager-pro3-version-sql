@@ -4,7 +4,7 @@ import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Loader2, PackageCheck, AlertCircle } from 'lucide-react';
+import { PackageCheck, AlertCircle } from 'lucide-react';
 import { receiveLensOrder } from '@/app/actions/lens-orders-actions';
 import { useToast } from '@/hooks/use-toast';
 
@@ -28,6 +28,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 const ReceiveOrderSchema = z.object({
   blRef: z.string().min(1, 'La référence du BL est requise'),
@@ -359,7 +360,7 @@ export function ReceiveOrderDialog({
                 >
                   {isSubmitting ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <BrandLoader size="sm" className="mr-2" />
                       Validation...
                     </>
                   ) : (

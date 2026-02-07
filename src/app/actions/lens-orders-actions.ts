@@ -294,8 +294,38 @@ export const updateLensOrder = secureAction(
 /**
  * Mark order as received
  */
-// Add purchases to imports at the top (Line 4)
-import { purchases, suppliers } from '@/db/schema'; // Ensure these are imported
+import { purchases, suppliers } from '@/db/schema';
+import { isNull } from 'drizzle-orm';
+
+/**
+ * Get billable lens orders for a client (pending/ordered/received AND not billed)
+ */
+export const getPendingLensOrders = secureAction(async (userId, user, clientId: string) => {
+  try {
+    const clientIdNum = parseInt(clientId);
+    const results = await db.query.lensOrders.findMany({
+      where: and(
+        eq(lensOrders.userId, userId),
+        eq(lensOrders.clientId, clientIdNum),
+        isNull(lensOrders.saleId), // Not yet billed
+        // Optional: filter by status if we only want 'received' orders to be billable?
+        // For now, let's allow billing even if just ordered.
+      ),
+      orderBy: [desc(lensOrders.createdAt)],
+      with: {
+        prescription: true
+      }
+    });
+    
+    return { success: true, data: results };
+
+  } catch (error: any) {
+    return { 
+      success: false, 
+      error: 'Erreur lors de la récupération des commandes à facturer' 
+    };
+  }
+});
 
 /**
  * Mark order as received (Smart Reception)
@@ -342,23 +372,21 @@ export const receiveLensOrder = secureAction(async (userId, user, orderId: strin
     
     // 4. Auto-Create Purchase Record (Debt)
     if (data && updated) {
-        // Find supplier ID by name if possible (best effort), or store name
-        // Ideally lensOrder should store supplierId, but it stores name currently.
-        // We will try to find the supplier.
+        // Find supplier ID by name (best effort)
         const supplier = await db.query.suppliers.findFirst({
             where: and(eq(suppliers.name, existingOrder.supplierName), eq(suppliers.userId, userId))
         });
 
         await db.insert(purchases).values({
             userId,
-            supplierId: supplier?.id, // Link if found
-            supplierName: existingOrder.supplierName, // Always store name
+            supplierId: supplier?.id,
+            supplierName: existingOrder.supplierName,
             type: 'LENS_ORDER',
             reference: data.blRef,
             totalAmount: data.finalCost.toString(),
-            status: 'UNPAID', // Default to debt
+            status: 'UNPAID',
             date: new Date(),
-            notes: `Commande verres #${orderIdNum} - Client: ${existingOrder.clientId}` // We don't have client name easily here without join, using ID
+            notes: `Commande verres #${orderIdNum}`
         });
     }
 

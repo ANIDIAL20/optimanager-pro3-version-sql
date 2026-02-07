@@ -33,7 +33,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Eye, Info } from 'lucide-react';
+import { Eye, Info } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 // Server Actions
@@ -41,6 +41,7 @@ import { getPrescriptions } from '@/app/actions/prescriptions-actions';
 import { getSuppliersList } from '@/app/actions/supplier-actions';
 import { getSettings } from '@/app/actions/settings-actions';
 import { createLensOrder, type LensOrderInput } from '@/app/actions/lens-orders-actions';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 const LensOrderSchema = z.object({
   prescriptionId: z.string().min(1, 'Veuillez sélectionner une prescription.'),
@@ -357,7 +358,7 @@ export function LensOrderForm({ clientId, onSuccess }: LensOrderFormProps) {
                     </FormDescription>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {isLoadingTreatments && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {isLoadingTreatments && <BrandLoader size="sm" />}
                     {!isLoadingTreatments && treatments.length === 0 && (
                         <p className="text-sm text-slate-500 italic col-span-full">Aucun traitement configuré.</p>
                     )}
@@ -598,7 +599,7 @@ export function LensOrderForm({ clientId, onSuccess }: LensOrderFormProps) {
             />
 
             <Button type="submit" disabled={isSubmitting || form.formState.isSubmitting}>
-              {(isSubmitting || form.formState.isSubmitting) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {(isSubmitting || form.formState.isSubmitting) && <BrandLoader size="sm" className="mr-2" />}
               Créer la Commande
             </Button>
           </form>

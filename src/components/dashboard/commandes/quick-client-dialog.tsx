@@ -17,10 +17,11 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { createClient } from '@/app/actions/clients-actions';
-import { Loader2, UserPlus } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
 import type { Client } from '@/lib/types';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { getInsurances } from '@/app/actions/settings-actions';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 const quickClientSchema = z.object({
     nom: z.string().min(1, 'Le nom est requis'),
@@ -259,7 +260,7 @@ export function QuickClientDialog({
                             </Button>
                             <Button type="submit" disabled={form.formState.isSubmitting}>
                                 {form.formState.isSubmitting && (
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    <BrandLoader size="sm" className="mr-2" />
                                 )}
                                 Créer et Sélectionner
                             </Button>

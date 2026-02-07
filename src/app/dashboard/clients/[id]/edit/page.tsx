@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon, Loader2 } from 'lucide-react';
+import { Calendar as CalendarIcon } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 
 import { PageHeader } from '@/components/page-header';
@@ -36,6 +36,7 @@ import { BackButton } from '@/components/ui/back-button';
 import { MutuelleSelector } from '@/components/clients/mutuelle-selector';
 import type { Client } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 const ClientSchema = z.object({
     nom: z.string().min(1, 'Le nom est requis.'),
@@ -243,7 +244,7 @@ export default function EditClientPage() {
                         <CardFooter className="flex justify-end gap-2">
                             <Button type="button" variant="outline" onClick={() => router.back()}>Annuler</Button>
                             <Button type="submit" disabled={form.formState.isSubmitting}>
-                                {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                {form.formState.isSubmitting && <BrandLoader size="sm" className="mr-2" />}
                                 Enregistrer les modifications
                             </Button>
                         </CardFooter>

@@ -25,11 +25,12 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { CalendarIcon, Loader2 } from 'lucide-react';
+import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { createPrescription } from '@/app/actions/prescriptions-actions';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 
 const PrescriptionSchema = z.object({
@@ -327,7 +328,7 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
             />
 
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isSubmitting && <BrandLoader size="sm" className="mr-2" />}
               Enregistrer la Prescription
             </Button>
           </form>

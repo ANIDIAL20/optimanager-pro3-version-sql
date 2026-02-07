@@ -20,7 +20,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, CreditCard, History } from 'lucide-react';
+import { CreditCard, History } from 'lucide-react';
 import { addPayment } from '@/app/actions/sales-actions';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -28,6 +28,7 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { Sale } from '@/lib/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 interface PaymentDialogProps {
     order: Sale;
@@ -294,7 +295,7 @@ export function PaymentDialog({ order, open, onOpenChange, onPaymentSuccess }: P
                             Annuler
                         </Button>
                         <Button type="submit" disabled={isSubmitting}>
-                            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {isSubmitting && <BrandLoader size="sm" className="mr-2" />}
                             Enregistrer le Paiement
                         </Button>
                     </DialogFooter>

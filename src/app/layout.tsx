@@ -9,6 +9,8 @@ import { Toaster as SonnerToaster } from "sonner";
 
 import { SessionProvider } from "next-auth/react";
 import { PrivacyProvider } from "@/context/privacy-context";
+import { LoadingProvider } from "@/contexts/loading-context";
+import { UnifiedLoader } from "@/components/ui/unified-loader";
 import { getGlobalBanner } from "@/app/actions/adminActions";
 
 export const metadata: Metadata = {
@@ -45,11 +47,14 @@ export default async function RootLayout({
         suppressHydrationWarning
       >
         <SessionProvider>
-          <PrivacyProvider>
-            <AppShell banner={banner}>
-              {children}
-            </AppShell>
-          </PrivacyProvider>
+          <LoadingProvider>
+            <PrivacyProvider>
+              <UnifiedLoader />
+              <AppShell banner={banner}>
+                {children}
+              </AppShell>
+            </PrivacyProvider>
+          </LoadingProvider>
         </SessionProvider>
         <Toaster />
         <SonnerToaster />

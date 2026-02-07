@@ -4,7 +4,7 @@ import * as React from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MoreHorizontal, ArrowUpDown, Loader2 } from "lucide-react";
+import { MoreHorizontal, ArrowUpDown } from 'lucide-react';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import type { Product as ProductType } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { deleteProduct } from "@/features/products/actions";
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 // Extend Product type for table display with optional populated fields
 export type Product = ProductType & {

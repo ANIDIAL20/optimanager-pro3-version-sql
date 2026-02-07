@@ -4,7 +4,7 @@ import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Download, Database, RotateCcw, AlertTriangle, Upload, Trash2 } from 'lucide-react';
+import { Download, Database, RotateCcw, AlertTriangle, Upload, Trash2 } from 'lucide-react';
 import { exportUserData, getBackupStats, restoreUserData, resetUserAccount } from '@/app/actions/backup-actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,6 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Separator } from '@/components/ui/separator';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 export function DataBackup() {
     const { toast } = useToast();
@@ -192,7 +193,7 @@ export function DataBackup() {
                         >
                             {isDownloading ? (
                                 <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    <BrandLoader size="sm" className="mr-2" />
                                     Compression en cours...
                                 </>
                             ) : (
@@ -241,7 +242,7 @@ export function DataBackup() {
                             onClick={() => setShowConfirmRestore(true)}
                             className="w-full md:w-auto"
                         >
-                             {isRestoring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
+                             {isRestoring ? <BrandLoader size="sm" className="mr-2" /> : <RotateCcw className="mr-2 h-4 w-4" />}
                              Restaurer le backup
                         </Button>
                     </div>
@@ -328,7 +329,7 @@ export function DataBackup() {
                             disabled={resetConfirmation !== 'RESET' || isResetting}
                             onClick={handleReset}
                         >
-                             {isResetting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                             {isResetting && <BrandLoader size="sm" className="mr-2" />}
                              TOUT SUPPRIMER
                         </Button>
                     </AlertDialogFooter>

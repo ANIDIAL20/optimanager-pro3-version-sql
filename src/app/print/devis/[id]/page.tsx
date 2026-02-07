@@ -3,7 +3,8 @@
 import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Loader2, Printer, ArrowLeft } from 'lucide-react';
+import { Printer, ArrowLeft } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import { getPrintData } from '@/app/actions/print-actions';
 import { PrintDocumentTemplate } from '@/components/printing/print-document-template';
 import { useToast } from '@/hooks/use-toast';
@@ -64,7 +65,7 @@ export default function DevisPrintPage({ params }: DevisPrintPageProps) {
     if (isLoading) {
         return (
             <div className="fixed inset-0 z-[100] bg-white flex items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                <BrandLoader size="md" className="text-gray-400" />
             </div>
         );
     }

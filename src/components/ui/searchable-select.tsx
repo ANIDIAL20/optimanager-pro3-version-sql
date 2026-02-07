@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronsUpDown, Plus, Loader2 } from "lucide-react"
+import { Check, ChevronsUpDown, Plus } from 'lucide-react';
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -9,6 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 export interface SearchableSelectOption {
   label: string
@@ -139,7 +140,7 @@ export function SearchableSelect({
                   >
                     {isCreating ? (
                       <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <BrandLoader size="sm" className="mr-2" />
                         Création...
                       </>
                     ) : (

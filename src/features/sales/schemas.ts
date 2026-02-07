@@ -12,6 +12,7 @@ export const saleItemSchema = z.object({
 export const saleSchema = z.object({
   clientId: z.number().optional(),
   clientName: z.string().optional(),
+  lensOrderIds: z.array(z.number()).optional(), // Add this
   items: z.array(saleItemSchema).min(1, "La vente doit contenir au moins un article"),
   
   // Financial

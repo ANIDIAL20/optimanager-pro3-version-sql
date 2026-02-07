@@ -270,6 +270,7 @@ export const lensOrders = pgTable('lens_orders', {
   // References
   clientId: integer('client_id').references(() => clients.id),
   prescriptionId: integer('prescription_id').references(() => prescriptions.id),
+  saleId: integer('sale_id').references(() => sales.id), // Link to the sale when billed
   
   // Order details
   orderType: text('order_type').notNull(), // 'progressive', 'bifocal', 'unifocal', 'contact'

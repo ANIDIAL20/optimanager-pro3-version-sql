@@ -1,9 +1,9 @@
 
 
 import { BaseRepository } from '@/lib/repositories/base.repository';
-import { sales, stockMovements, products } from '@/db/schema';
+import { sales, stockMovements, products, lensOrders } from '@/db/schema';
 import { db } from '@/db';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { CACHE_TAGS, redis } from '@/lib/cache/redis';
 
 export type Sale = typeof sales.$inferSelect;
@@ -53,7 +53,7 @@ export class SaleRepository extends BaseRepository<Sale, typeof sales> {
    * CRITICAL: Crée une vente ET met à jour le stock
    * Note: HTTP driver doesn't support transactions, so we do sequential operations
    */
-  async createSale(data: NewSale, items: any[]): Promise<Sale> {
+  async createSale(data: NewSale, items: any[], lensOrderIds?: number[]): Promise<Sale> {
     
     // 1. Create Sale first
     const saleResult = await db.insert(sales).values(data).returning();
@@ -64,6 +64,9 @@ export class SaleRepository extends BaseRepository<Sale, typeof sales> {
       for (const item of items) {
          if (item.productId) {
              const productId = parseInt(item.productId);
+
+             if (isNaN(productId)) continue;
+
              
              // Decrement stock using SQL
              await db
@@ -92,6 +95,25 @@ export class SaleRepository extends BaseRepository<Sale, typeof sales> {
 
       // Invalidate caches
       await this.invalidateListCache(data.userId);
+
+      // 3. Link Lens Orders (New Feature)
+      if (lensOrderIds && lensOrderIds.length > 0) {
+          try {
+              await db.update(lensOrders)
+                  .set({
+                      saleId: newSale.id,
+                      status: 'delivered', // Assume sale = delivery
+                      deliveredDate: new Date(),
+                      updatedAt: new Date()
+                  })
+                  .where(and(
+                      inArray(lensOrders.id, lensOrderIds),
+                      eq(lensOrders.userId, data.userId)
+                  ));
+          } catch (err) {
+              console.error('Failed to link lens orders to sale:', err);
+          }
+      }
 
       return newSale;
     } catch (error) {

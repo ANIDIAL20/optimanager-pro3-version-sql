@@ -4,11 +4,12 @@ import * as React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Loader2, TrendingUp, ShoppingCart, DollarSign, FileText, Users, Package, ArrowUpRight } from 'lucide-react';
+import { TrendingUp, ShoppingCart, DollarSign, FileText, Users, Package, ArrowUpRight } from 'lucide-react';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { SensitiveData } from '@/components/ui/sensitive-data';
 import { useToast } from '@/hooks/use-toast';
 import { getAccountingMetrics, exportSalesData, exportClientsData, exportStockData, type AccountingMetrics } from '@/app/actions/accounting-actions';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 // Constants
 const CARD_COLORS = {
@@ -155,7 +156,7 @@ export default function AccountingPage() {
                             </div>
                         </div>
                         {isLoading ? (
-                            <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                            <BrandLoader size="md" className="text-slate-400" />
                         ) : (
                             <div className="space-y-1">
                                 <h3 className="text-3xl font-bold text-slate-900">
@@ -180,7 +181,7 @@ export default function AccountingPage() {
                             </div>
                         </div>
                         {isLoading ? (
-                            <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                            <BrandLoader size="md" className="text-slate-400" />
                         ) : (
                             <div className="space-y-1">
                                 <h3 className="text-3xl font-bold text-slate-900">
@@ -205,7 +206,7 @@ export default function AccountingPage() {
                             </div>
                         </div>
                         {isLoading ? (
-                            <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                            <BrandLoader size="md" className="text-slate-400" />
                         ) : (
                             <div className="space-y-1">
                                 <h3 className="text-3xl font-bold text-slate-900">
@@ -233,7 +234,7 @@ export default function AccountingPage() {
                 <CardContent className="pl-2">
                     {isLoading ? (
                         <div className="h-[350px] flex items-center justify-center">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                            <BrandLoader size="md" className="text-primary" />
                         </div>
                     ) : (
                         <ResponsiveContainer width="100%" height={350}>
@@ -303,7 +304,7 @@ export default function AccountingPage() {
                                 <p className="text-sm text-slate-600">Historique complet des ventes</p>
                             </div>
                             {isExporting === 'sales' ? (
-                                <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+                                <BrandLoader size="sm" className="text-blue-500" />
                             ) : (
                                 <div className="text-xs text-blue-600 font-medium group-hover:underline">
                                     Cliquer pour télécharger
@@ -326,7 +327,7 @@ export default function AccountingPage() {
                                 <p className="text-sm text-slate-600">Base de données clients</p>
                             </div>
                             {isExporting === 'clients' ? (
-                                <Loader2 className="h-5 w-5 animate-spin text-emerald-500" />
+                                <BrandLoader size="sm" className="text-emerald-500" />
                             ) : (
                                 <div className="text-xs text-emerald-600 font-medium group-hover:underline">
                                     Cliquer pour télécharger
@@ -349,7 +350,7 @@ export default function AccountingPage() {
                                 <p className="text-sm text-slate-600">État actuel de l'inventaire</p>
                             </div>
                             {isExporting === 'stock' ? (
-                                <Loader2 className="h-5 w-5 animate-spin text-violet-500" />
+                                <BrandLoader size="sm" className="text-violet-500" />
                             ) : (
                                 <div className="text-xs text-violet-600 font-medium group-hover:underline">
                                     Cliquer pour télécharger

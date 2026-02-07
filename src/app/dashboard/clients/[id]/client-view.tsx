@@ -18,7 +18,7 @@ import { getClient } from '@/app/actions/clients-actions';
 import type { Client } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Skeleton } from '@/components/ui/skeleton';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import { PrescriptionForm } from './_components/prescription-form';
 import { ContactLensPrescriptionForm } from './_components/contact-lens-prescription-form';
 import { PrescriptionList } from './_components/prescription-list';
@@ -81,13 +81,8 @@ export default function ClientDetailView() {
 
     if (isLoading) {
         return (
-            <div className="space-y-6">
-                <div className="flex items-center gap-4">
-                    <Skeleton className="h-9 w-24" />
-                </div>
-                <Skeleton className="h-32 w-full rounded-xl" />
-                <Skeleton className="h-10 w-full max-w-md" />
-                <Skeleton className="h-96 w-full" />
+            <div className="flex items-center justify-center h-screen">
+                <BrandLoader size="md" className="text-primary" />
             </div>
         );
     }
