@@ -11,6 +11,7 @@ import type { Product } from '@/lib/types';
 export interface CartItem {
     product: Product;
     quantity: number;
+    lensOrderId?: number;
 }
 
 interface CartProps {

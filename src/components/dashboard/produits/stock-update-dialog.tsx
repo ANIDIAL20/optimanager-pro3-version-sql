@@ -15,11 +15,12 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Minus, Package, Loader2, TrendingUp, TrendingDown } from 'lucide-react';
+import { Plus, Minus, Package, TrendingUp, TrendingDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { updateStock } from '@/app/actions/products-actions';
 import type { Product } from '@/lib/types';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 interface StockUpdateDialogProps {
     product: Product;
@@ -289,7 +290,7 @@ export function StockUpdateDialog({
                                     : "bg-orange-600 hover:bg-orange-700"
                             )}
                         >
-                            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {isSubmitting && <BrandLoader size="sm" className="mr-2" />}
                             {movementType === 'in' ? (
                                 <>
                                     <Plus className="mr-2 h-4 w-4" />

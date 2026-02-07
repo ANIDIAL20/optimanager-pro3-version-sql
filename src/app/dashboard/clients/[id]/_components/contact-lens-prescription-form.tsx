@@ -25,7 +25,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { CalendarIcon, Loader2 } from 'lucide-react';
+import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { createContactLensPrescription } from '@/app/actions/contact-lens-prescriptions-actions';
 import { useToast } from '@/hooks/use-toast';
@@ -37,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 const ContactLensPrescriptionSchema = z.object({
   date: z.date({ required_error: 'La date est requise.' }),
@@ -344,7 +345,7 @@ export function ContactLensPrescriptionForm({ clientId, onSuccess }: ContactLens
             )} />
 
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isSubmitting && <BrandLoader size="sm" className="mr-2" />}
               Enregistrer la Prescription Lentilles
             </Button>
           </form>

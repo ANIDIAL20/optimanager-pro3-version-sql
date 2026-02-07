@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Eye, ShoppingBag, Loader2, MoreHorizontal, Package, CheckCircle2 } from 'lucide-react';
+import { Eye, ShoppingBag, MoreHorizontal, Package, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { SensitiveData } from '@/components/ui/sensitive-data';
 import { getSales } from '@/app/actions/sales-actions';
@@ -28,6 +28,7 @@ import { ReceiveLensModal } from '@/components/clients/receive-lens-modal';
 import { deliverLensOrder } from '@/app/actions/lens-orders-actions';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 interface PurchaseHistoryTableProps {
     clientId: string;
@@ -180,7 +181,7 @@ export function PurchaseHistoryTable({ clientId }: PurchaseHistoryTableProps) {
                     <CardDescription>Chargement de l'historique...</CardDescription>
                 </CardHeader>
                 <CardContent className="h-40 flex items-center justify-center text-slate-500">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                    <BrandLoader size="md" className="text-blue-600" />
                 </CardContent>
             </Card>
         );
@@ -285,7 +286,7 @@ export function PurchaseHistoryTable({ clientId }: PurchaseHistoryTableProps) {
                                                         className="text-green-600 focus:text-green-600"
                                                     >
                                                         {isDeliveringOrder === sale.id ? (
-                                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                            <BrandLoader size="sm" className="mr-2" />
                                                         ) : (
                                                             <CheckCircle2 className="mr-2 h-4 w-4" />
                                                         )}

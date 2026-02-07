@@ -6,7 +6,7 @@ import {
     SupplierOrder,
 } from '@/app/actions/supplier-orders-actions';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Truck, Plus, Package, AlertTriangle, Euro, Search, Clock } from 'lucide-react';
+import { Truck, Plus, Package, AlertTriangle, Euro, Search, Clock } from 'lucide-react';
 import { DataTable } from '@/components/ui/data-table';
 import { columns, SupplierOrderUI } from '@/components/dashboard/supplier-orders/columns';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { SensitiveData } from '@/components/ui/sensitive-data';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 export default function SupplierOrdersPage() {
     const { toast } = useToast();
@@ -79,7 +80,7 @@ export default function SupplierOrdersPage() {
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-screen">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <BrandLoader size="md" className="text-primary" />
             </div>
         );
     }

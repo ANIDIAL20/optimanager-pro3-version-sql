@@ -12,7 +12,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 
-import { Loader2, Upload, Building2, Image as ImageIcon, Download, Database } from 'lucide-react';
+import { Upload, Building2, Image as ImageIcon, Download, Database } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import Image from 'next/image';
 import { getShopSettings, updateShopSettings } from '@/app/actions/shop-settings-actions';
 import { exportUserData, getBackupStats } from '@/app/actions/backup-actions';
@@ -175,7 +176,7 @@ export default function ParametresPage() {
     if (isLoading) {
         return (
             <div className="flex flex-1 items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                <BrandLoader size="md" className="text-slate-400" />
             </div>
         );
     }
@@ -243,7 +244,7 @@ export default function ParametresPage() {
                                     >
                                         {isUploading ? (
                                             <>
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                <BrandLoader size="sm" className="mr-2" />
                                                 Téléchargement...
                                             </>
                                         ) : (
@@ -395,7 +396,7 @@ export default function ParametresPage() {
                                 >
                                     {isDownloadingBackup ? (
                                         <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            <BrandLoader size="sm" className="mr-2" />
                                             Téléchargement en cours...
                                         </>
                                     ) : (
@@ -416,7 +417,7 @@ export default function ParametresPage() {
                     <div className="flex justify-end">
                         <Button type="submit" size="lg" disabled={form.formState.isSubmitting}>
                             {form.formState.isSubmitting && (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                <BrandLoader size="sm" className="mr-2" />
                             )}
                             Enregistrer les Paramètres
                         </Button>

@@ -417,7 +417,7 @@ export default function ClientsTable({ clients }: { clients: ClientData[] }) {
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsResetOpen(false)}>Annuler</Button>
                         <Button onClick={confirmResetPassword} disabled={isResetting || !newPassword}>
-                            {isResetting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {isResetting && <BrandLoader size="sm" className="mr-2" />}
                             Confirmer
                         </Button>
                     </DialogFooter>

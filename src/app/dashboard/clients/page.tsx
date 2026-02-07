@@ -35,14 +35,14 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Users, Plus, Loader2, Trash2, Eye, Search, MoreHorizontal, Edit, CreditCard, ShoppingBag, UserCheck, TrendingUp, UserPlus } from 'lucide-react';
+import { Users, Plus, Trash2, Eye, Search, MoreHorizontal, Edit, CreditCard, ShoppingBag, UserCheck, TrendingUp, UserPlus } from 'lucide-react';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { SensitiveData } from '@/components/ui/sensitive-data';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
-// Extended Client type to include calculated fields
 // Extended Client type to include calculated fields
 interface ExtendedClient {
     id: string; // UI expects string IDs
@@ -72,7 +72,6 @@ export default function ClientsPage() {
         ongoingOrders: 0,
     });
 
-    // Load data (Clients + Sales)
     // Load data (Clients + Sales)
     const loadData = React.useCallback(async () => {
         setIsLoading(true);
@@ -140,7 +139,7 @@ export default function ClientsPage() {
                     name: client.fullName,    // Map fullName -> name
                     email: client.email,
                     phone: client.phone,
-                    mutuelle: null, // New schema migth not have mutuelle mapped yet?
+                    mutuelle: client.mutuelle, // Mapped correctly now
                     address: client.address,
                     balance,
                     lastVisit,
@@ -193,7 +192,6 @@ export default function ClientsPage() {
     }, [searchQuery, clients]);
 
     // Delete client
-    // Delete client
     const handleDelete = async (clientId: string) => {
         if (!confirm('Êtes-vous sûr de vouloir supprimer ce client ? Cette action est irréversible.')) return;
 
@@ -209,7 +207,7 @@ export default function ClientsPage() {
     if (isLoading) {
         return (
             <div className="flex items-center justify-center min-h-[60vh]">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <BrandLoader size="md" />
             </div>
         );
     }

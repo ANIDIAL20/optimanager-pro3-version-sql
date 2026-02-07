@@ -36,7 +36,7 @@ import type { Client, Product, Sale, OrderDetail } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Check, ChevronsUpDown, Loader2, PlusCircle, Trash2 } from 'lucide-react';
+import { Check, ChevronsUpDown, PlusCircle, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Table,
@@ -50,6 +50,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { SensitiveData } from '@/components/ui/sensitive-data';
 // import { Invoice } from './invoice'; // This probably also imports firebase? If so, stub.
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 const SaleItemSchema = z.object({
   productId: z.string().min(1),

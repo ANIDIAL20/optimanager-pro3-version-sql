@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Plus, Minus, Trash2, Loader2, ShoppingCart, Package, Glasses, Eye, Box, Disc, SprayCan, Link as LinkIcon, Briefcase, Puzzle, Wrench } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, ShoppingCart, Package, Glasses, Eye, Box, Disc, SprayCan, Link as LinkIcon, Briefcase, Puzzle, Wrench } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { SensitiveData } from '@/components/ui/sensitive-data';
@@ -17,6 +17,8 @@ import { cn } from '@/lib/utils';
 import { getProducts } from '@/app/actions/products-actions';
 import { getCategories } from '@/app/actions/products-actions';
 import { createSale } from '@/app/actions/sales-actions';
+import { getPendingLensOrders, type LensOrder } from '@/app/actions/lens-orders-actions';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 interface Client {
     id: string;
@@ -47,6 +49,7 @@ interface Category {
 interface CartItem {
     product: Product;
     quantity: number;
+    lensOrderId?: number;
 }
 
 // Helper to get icon based on name (fuzzy match)
@@ -74,6 +77,7 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
     const [activeCategory, setActiveCategory] = React.useState('all');
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [isLoading, setIsLoading] = React.useState(true);
+    const [pendingOrders, setPendingOrders] = React.useState<LensOrder[]>([]);
 
     const { toast } = useToast();
     const router = useRouter();
@@ -109,6 +113,17 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
 
         loadData();
     }, []);
+
+    // Load pending lens orders
+    React.useEffect(() => {
+        if (clientId) {
+            getPendingLensOrders(clientId).then(res => {
+                if (res.success && res.data) {
+                    setPendingOrders(res.data as LensOrder[]);
+                }
+            });
+        }
+    }, [clientId]);
 
     // Filter products
     const filteredProducts = React.useMemo(() => {
@@ -183,6 +198,32 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
         setCartItems(cartItems.filter(item => item.product.id !== productId));
     };
 
+    // Add lens order to cart
+    const handleAddLensOrder = (order: LensOrder) => {
+        if (cartItems.some(item => item.lensOrderId === order.id)) {
+            toast({ description: "Cette commande est déjà dans le panier." });
+            return;
+        }
+
+        const virtualProduct: Product = {
+            id: `LO-${order.id}`,
+            nomProduit: `Verres: ${order.lensType}`,
+            reference: `CMD-#${order.id}`,
+            categorie: 'Verres',
+            categorieId: 'verres',
+            prixVente: parseFloat(order.sellingPrice),
+            quantiteStock: 1
+        };
+
+        setCartItems([...cartItems, {
+            product: virtualProduct,
+            quantity: 1,
+            lensOrderId: order.id
+        }]);
+        
+        toast({ title: "Ajouté", description: "Commande ajoutée au panier." });
+    };
+
     // Validate order
     const handleValidateOrder = async () => {
         if (cartItems.length === 0) {
@@ -197,8 +238,13 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
         setIsSubmitting(true);
 
         try {
+            const lensOrderIds = cartItems
+                .filter(item => item.lensOrderId)
+                .map(item => item.lensOrderId as number);
+
             const saleData = {
                 clientId: clientId,
+                lensOrderIds,
                 items: cartItems.map(item => ({
                     productRef: item.product.id,
                     productName: item.product.nomProduit,
@@ -250,6 +296,53 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
             {/* LEFT: Product Catalog (66%) */}
             <div className="lg:col-span-2 space-y-4">
                 {/* Search Bar */}
+                {/* Pending Orders Block */}
+                {pendingOrders.length > 0 && (
+                    <div className="mb-6 animate-in fade-in slide-in-from-top-4 duration-500">
+                         <div className="flex items-center gap-2 mb-3">
+                            <h3 className="font-semibold text-lg text-indigo-900">Commandes en attente ({pendingOrders.length})</h3>
+                        </div>
+                        <Card className="border-indigo-100 bg-indigo-50/30 shadow-sm">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-base font-medium flex items-center gap-2">
+                                    <Package className="h-4 w-4 text-indigo-600" />
+                                    Ce client a des commandes de verres prêtes à être facturées.
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="grid gap-3 pt-0">
+                                {pendingOrders.map(order => {
+                                    const isAdded = cartItems.some(i => i.lensOrderId === order.id);
+                                    return (
+                                        <div key={order.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-indigo-100 shadow-sm">
+                                            <div>
+                                                <p className="font-semibold text-slate-800">{order.lensType} <span className="text-slate-400 font-normal">({order.orderType})</span></p>
+                                                <p className="text-xs text-slate-500">
+                                                    Commandée le {new Date(order.createdAt || new Date()).toLocaleDateString()} • {parseFloat(order.sellingPrice).toFixed(2)} DH
+                                                </p>
+                                                <Badge variant="outline" className="mt-1 text-[10px] bg-indigo-100 text-indigo-700 border-indigo-200">
+                                                    {order.status === 'received' ? 'Reçue' : 'En cours'}
+                                                </Badge>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-bold text-sm">{parseFloat(order.sellingPrice).toFixed(2)} DH</span>
+                                                <Button 
+                                                    size="sm" 
+                                                    variant={isAdded ? "secondary" : "default"}
+                                                    className={cn(isAdded ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-indigo-600 hover:bg-indigo-700")}
+                                                    onClick={() => handleAddLensOrder(order)}
+                                                    disabled={isAdded}
+                                                >
+                                                    {isAdded ? "Ajouté" : "Ajouter"}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </CardContent>
+                        </Card>
+                    </div>
+                )}
+
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
@@ -284,7 +377,7 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
                     <TabsContent value="all" className="mt-4">
                         {isLoading ? (
                             <div className="text-center py-12">
-                                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-slate-400" />
+                                <BrandLoader size="md" className="mx-auto mb-2 text-slate-400" />
                                 <p className="text-sm text-slate-500">Chargement...</p>
                             </div>
                         ) : filteredProducts.length === 0 ? (
@@ -490,7 +583,7 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
                             disabled={cartItems.length === 0 || isSubmitting}
                             className="w-full h-12 text-base font-semibold"
                         >
-                            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {isSubmitting && <BrandLoader size="sm" className="mr-2" />}
                             Valider la Vente
                         </Button>
                     </CardContent>

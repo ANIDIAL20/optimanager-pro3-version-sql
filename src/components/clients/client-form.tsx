@@ -6,12 +6,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { Loader2, User, Phone, MapPin, Calendar, FileText, Mail } from 'lucide-react';
+import { User, Phone, MapPin, Calendar, FileText, Mail } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Client } from '@/app/actions/clients-actions';
 
 
 import { getInsurances } from '@/app/actions/settings-actions';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 interface ClientFormProps {
     defaultValues?: Partial<Client>;
@@ -264,7 +265,7 @@ export function ClientForm({
                 >
                     {isSubmitting ? (
                         <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            <BrandLoader size="sm" className="mr-2" />
                             Traitement...
                         </>
                     ) : (

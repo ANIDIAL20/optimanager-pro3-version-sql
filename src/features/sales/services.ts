@@ -61,7 +61,7 @@ export class SaleService {
     };
 
     // 3. Execute Transaction via Repository
-    return await saleRepository.createSale(saleData, data.items);
+    return await saleRepository.createSale(saleData, data.items, data.lensOrderIds);
   }
 }
 

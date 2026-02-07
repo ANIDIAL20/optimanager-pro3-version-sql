@@ -6,13 +6,14 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, CheckCircle2, User, Phone, Building2, Receipt, Clock, FileText } from 'lucide-react';
+import { CheckCircle2, User, Phone, Building2, Receipt, Clock, FileText } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { BackButton } from '@/components/ui/back-button';
 import { PageHeader } from '@/components/page-header';
 import { QuoteActions } from '@/components/quotes/quote-actions';
 import { getShopProfile } from '@/app/actions/shop-actions';
 import { Separator } from '@/components/ui/separator';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 interface DevisDetailsPageProps {
     params: Promise<{ id: string }>;
@@ -113,7 +114,7 @@ export default function DevisDetailsPage({ params }: DevisDetailsPageProps) {
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-screen">
-                <Loader2 className="h-8 w-8 animate-spin" />
+                <BrandLoader size="md" />
             </div>
         );
     }
@@ -151,7 +152,7 @@ export default function DevisDetailsPage({ params }: DevisDetailsPageProps) {
                             className="bg-green-600 hover:bg-green-700 text-white"
                         >
                             {isConverting ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                <BrandLoader size="sm" className="mr-2" />
                             ) : (
                                 <CheckCircle2 className="mr-2 h-4 w-4" />
                             )}

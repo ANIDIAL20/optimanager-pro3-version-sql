@@ -6,8 +6,8 @@
 'use server';
 
 import { db } from '@/db';
-import { sales, clients, products } from '@/db/schema';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { sales, clients, products, lensOrders } from '@/db/schema';
+import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
 
@@ -58,6 +58,7 @@ export interface Sale {
 export interface CreateSaleInput {
     clientId?: string;
     items: SaleItem[];
+    lensOrderIds?: number[]; // IDs of lens orders to link
     paymentMethod?: string;
     notes?: string;
     totalHT?: number; // Optional, usually calculated
@@ -311,9 +312,25 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
             console.log("📝 Inserting sale:", newSale);
 
             const result = await tx.insert(sales).values(newSale).returning();
+            const createdSaleId = result[0].id;
 
-            await logSuccess(userId, 'CREATE', 'sales', result[0].id.toString());
-            return { success: true, id: result[0].id.toString(), message: 'Vente créée avec succès' };
+            // 5. Link Lens Orders (PRO Workflow)
+            if (data.lensOrderIds && data.lensOrderIds.length > 0) {
+                await tx.update(lensOrders)
+                    .set({
+                        saleId: createdSaleId,
+                        status: 'delivered', // Assume sale = delivery to customer
+                        deliveredDate: new Date(),
+                        updatedAt: new Date()
+                    })
+                    .where(and(
+                        inArray(lensOrders.id, data.lensOrderIds),
+                        eq(lensOrders.userId, userId)
+                    ));
+            }
+
+            await logSuccess(userId, 'CREATE', 'sales', createdSaleId.toString());
+            return { success: true, id: createdSaleId.toString(), message: 'Vente créée avec succès' };
         });
 
     } catch (error: any) {

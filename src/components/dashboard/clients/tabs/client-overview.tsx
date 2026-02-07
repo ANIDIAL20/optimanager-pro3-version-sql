@@ -5,7 +5,7 @@ import { getPrescriptions } from '@/app/actions/prescriptions-actions';
 import * as React from 'react';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { Badge } from '@/components/ui/badge';
-import { Phone, Mail, MapPin, DollarSign, Eye, Glasses, StickyNote, Pencil, Check, X, Loader2 } from 'lucide-react';
+import { Phone, Mail, MapPin, DollarSign, Eye, Glasses, StickyNote, Pencil, Check, X } from 'lucide-react';
 import type { Client } from '@/lib/types';
 // Temporary: Firebase features disabled
 // import { useFirestore, useCollection, useMemoFirebase, useFirebase } from '@/firebase';
@@ -14,6 +14,7 @@ import { SensitiveData } from '@/components/ui/sensitive-data';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 interface ClientOverviewProps {
     client: Client;
@@ -255,7 +256,7 @@ export function ClientOverview({ client, clientId }: ClientOverviewProps) {
                                     <X className="h-4 w-4" />
                                 </Button>
                                 <Button variant="ghost" size="sm" onClick={handleSaveNotes} disabled={isSavingNotes} className="h-8 w-8 p-0 text-green-600 hover:text-green-700">
-                                    {isSavingNotes ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                                    {isSavingNotes ? <BrandLoader size="sm" /> : <Check className="h-4 w-4" />}
                                 </Button>
                             </div>
                         )}

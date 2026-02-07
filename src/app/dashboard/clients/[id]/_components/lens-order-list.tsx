@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertCircle, MoreHorizontal, Loader2, Eye, Trash2, Edit, Share2, Mail, Printer, PackageCheck } from 'lucide-react';
+import { AlertCircle, MoreHorizontal, Eye, Trash2, Edit, Share2, Mail, Printer, PackageCheck } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { format } from 'date-fns';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { BrandLoader } from '@/components/ui/loader-brand';
 import { SensitiveData } from '@/components/ui/sensitive-data';
 import { ReceiveOrderDialog } from './receive-order-dialog';
 
@@ -58,9 +59,9 @@ interface LensOrder {
 
 const getStatusBadge = (status: string) => {
   const statusMap: Record<string, { variant: any; label: string; className?: string }> = {
-    pending: { variant: 'outline', label: 'En Attente', className: 'bg-slate-100 text-slate-700 border-slate-200' },
+    pending: { variant: 'outline', label: 'En Attente', className: 'bg-yellow-100 text-yellow-700 border-yellow-200 hover:bg-yellow-200' },
     ordered: { variant: 'default', label: 'Commandée', className: 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200' },
-    received: { variant: 'secondary', label: 'Reçue', className: 'bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200' },
+    received: { variant: 'secondary', label: 'Reçue', className: 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border-indigo-200' },
     delivered: { variant: 'default', label: 'Livrée', className: 'bg-green-100 text-green-700 hover:bg-green-200 border-green-200' }
   };
 
@@ -263,6 +264,7 @@ export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
             <title>Commande - ${selectedOrder.lensType}</title>
             <style>
               @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+import { BrandLoader } from '@/components/ui/loader-brand';
               
               body { 
                 font-family: 'Inter', sans-serif; 
@@ -732,7 +734,7 @@ export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
                             className="text-red-600 focus:text-red-600"
                           >
                             {deletingId === order.id ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              <BrandLoader size="sm" className="mr-2" />
                             ) : (
                               <Trash2 className="mr-2 h-4 w-4" />
                             )}
@@ -788,7 +790,7 @@ export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
               Annuler
             </Button>
             <Button onClick={handleUpdateStatus} disabled={isUpdating}>
-              {isUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isUpdating && <BrandLoader size="sm" className="mr-2" />}
               Enregistrer
             </Button>
           </DialogFooter>

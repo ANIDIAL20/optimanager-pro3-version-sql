@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { Loader2 } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 const LoginClient = dynamic(
   () => import('./_components/login-client').then((mod) => mod.LoginClient),
@@ -9,7 +9,7 @@ const LoginClient = dynamic(
     ssr: false,
     loading: () => (
       <div className="flex h-screen w-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <BrandLoader size="md" className="text-primary" />
       </div>
     ),
   }

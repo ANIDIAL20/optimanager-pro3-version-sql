@@ -128,7 +128,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     ...authConfig.callbacks,
     async jwt({ token, user, trigger, session }) {
-      console.log("🎫 JWT Callback Triggered", { email: token.email, sub: token.sub });
+      // console.log("🎫 JWT Callback Triggered", { email: token.email, sub: token.sub });
 
       // 1. Initial Sign In (Google or Credentials)
       if (user) {
@@ -138,64 +138,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       // 2. On every JWT check (navigation), sync with DB to get real Role and ID
       if (token.email) {
-        let attempts = 0;
-        const maxAttempts = 3;
-        
-        while (attempts < maxAttempts) {
-          try {
-            // Fetch fresh user data from DB
-            const [dbUser] = await db
-              .select({
-                id: users.id,
-                role: users.role,
-                isActive: users.isActive,
-              })
-              .from(users)
-              .where(eq(users.email, token.email as string))
-              .limit(1);
+        try {
+          // Use query builder for safer execution
+          const dbUser = await db.query.users.findFirst({
+            where: eq(users.email, token.email as string),
+            columns: {
+              id: true,
+              role: true,
+              isActive: true,
+            }
+          });
 
-            if (dbUser) {
-              token.sub = dbUser.id; // Use DB ID as the subject
-              token.role = dbUser.role; // Sync Role (ADMIN/USER)
-              token.isActive = dbUser.isActive;
-              console.log("✅ JWT Synced with DB:", { id: dbUser.id, role: dbUser.role });
-            } else {
-               console.log("⚠️ User not found in DB during JWT sync:", token.email);
-            }
-            
-            // Success - break loop
-            break; 
-            
-          } catch (error: any) {
-            attempts++;
-            console.error(`❌ Failed to sync user in JWT (Attempt ${attempts}/${maxAttempts})`);
-            console.error("Error Details:", {
-              message: error.message,
-              code: error.code,
-              hint: error.hint,
-              cause: error.cause,
-              stack: error.stack
-            });
-            
-            // Try fallback raw query on failure
-            try {
-              if (attempts === 1) { // Only try once
-                const { sql } = await import("drizzle-orm");
-                console.log("🔄 Attempting RAW SQL fallback...");
-                const rawResult = await db.execute(sql`SELECT * FROM "users" WHERE email = ${token.email} LIMIT 1`);
-                console.log("✅ RAW SQL SUCCESS:", rawResult.rows[0]);
-              }
-            } catch (rawErr) {
-              console.error("❌ RAW SQL ALSO FAILED:", rawErr);
-            }
-
-            if (attempts === maxAttempts) {
-              console.error("🚨 Final JWT Sync Failure - Session may be stale.");
-            } else {
-              // Wait 500ms before retry
-              await new Promise(r => setTimeout(r, 500));
-            }
+          if (dbUser) {
+            token.sub = dbUser.id; // Use DB ID as the subject
+            token.role = dbUser.role; // Sync Role (ADMIN/USER)
+            token.isActive = dbUser.isActive;
+            // console.log("✅ JWT Synced with DB:", { id: dbUser.id, role: dbUser.role });
+          } else {
+             console.log("⚠️ User not found in DB during JWT sync:", token.email);
           }
+        } catch (error: any) {
+          console.error(`❌ Failed to sync user in JWT: ${error.message}`);
+          // Fallback: don't crash, just use existing token data
         }
       }
       

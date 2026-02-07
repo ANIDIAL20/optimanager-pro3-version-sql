@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { getProducts } from '@/app/actions/products-actions';
-import { Search, Loader2 } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -12,6 +12,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { Product } from '@/lib/types';
 import { cn } from '@/lib/utils';
 // import { useDebounce } from '@/hooks/use-debounce'; // Assumption removed, inline used
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 // Simple debounce hook implementation if not available
 function useDebounceValue<T>(value: T, delay: number): T {
@@ -111,7 +112,7 @@ export function ProductSearch({ onProductSelect }: ProductSearchProps) {
             <ScrollArea className="flex-1 h-[400px] border rounded-md p-4">
                 {isLoading && (
                     <div className="flex justify-center items-center h-full">
-                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        <BrandLoader size="md" className="text-muted-foreground" />
                     </div>
                 )}
 
