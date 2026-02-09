@@ -43,8 +43,8 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 // Actions
-import { createSupplierOrder } from '@/app/actions/supplier-orders-actions';
-import { getSuppliers, Supplier } from '@/app/actions/suppliers-actions';
+import { getSuppliersList as getSuppliers } from '@/app/actions/supplier-actions';
+import type { Supplier } from '@/lib/types';
 import { OrderItemRow } from './order-item-row';
 
 // Schema
@@ -175,13 +175,13 @@ export function CreateOrderButton() {
                 supplierName: supplierName,
                 date: values.date,
                 items: values.items,
-                subtotal: subtotal,
+                subTotal: subtotal,
                 discount: values.discount || 0,
                 totalAmount: total,
                 amountPaid: values.amountPaid || 0,
-                invoiceRef: values.invoiceRef,
-                note: values.note,
-            });
+                orderReference: values.invoiceRef,
+                notes: values.note,
+            } as any);
 
             if (result.success) {
                 toast({

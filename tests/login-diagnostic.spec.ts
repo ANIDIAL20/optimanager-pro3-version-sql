@@ -88,7 +88,7 @@ test.describe('Login Diagnostic Test - Database + UI', () => {
       expect(user.password).toBeTruthy();
       expect(bcryptMatch).toBe(true);
 
-    } catch (error) {
+    } catch (error: any) {
       diagnosticReport.push(`\n💥 ERROR: ${error.message}`);
       console.log('\n' + diagnosticReport.join('\n'));
       throw error;

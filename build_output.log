@@ -1,0 +1,58 @@
+﻿
+> nextn@0.1.0 build
+> cross-env NODE_ENV=production next build
+
+   Ôû▓ Next.js 16.0.8 (Turbopack)
+   - Environments: .env.local
+   - Experiments (use with caution):
+     ┬À serverActions
+
+   Creating an optimized production build ...
+ Ô£ô Compiled successfully in 5.7min
+   Skipping validation of types
+   Collecting page data using 7 workers ...
+­ƒöÆ Auth Configuration Loaded
+- AUTH_SECRET Present: [33mtrue[39m
+- NODE_ENV: production
+- GOOGLE CLIENT ID Present: [33mtrue[39m
+­ƒöÆ Auth Configuration Loaded
+- AUTH_SECRET Present: [33mtrue[39m
+- NODE_ENV: production
+- GOOGLE CLIENT ID Present: [33mtrue[39m
+­ƒöÆ Auth Configuration Loaded
+- AUTH_SECRET Present: [33mtrue[39m
+- NODE_ENV: production
+- GOOGLE CLIENT ID Present: [33mtrue[39m
+­ƒöÆ Auth Configuration Loaded
+- AUTH_SECRET Present: [33mtrue[39m
+- NODE_ENV: production
+- GOOGLE CLIENT ID Present: [33mtrue[39m
+­ƒöÆ Auth Configuration Loaded
+- AUTH_SECRET Present: [33mtrue[39m
+- NODE_ENV: production
+- GOOGLE CLIENT ID Present: [33mtrue[39m
+­ƒöÆ Auth Configuration Loaded
+- AUTH_SECRET Present: [33mtrue[39m
+- NODE_ENV: production
+- GOOGLE CLIENT ID Present: [33mtrue[39m
+­ƒöÆ Auth Configuration Loaded
+- AUTH_SECRET Present: [33mtrue[39m
+- NODE_ENV: production
+- GOOGLE CLIENT ID Present: [33mtrue[39m
+­ƒöÆ Auth Configuration Loaded
+- AUTH_SECRET Present: [33mtrue[39m
+- NODE_ENV: production
+- GOOGLE CLIENT ID Present: [33mtrue[39m
+­ƒöÆ Auth Configuration Loaded
+- AUTH_SECRET Present: [33mtrue[39m
+- NODE_ENV: production
+- GOOGLE CLIENT ID Present: [33mtrue[39m
+   Generating static pages using 7 workers (0/28) ...
+­ƒöÆ Auth Configuration Loaded
+- AUTH_SECRET Present: [33mtrue[39m
+- NODE_ENV: production
+- GOOGLE CLIENT ID Present: [33mtrue[39m
+­ƒöÆ Auth Configuration Loaded
+- AUTH_SECRET Present: [33mtrue[39m
+- NODE_ENV: production
+- GOOGLE CLIENT ID Present: [33mtrue[39m

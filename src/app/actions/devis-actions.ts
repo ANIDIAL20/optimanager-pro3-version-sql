@@ -9,7 +9,7 @@ import { db } from '@/db';
 import { devis, sales, products, stockMovements } from '@/db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
-import { logSuccess, logFailure } from '@/lib/audit-log';
+import { logSuccess, logFailure, logAudit } from '@/lib/audit-log';
 
 // ========================================
 // TYPE DEFINITIONS
@@ -63,12 +63,18 @@ export interface CreateDevisInput {
  */
 export const getDevis = secureAction(async (userId, user) => {
     try {
-        const results = await db.query.devis.findMany({
-            where: eq(devis.userId, userId),
-            orderBy: [desc(devis.createdAt)]
-        });
+        console.log(`🔍 Fetching devis for user: ${userId}`);
+        
+        // Use select() instead of query relational builder for better reliability
+        const resultRows = await db
+            .select()
+            .from(devis)
+            .where(eq(devis.userId, userId))
+            .orderBy(desc(devis.createdAt));
 
-        const mapped: Devis[] = results.map(d => ({
+        console.log(`✅ Fetched ${resultRows.length} devis rows`);
+
+        const mapped: Devis[] = resultRows.map((d) => ({
             id: d.id.toString(),
             clientId: d.clientId?.toString(),
             clientName: d.clientName,
@@ -83,11 +89,12 @@ export const getDevis = secureAction(async (userId, user) => {
             validUntil: d.validUntil?.toISOString()
         }));
 
-        await logSuccess(userId, 'READ', 'devis', undefined, { count: mapped.length });
+        await logSuccess(userId, 'READ', 'devis', 'list', { count: mapped.length });
         return { success: true, devis: mapped };
 
     } catch (error: any) {
-        await logFailure(userId, 'READ', 'devis', error.message);
+        console.error('❌ GET_DEVIS_ERROR_FULL:', error);
+        await logFailure(userId, 'READ', 'devis', error.message || 'Unknown error');
         return { success: false, error: 'Erreur lors de la récupération des devis', devis: [] };
     }
 });
@@ -151,10 +158,11 @@ export const createDevis = secureAction(async (userId, user, data: CreateDevisIn
             createdAt: new Date(),
         };
 
-        const result = await db.insert(devis).values(newDevis).returning();
-
-        await logSuccess(userId, 'CREATE', 'devis', result[0].id.toString());
-        return { success: true, id: result[0].id.toString(), message: 'Devis créé avec succès' };
+         const inserted = await db.insert(devis).values(newDevis).returning();
+        
+        await logSuccess(userId, 'CREATE', 'devis', inserted[0].id.toString(), { clientName: data.clientName, total: totalTTC }, null, newDevis);
+        revalidatePath('/dashboard/devis');
+        return { success: true, id: inserted[0].id.toString(), message: 'Devis créé avec succès' };
 
     } catch (error: any) {
         await logFailure(userId, 'CREATE', 'devis', error.message);
@@ -225,7 +233,7 @@ export const convertDevisToSale = secureAction(async (userId, user, devisId: str
     try {
         const id = parseInt(devisId);
 
-        const result = await db.transaction(async (tx) => {
+        const result = await db.transaction(async (tx: any) => {
             // ... (transaction logic remains same)
             // 1. Get Devis
             const devisData = await tx.query.devis.findFirst({
@@ -243,7 +251,7 @@ export const convertDevisToSale = secureAction(async (userId, user, devisId: str
                     const pid = parseInt(item.productId);
                     if (!isNaN(pid)) {
                          const product = await tx.query.products.findFirst({
-                             where: eq(products.id, pid)
+                             where: and(eq(products.id, pid), eq(products.userId, userId))
                          });
                          
                          if (product) {
@@ -251,10 +259,21 @@ export const convertDevisToSale = secureAction(async (userId, user, devisId: str
                                  throw new Error(`Stock insuffisant pour ${item.designation}`);
                              }
                              
-                             // Update stock
-                             await tx.update(products)
-                                 .set({ quantiteStock: (product.quantiteStock || 0) - item.quantite })
-                                 .where(eq(products.id, pid));
+                             // ✅ Optimistic Locking update
+                             const updateRes = await tx.update(products)
+                                 .set({ 
+                                     quantiteStock: sql`${products.quantiteStock} - ${item.quantite}`,
+                                     version: sql`${products.version} + 1`,
+                                     updatedAt: new Date()
+                                 })
+                                 .where(and(
+                                     eq(products.id, pid),
+                                     eq(products.version, product.version)
+                                 ));
+
+                             if (updateRes.rowCount === 0) {
+                                 throw new Error(`Erreur de concurrence pour ${item.designation}.`);
+                             }
 
                              // Log movement
                              await tx.insert(stockMovements).values({
@@ -264,6 +283,18 @@ export const convertDevisToSale = secureAction(async (userId, user, devisId: str
                                  type: 'Vente (Devis)',
                                  ref: `DEVIS-${id}`,
                                  date: new Date()
+                             });
+
+                             // Audit log product
+                             await logAudit({
+                                 userId,
+                                 entityType: 'product',
+                                 entityId: pid.toString(),
+                                 action: 'UPDATE_STOCK',
+                                 oldValue: { stock: product.quantiteStock, version: product.version },
+                                 newValue: { stock: product.quantiteStock - item.quantite, version: product.version + 1 },
+                                 metadata: { devisRef: id.toString() },
+                                 success: true
                              });
                          }
                     }
@@ -314,6 +345,16 @@ export const convertDevisToSale = secureAction(async (userId, user, devisId: str
                     updatedAt: new Date()
                 })
                 .where(eq(devis.id, id));
+
+            await logAudit({
+                userId,
+                entityType: 'sale',
+                entityId: insertedSale[0].id.toString(),
+                action: 'CREATE_FROM_DEVIS',
+                newValue: newSale,
+                metadata: { devisId: id },
+                success: true
+            });
 
             return insertedSale[0].id;
         });

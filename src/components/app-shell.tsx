@@ -7,11 +7,16 @@ import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/s
 import { AppSidebar } from "./app-sidebar";
 import { BrandLoader } from '@/components/ui/loader-brand';
 
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
+
 export default function AppShell({ children, banner }: { children: React.ReactNode, banner?: any }) {
     const { data: session, status } = useSession();
     const router = useRouter();
     const pathname = usePathname();
     const [isBannerVisible, setIsBannerVisible] = useState(true);
+
+    // Initialize global keyboard shortcuts (Power Users)
+    useKeyboardShortcuts();
 
     // 1. Define Public and Print Routes
     // Using explicit check to prevent any undefined errors

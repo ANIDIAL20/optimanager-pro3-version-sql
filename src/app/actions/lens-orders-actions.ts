@@ -1,11 +1,12 @@
 'use server';
 
 import { db } from '@/db';
-import { lensOrders, clients, prescriptions } from '@/db/schema';
+import { lensOrders, clients, prescriptions, supplierOrders, suppliers, supplierOrderItems } from '@/db/schema';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
 import { eq, and, desc } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { LensOrderSchema } from '@/lib/validations/optical';
 
 // ========================================
 // TYPE DEFINITIONS
@@ -18,8 +19,22 @@ export interface LensOrderInput {
   lensType: string;
   treatment?: string | null;
   supplierName: string;
-  rightEye?: any;
-  leftEye?: any;
+  
+  // Explicit Eye Prescription (Replacing JSON)
+  sphereR?: string | null;
+  cylindreR?: string | null;
+  axeR?: string | null;
+  additionR?: string | null;
+  hauteurR?: string | null;
+  
+  sphereL?: string | null;
+  cylindreL?: string | null;
+  axeL?: string | null;
+  additionL?: string | null;
+  hauteurL?: string | null;
+
+  matiere?: string | null;
+  indice?: string | null;
   
   // Professional Pricing Workflow
   sellingPrice: number;           // Prix de vente client (obligatoire)
@@ -43,8 +58,21 @@ export interface LensOrder {
   lensType: string;
   treatment: string | null;
   supplierName: string;
-  rightEye: any | null;
-  leftEye: any | null;
+  // Explicit Eye Prescription
+  sphereR: string | null;
+  cylindreR: string | null;
+  axeR: string | null;
+  additionR: string | null;
+  hauteurR: string | null;
+  
+  sphereL: string | null;
+  cylindreL: string | null;
+  axeL: string | null;
+  additionL: string | null;
+  hauteurL: string | null;
+
+  matiere: string | null;
+  indice: string | null;
   
   // Professional Pricing
   sellingPrice: string;
@@ -161,80 +189,132 @@ export const getLensOrder = secureAction(async (userId, user, orderId: string) =
 /**
  * Create lens order
  */
-export const createLensOrder = secureAction(async (userId, user, input: LensOrderInput) => {
+export const createLensOrder = secureAction(async (userId, user, rawInput: LensOrderInput) => {
   try {
-    // Verify client ownership
-    const clientExists = await db.query.clients.findFirst({
-      where: and(eq(clients.id, input.clientId), eq(clients.userId, userId))
+    // 1. Validate & Coerce Data with Zod
+    const input = LensOrderSchema.parse(rawInput);
+
+    // 2. Perform Atomic Transaction
+    const result = await db.transaction(async (tx: any) => {
+        // Verify client ownership
+        const clientExists = await tx.query.clients.findFirst({
+            where: and(eq(clients.id, input.clientId), eq(clients.userId, userId))
+        });
+        
+        if (!clientExists) {
+            throw new Error('Client introuvable');
+        }
+
+        let supplierId = null;
+        let supplierOrderId = null;
+
+        if (input.supplierName) {
+            const supplier = await tx.query.suppliers.findFirst({
+                where: and(eq(suppliers.name, input.supplierName), eq(suppliers.userId, userId))
+            });
+            supplierId = supplier?.id;
+
+            if (supplierId) {
+                const items = [];
+                if (input.sphereR || input.cylindreR || input.axeR) {
+                    items.push({ 
+                        side: 'OD', 
+                        type: input.lensType,
+                        sphere: input.sphereR,
+                        cylindre: input.cylindreR,
+                        axe: input.axeR,
+                        addition: input.additionR,
+                        hauteur: input.hauteurR
+                    });
+                }
+                if (input.sphereL || input.cylindreL || input.axeL) {
+                    items.push({ 
+                        side: 'OG', 
+                        type: input.lensType,
+                        sphere: input.sphereL,
+                        cylindre: input.cylindreL,
+                        axe: input.axeL,
+                        addition: input.additionL,
+                        hauteur: input.hauteurL
+                    });
+                }
+
+                const [so] = await tx.insert(supplierOrders).values({
+                    userId,
+                    supplierId,
+                    fournisseur: input.supplierName,
+                    dateCommande: new Date(),
+                    statut: 'EN_COURS',
+                    deliveryStatus: 'PENDING',
+                    orderReference: `LENS-${input.clientId}-${Date.now().toString().slice(-4)}`,
+                    items: items,
+                    montantTotal: '0',
+                    createdAt: new Date()
+                }).returning();
+                
+                supplierOrderId = so.id;
+            }
+        }
+
+        const [created] = await tx.insert(lensOrders)
+            .values({
+                userId,
+                clientId: input.clientId,
+                orderType: input.orderType,
+                lensType: input.lensType,
+                treatment: input.treatment || null,
+                supplierName: input.supplierName,
+                
+                sphereR: input.sphereR?.toString() || null,
+                cylindreR: input.cylindreR?.toString() || null,
+                axeR: input.axeR?.toString() || null,
+                additionR: input.additionR?.toString() || null,
+                hauteurR: input.hauteurR?.toString() || null,
+                sphereL: input.sphereL?.toString() || null,
+                cylindreL: input.cylindreL?.toString() || null,
+                axeL: input.axeL?.toString() || null,
+                additionL: input.additionL?.toString() || null,
+                hauteurL: input.hauteurL?.toString() || null,
+                
+                sellingPrice: input.sellingPrice.toString(),
+                unitPrice: input.unitPrice.toString(),
+                quantity: input.quantity,
+                totalPrice: (input.sellingPrice * input.quantity).toString(),
+                
+                status: 'pending',
+                orderDate: new Date(),
+                notes: input.notes || null,
+                supplierId: supplierId || null,
+                supplierOrderId: supplierOrderId || null
+            })
+            .returning();
+
+        return created;
     });
     
-    if (!clientExists) {
-      return { success: false, error: 'Client introuvable' };
-    }
-
-    // Verify prescription ownership if provided
-    if (input.prescriptionId) {
-      const prescriptionExists = await db.query.prescriptions.findFirst({
-        where: and(
-          eq(prescriptions.id, input.prescriptionId),
-          eq(prescriptions.userId, userId)
-        )
-      });
-      
-      if (!prescriptionExists) {
-        return { success: false, error: 'Ordonnance introuvable' };
-      }
-    }
-
-    // Calculate estimated margin if buying price provided
-    const estimatedMargin = input.estimatedBuyingPrice 
-      ? input.sellingPrice - input.estimatedBuyingPrice 
-      : null;
-
-    const [created] = await db.insert(lensOrders)
-      .values({
-        userId,
+    // 3. Log Success with Action Tracking Context
+    await logSuccess(userId, 'CREATE', 'lens_orders', result.id.toString(), {
         clientId: input.clientId,
-        prescriptionId: input.prescriptionId || null,
         orderType: input.orderType,
-        lensType: input.lensType,
-        treatment: input.treatment || null,
-        supplierName: input.supplierName,
-        rightEye: input.rightEye || null,
-        leftEye: input.leftEye || null,
-        
-        // Professional Pricing
-        sellingPrice: input.sellingPrice.toString(),
-        estimatedBuyingPrice: input.estimatedBuyingPrice?.toString() || null,
-        estimatedMargin: estimatedMargin?.toString() || null,
-        
-        // Legacy pricing
-        unitPrice: input.unitPrice.toString(),
-        quantity: input.quantity,
-        totalPrice: (input.sellingPrice * input.quantity).toString(), // Use sellingPrice for total
-        
-        status: input.status || 'pending',
-        orderDate: new Date(),
-        notes: input.notes || null
-      })
-      .returning();
-    
-    await logSuccess(userId, 'CREATE', 'lens_orders', created.id.toString());
+        supplier: input.supplierName,
+        price: input.sellingPrice
+    });
 
     revalidatePath('/dashboard/clients');
     revalidatePath(`/dashboard/clients/${input.clientId}`);
     
     return { 
       success: true, 
-      message: 'Commande de verres créée',
-      data: created 
+      message: 'Commande de verres créée avec succès',
+      data: result 
     };
 
   } catch (error: any) {
+    console.error("❌ Lens Order Creation Failed:", error);
     await logFailure(userId, 'CREATE', 'lens_orders', error.message);
     return { 
       success: false, 
-      error: 'Erreur lors de la création de la commande de verres' 
+      error: error.message || 'Erreur lors de la création de la commande' 
     };
   }
 });
@@ -261,8 +341,23 @@ export const updateLensOrder = secureAction(
       if (input.lensType) updateData.lensType = input.lensType;
       if (input.treatment !== undefined) updateData.treatment = input.treatment;
       if (input.supplierName) updateData.supplierName = input.supplierName;
-      if (input.rightEye !== undefined) updateData.rightEye = input.rightEye;
-      if (input.leftEye !== undefined) updateData.leftEye = input.leftEye;
+      
+      // Explicit Prescription Update
+      if (input.sphereR !== undefined) updateData.sphereR = input.sphereR;
+      if (input.cylindreR !== undefined) updateData.cylindreR = input.cylindreR;
+      if (input.axeR !== undefined) updateData.axeR = input.axeR;
+      if (input.additionR !== undefined) updateData.additionR = input.additionR;
+      if (input.hauteurR !== undefined) updateData.hauteurR = input.hauteurR;
+      
+      if (input.sphereL !== undefined) updateData.sphereL = input.sphereL;
+      if (input.cylindreL !== undefined) updateData.cylindreL = input.cylindreL;
+      if (input.axeL !== undefined) updateData.axeL = input.axeL;
+      if (input.additionL !== undefined) updateData.additionL = input.additionL;
+      if (input.hauteurL !== undefined) updateData.hauteurL = input.hauteurL;
+
+      if (input.matiere !== undefined) updateData.matiere = input.matiere;
+      if (input.indice !== undefined) updateData.indice = input.indice;
+
       if (input.unitPrice) updateData.unitPrice = input.unitPrice.toString();
       if (input.quantity) updateData.quantity = input.quantity;
       if (input.totalPrice) updateData.totalPrice = input.totalPrice.toString();
@@ -294,7 +389,6 @@ export const updateLensOrder = secureAction(
 /**
  * Mark order as received
  */
-import { purchases, suppliers } from '@/db/schema';
 import { isNull } from 'drizzle-orm';
 
 /**
@@ -377,16 +471,20 @@ export const receiveLensOrder = secureAction(async (userId, user, orderId: strin
             where: and(eq(suppliers.name, existingOrder.supplierName), eq(suppliers.userId, userId))
         });
 
-        await db.insert(purchases).values({
+        // Consolidate into Supplier Order
+        await db.insert(supplierOrders).values({
             userId,
-            supplierId: supplier?.id,
-            supplierName: existingOrder.supplierName,
-            type: 'LENS_ORDER',
-            reference: data.blRef,
-            totalAmount: data.finalCost.toString(),
-            status: 'UNPAID',
-            date: new Date(),
-            notes: `Commande verres #${orderIdNum}`
+            supplierId: supplier?.id || null,
+            fournisseur: existingOrder.supplierName,
+            orderReference: data.blRef,
+            // Use date.finalCost for total amount. Assuming paid amount = 0 initially (debt).
+            montantTotal: data.finalCost.toString(),
+            montantPaye: '0',
+            resteAPayer: data.finalCost.toString(),
+            statut: 'received', 
+            
+            dateCommande: new Date(),
+            notes: `Auto-created from Lens Order #${orderIdNum}`
         });
     }
 

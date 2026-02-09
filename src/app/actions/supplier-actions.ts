@@ -5,8 +5,9 @@ import { db } from '@/db';
 import { suppliers } from '@/db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import { unstable_noStore as noStore } from 'next/cache';
+import { measurePerformance } from '@/lib/performance';
 import { getClientUsageStats } from './adminActions';
 
 
@@ -46,68 +47,67 @@ function parseContactInfo(notes: string | null) {
  * Get all suppliers for the current user
  */
 export const getSuppliersList = secureAction(async (userId, user) => {
-  noStore();
-  
-  console.log('⚡ [v2] Fetching suppliers list for user:', userId);
-
-  try {
-    // Fallback to raw SQL since query builder is failing
-    const query = sql`
-      SELECT * FROM "suppliers"
-      WHERE "user_id"::text = ${userId}
-      ORDER BY "created_at" DESC
-    `;
+  return await measurePerformance(`getSuppliersList-${userId}`, async () => {
+    noStore();
     
-    const result = await db.execute(query);
+    console.log('⚡ [v2] Fetching suppliers list for user:', userId);
+
+    try {
+      // Standard Drizzle Query
+      const results = await db.select()
+        .from(suppliers)
+        .where(eq(suppliers.userId, userId))
+        .orderBy(desc(suppliers.createdAt));
+      
+      const mappedItems = results.map((row: any) => {
+        const contactInfo = parseContactInfo(row.notes);
+        return {
+          id: row.id,
+          userId: row.userId,
+          
+          // Use schema keys (camelCase from Drizzle results)
+          name: row.name,
+          email: row.email,
+          phone: row.phone,
+          address: row.address,
+          city: row.city,
+          ice: row.ice,
+          if: row.if,
+          rc: row.rc,
+          taxId: row.taxId,
+          category: row.category,
+          paymentTerms: row.paymentTerms,
+          paymentMethod: row.paymentMethod,
+          bank: row.bank,
+          rib: row.rib,
+          notes: contactInfo.cleanNotes, // Return clean notes
+          status: row.status,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
     
-    const mappedItems = result.rows.map((row: any) => {
-      const contactInfo = parseContactInfo(row.notes);
-      return {
-      id: row.id,
-      userId: row.user_id,
-      
-      // English keys (Legacy/DB)
-      name: row.name,
-      email: row.email,
-      phone: row.phone,
-      address: row.address,
-      city: row.city,
-      ice: row.ice,
-      if: row.if,
-      rc: row.rc,
-      taxId: row.tax_id,
-      category: row.category,
-      paymentTerms: row.payment_terms,
-      paymentMethod: row.payment_method,
-      bank: row.bank,
-      rib: row.rib,
-      notes: contactInfo.cleanNotes, // Return clean notes
-      status: row.status,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+          // UI Keys (French, matching types.ts & columns.tsx)
+          nomCommercial: row.name,
+          telephone: row.phone,
+          typeProduits: row.category ? row.category.split(', ') : [],
+          adresse: row.address,
+          ville: row.city,
+          delaiPaiement: row.paymentTerms,
+          modePaiement: row.paymentMethod,
+          banque: row.bank,
+        
+        // Add parsed contact info
+        contactNom: contactInfo.nom,
+        contactTelephone: contactInfo.tel,
+        contactEmail: contactInfo.email,
+        };
+      });
 
-      // UI Keys (French, matching types.ts & columns.tsx)
-      nomCommercial: row.name,
-      telephone: row.phone,
-      typeProduits: row.category ? row.category.split(', ') : [],
-      adresse: row.address,
-      ville: row.city,
-      delaiPaiement: row.payment_terms,
-      modePaiement: row.payment_method,
-      banque: row.bank,
-      
-      // Add parsed contact info
-      contactNom: contactInfo.nom,
-      contactTelephone: contactInfo.tel,
-      contactEmail: contactInfo.email,
-      };
-    });
-
-    return mappedItems;
-  } catch (error: any) {
-    console.error('[getSuppliersList] CRITICAL SQL ERROR:', error);
-    throw new Error(`Erreur récupération fournisseurs (SQL): ${error.message}`);
-  }
+      return mappedItems;
+    } catch (error: any) {
+      console.error('[getSuppliersList] CRITICAL SQL ERROR:', error);
+      throw new Error(`Erreur récupération fournisseurs (SQL): ${error.message}`);
+    }
+  }, { userId });
 });
 
 /**
@@ -117,61 +117,53 @@ export const getSupplier = secureAction(async (userId, user, id: string) => {
   noStore();
 
   try {
-    // Reuse the working getSuppliersList query to ensure consistency and prevent "Failed query" errors
-    // This is safer than running a separate ad-hoc query that might differ in subtle ways
-    // Note: Calling secureAction from within secureAction is tricky with args.
-    // We'll just call the implementation logic if possible, or just re-run the query efficiently.
+    // Standard Drizzle Query for single item
+    const results = await db.select()
+      .from(suppliers)
+      .where(and(eq(suppliers.id, id), eq(suppliers.userId, userId)))
+      .limit(1);
     
-    // Efficient query for single item
-    const query = sql`
-      SELECT * FROM "suppliers"
-      WHERE "id"::text = ${id} AND "user_id"::text = ${userId}
-      LIMIT 1
-    `;
-    
-    const result = await db.execute(query);
-    const row = result.rows[0];
+    const row = results[0];
 
     if (!row) return null;
 
     // Map single item
-    const contactInfo = parseContactInfo((row as any).notes);
+    const contactInfo = parseContactInfo(row.notes);
     return {
-        id: (row as any).id,
-        userId: (row as any).user_id,
-        name: (row as any).name,
-        email: (row as any).email,
-        phone: (row as any).phone,
-        address: (row as any).address,
-        city: (row as any).city,
-        ice: (row as any).ice,
-        if: (row as any).if,
-        rc: (row as any).rc,
-        taxId: (row as any).tax_id,
-        category: (row as any).category,
-        paymentTerms: (row as any).payment_terms,
-        paymentMethod: (row as any).payment_method,
-        bank: (row as any).bank,
-        rib: (row as any).rib,
+        id: row.id,
+        userId: row.userId,
+        name: row.name,
+        email: row.email,
+        phone: row.phone,
+        address: row.address,
+        city: row.city,
+        ice: row.ice,
+        if: row.if,
+        rc: row.rc,
+        taxId: row.taxId,
+        category: row.category,
+        paymentTerms: row.paymentTerms,
+        paymentMethod: row.paymentMethod,
+        bank: row.bank,
+        rib: row.rib,
         notes: contactInfo.cleanNotes,
-        status: (row as any).status,
-        createdAt: (row as any).created_at,
-        updatedAt: (row as any).updated_at,
+        status: row.status,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
         
         // UI Keys
-        nomCommercial: (row as any).name,
-        telephone: (row as any).phone,
-        typeProduits: (row as any).category ? (row as any).category.split(', ') : [],
-        adresse: (row as any).address,
-        ville: (row as any).city,
-        delaiPaiement: (row as any).payment_terms,
-        modePaiement: (row as any).payment_method,
-        banque: (row as any).bank,
+        nomCommercial: row.name,
+        telephone: row.phone,
+        typeProduits: row.category ? row.category.split(', ') : [],
+        adresse: row.address,
+        ville: row.city,
+        delaiPaiement: row.paymentTerms,
+        modePaiement: row.paymentMethod,
+        banque: row.bank,
         contactNom: contactInfo.nom,
         contactTelephone: contactInfo.tel,
         contactEmail: contactInfo.email,
     };
-
   } catch (error: any) {
     console.error('❌ Error fetching supplier:', error);
     throw new Error(`Erreur lors de la récupération du fournisseur: ${error.message}`);
@@ -217,6 +209,7 @@ export const createSupplier = secureAction(async (userId, user, data: any) => {
       } as any)
       .returning();
 
+    revalidateTag('suppliers', 'page');
     revalidatePath('/suppliers');
     return created;
   } catch (error: any) {
@@ -267,49 +260,22 @@ export const updateSupplier = secureAction(async (userId, user, id: string, data
       dbPayload.notes = data.notes;
   }
 
-  console.log('💾 [updateSupplier] Final DB Payload keys:', Object.keys(dbPayload));
-
-  // 3. Construct Raw SQL Update
-  // We use sql.join to build the SET clause dynamically to bypass Drizzle ID casting issues
-  const explicitSetClauses = [];
+  dbPayload.updatedAt = new Date();
   
-  if (dbPayload.name !== undefined) explicitSetClauses.push(sql`"name" = ${dbPayload.name}`);
-  if (dbPayload.email !== undefined) explicitSetClauses.push(sql`"email" = ${dbPayload.email}`);
-  if (dbPayload.phone !== undefined) explicitSetClauses.push(sql`"phone" = ${dbPayload.phone}`);
-  if (dbPayload.address !== undefined) explicitSetClauses.push(sql`"address" = ${dbPayload.address}`);
-  if (dbPayload.city !== undefined) explicitSetClauses.push(sql`"city" = ${dbPayload.city}`);
-  if (dbPayload.ice !== undefined) explicitSetClauses.push(sql`"ice" = ${dbPayload.ice}`);
-  if (dbPayload.if !== undefined) explicitSetClauses.push(sql`"if" = ${dbPayload.if}`);
-  if (dbPayload.rc !== undefined) explicitSetClauses.push(sql`"rc" = ${dbPayload.rc}`);
-  if (dbPayload.taxId !== undefined) explicitSetClauses.push(sql`"tax_id" = ${dbPayload.taxId}`);
-  if (dbPayload.rib !== undefined) explicitSetClauses.push(sql`"rib" = ${dbPayload.rib}`);
-  if (dbPayload.bank !== undefined) explicitSetClauses.push(sql`"bank" = ${dbPayload.bank}`);
-  if (dbPayload.paymentTerms !== undefined) explicitSetClauses.push(sql`"payment_terms" = ${dbPayload.paymentTerms}`);
-  if (dbPayload.paymentMethod !== undefined) explicitSetClauses.push(sql`"payment_method" = ${dbPayload.paymentMethod}`);
-  if (dbPayload.status !== undefined) explicitSetClauses.push(sql`"status" = ${dbPayload.status}`);
-  if (dbPayload.category !== undefined) explicitSetClauses.push(sql`"category" = ${dbPayload.category}`);
-  if (dbPayload.notes !== undefined) explicitSetClauses.push(sql`"notes" = ${dbPayload.notes}`);
-
-  explicitSetClauses.push(sql`"updated_at" = ${new Date()}`);
-
-  const query = sql`
-    UPDATE "suppliers"
-    SET ${sql.join(explicitSetClauses, sql`, `)}
-    WHERE "id"::text = ${id} AND "user_id" = ${userId}
-    RETURNING *
-  `;
-
   try {
-    const { rows } = await db.execute(query);
-    const updated = rows[0];
+    const [updated] = await db.update(suppliers)
+      .set(dbPayload)
+      .where(and(eq(suppliers.id, id), eq(suppliers.userId, userId)))
+      .returning();
 
+    revalidateTag('suppliers', 'page');
     revalidatePath('/suppliers'); 
     revalidatePath('/dashboard/fournisseurs');
     revalidatePath(`/dashboard/fournisseurs/${id}`);
     
     return updated;
   } catch (err: any) {
-     console.error("❌ SQL Update Error:", err);
+     console.error("❌ DB Update Error:", err);
      throw new Error("Erreur mise à jour fournisseur: " + err.message);
   }
 });
@@ -327,6 +293,7 @@ export const deleteSupplier = secureAction(async (userId, user, id: string) => {
       )
     );
 
+  revalidateTag('suppliers', 'page');
   revalidatePath('/dashboard/fournisseurs');
   return { success: true };
 });

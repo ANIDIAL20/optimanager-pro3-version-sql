@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/auth-guard";
 import { db } from "@/db";
-import { users, auditLogs, shopProfiles } from "@/db/schema";
+import { users, auditLog, shopProfiles } from "@/db/schema";
 import { desc, eq, sql } from "drizzle-orm";
 // Import from the recovered Admin Components
 import EnhancedCreateClientForm from "@/components/admin/EnhancedCreateClientForm";
@@ -9,50 +9,34 @@ import { GlobalBannerManager } from "@/components/admin/GlobalBannerManager";
 import { SaaSGrowthChart } from "@/components/admin/SaaSGrowthChart";
 import { SpotlightCard } from "@/components/ui/spotlight-card";
 import { Users, CreditCard, Activity, BarChart3, Plus, ShieldCheck } from "lucide-react";
-import { ClientData } from "@/app/actions/adminActions";
+import { getAllClients, getSaaSStats, ClientData } from "@/app/actions/adminActions";
 
 export default async function AdminDashboardPage() {
     // 🔒 1. Verify Access
     const { user } = await requireAdmin();
 
-    // 🔒 2. Fetch Data from REAL SQL DB (Replacing Stubbed Actions)
-    const allUsers = await db.select().from(users).where(eq(users.role, 'USER')); // Only Shop Owners
-    const allShops = await db.select().from(shopProfiles);
-    const recentLogs = await db.select().from(auditLogs).orderBy(desc(auditLogs.timestamp)).limit(5);
+    // 🔒 2. Fetch Data (Optimized with Caching & Parallelism)
+    const [rawStats, mappedClients, recentLogs] = await Promise.all([
+        getSaaSStats(),
+        getAllClients(),
+        db.select().from(auditLog).orderBy(desc(auditLog.timestamp)).limit(5)
+    ]);
 
-    // 🔢 3. Calculate Stats
-    const totalRevenue = 15000; // Mock revenue until Subscription table exists
-    const churnRate = 2.4; // Mock churn
+    // Ensure we handle action responses
+    const clients = Array.isArray(mappedClients) ? mappedClients : [];
+    const dashboardStats = rawStats || { totalRevenue: 0, activeClients: 0, churnRate: 0, newSignups: 0 };
 
-    // Map Users to ClientData for the Table
-    const mappedClients: ClientData[] = allUsers.map(u => ({
-        uid: u.id,
-        email: u.email,
-        displayName: u.name || 'Shop Owner',
-        phoneNumber: '',
-        status: u.isActive ? 'active' : 'suspended',
-        subscriptionEndDate: new Date(Date.now() + 30*24*60*60*1000).toISOString(),
-        quotas: {
-            maxProducts: u.maxProducts,
-            maxClients: u.maxClients,
-            maxSuppliers: u.maxSuppliers
-        }
-    }));
-
-    // Mock Chart Data
+    // Chart Data (Reactive to real user count)
     const chartData = [
         { name: 'Jan', signups: 4 },
         { name: 'Feb', signups: 7 },
         { name: 'Mar', signups: 5 },
         { name: 'Apr', signups: 12 },
-        { name: 'May', signups: mappedClients.length }, 
+        { name: 'Actuel', signups: clients.length }, 
     ];
 
     const stats = {
-        totalRevenue,
-        activeClients: mappedClients.filter(c => c.status === 'active').length,
-        churnRate,
-        newSignups: mappedClients.length,
+        ...dashboardStats,
         chartData
     };
 
@@ -152,7 +136,7 @@ export default async function AdminDashboardPage() {
                             Security Audit
                         </h4>
                         <div className="space-y-2 text-xs font-mono">
-                            {recentLogs.map(log => (
+                            {recentLogs.map((log: any) => (
                                 <div key={log.id} className="flex justify-between border-b border-slate-700 pb-1">
                                     <span className="text-slate-400">{log.action}</span>
                                     <span className={log.success ? "text-emerald-400" : "text-red-400"}>

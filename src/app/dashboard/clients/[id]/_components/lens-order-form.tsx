@@ -171,8 +171,22 @@ export function LensOrderForm({ clientId, onSuccess }: LensOrderFormProps) {
         lensType: data.lensType,
         treatment: data.treatments?.join(', ') || null,
         supplierName: supplier?.nomCommercial || supplier?.name || 'Unknown',
-        rightEye: fullSelectedPrescription?.data?.od || null,
-        leftEye: fullSelectedPrescription?.data?.og || null,
+        
+        // Explicit Prescription (Mapping from prescription data object)
+        sphereR: fullSelectedPrescription?.data?.od?.sphere?.toString() || null,
+        cylindreR: fullSelectedPrescription?.data?.od?.cylinder?.toString() || null,
+        axeR: fullSelectedPrescription?.data?.od?.axis?.toString() || null,
+        additionR: fullSelectedPrescription?.data?.od?.add?.toString() || null,
+        hauteurR: fullSelectedPrescription?.data?.od?.hauteur?.toString() || null,
+        
+        sphereL: fullSelectedPrescription?.data?.og?.sphere?.toString() || null,
+        cylindreL: fullSelectedPrescription?.data?.og?.cylinder?.toString() || null,
+        axeL: fullSelectedPrescription?.data?.og?.axis?.toString() || null,
+        additionL: fullSelectedPrescription?.data?.og?.add?.toString() || null,
+        hauteurL: fullSelectedPrescription?.data?.og?.hauteur?.toString() || null,
+
+        matiere: fullSelectedPrescription?.data?.matiere || null,
+        indice: fullSelectedPrescription?.data?.indice || null,
         
         // Professional Pricing
         sellingPrice: data.sellingPrice,

@@ -1,0 +1,47 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - img "OptiManager" [ref=e7]
+      - generic [ref=e8]:
+        - heading "Bienvenue" [level=1] [ref=e9]
+        - paragraph [ref=e10]: Connectez-vous pour accéder à votre espace
+      - generic [ref=e11]:
+        - generic [ref=e12]:
+          - text: Email
+          - generic [ref=e13]:
+            - img [ref=e14]
+            - textbox "Email" [ref=e17]:
+              - /placeholder: votre@email.com
+        - generic [ref=e18]:
+          - text: Mot de passe
+          - generic [ref=e19]:
+            - img [ref=e20]
+            - textbox "Mot de passe" [ref=e23]:
+              - /placeholder: ••••••••
+        - button "Se connecter" [ref=e24] [cursor=pointer]
+      - generic [ref=e29]: Ou
+      - button "Continuer avec Google" [ref=e30] [cursor=pointer]:
+        - img [ref=e31]
+        - generic [ref=e36]: Continuer avec Google
+    - generic [ref=e40]:
+      - generic [ref=e41]:
+        - heading "OptiManager Pro" [level=2] [ref=e42]
+        - paragraph [ref=e43]: Gérez votre boutique d'optique avec efficacité et simplicité
+      - generic [ref=e70]:
+        - img [ref=e72]
+        - img [ref=e78]
+        - img [ref=e84]
+      - generic [ref=e88]:
+        - img [ref=e90]
+        - img [ref=e95]
+        - img [ref=e98]
+  - region "Notifications (F8)":
+    - list
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e106] [cursor=pointer]:
+    - img [ref=e107]
+  - alert [ref=e110]
+```

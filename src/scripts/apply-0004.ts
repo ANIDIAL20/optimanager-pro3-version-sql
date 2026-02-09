@@ -1,5 +1,5 @@
 import { neon, neonConfig, Pool } from '@neondatabase/serverless';
-import { dotenv } from 'dotenv';
+import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import ws from 'ws';

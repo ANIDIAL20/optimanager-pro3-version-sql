@@ -4,7 +4,9 @@
  */
 
 import { auth } from '@/auth';
-import { type AuthUser, requireAdmin } from './auth';
+import { type AuthUser } from './auth';
+import { requireAdmin } from './auth-guard';
+import { requireAuth } from './auth';
 
 /**
  * Type definitions for secure actions
@@ -40,24 +42,28 @@ export function secureAction<TArgs extends any[], TReturn>(
         throw new Error("Authentication required. Please log in.");
       }
 
-      const user = {
-        uid: session.user.id,
+      const user: AuthUser = {
+        uid: session.user.id || '',
+        id: session.user.id || '',
         email: session.user.email || null,
-        emailVerified: true, // Auth.js handles this differently, assume true for now or check field
+        emailVerified: !!session.user.emailVerified,
         displayName: session.user.name || null,
-        role: (session.user.role as 'admin' | 'user') || 'user',
+        name: session.user.name || null,
+        image: session.user.image || null,
+        role: (session.user.role as 'ADMIN' | 'USER') || 'USER',
       };
       
       return await handler(user.uid, user, ...args);
     } catch (error: any) {
-      // ⚡ Allow Next.js Redirects to bubble up
       if (error.message === 'NEXT_REDIRECT' || error.digest?.startsWith('NEXT_REDIRECT')) {
         throw error;
       }
-      
-      if (!error.message?.includes('Authentication required')) {
-          console.error('Secure action error:', error);
+
+      if (error.message === 'UNAUTHENTICATED') {
+        throw new Error('Please login first');
       }
+
+      console.error('Secure action error:', error);
       throw new Error(error.message || 'Authentication failed');
     }
   };
@@ -78,17 +84,26 @@ export function adminAction<TArgs extends any[], TReturn>(
 ) {
   return async (...args: TArgs): Promise<TReturn> => {
     try {
-      // Require admin role
-      const user = await requireAdmin();
+      // 🔒 Layer 3: Server-side guard with audit logging & brute-force protection
+      const { user } = await requireAdmin();
       
       // Call the handler with user object
       return await handler(user, ...args);
     } catch (error: any) {
-      // Only log unexpected errors
-      if (!error.message?.includes('Admin access required') && !error.message?.includes('Authentication required')) {
-          console.error('Admin action error:', error);
+      if (error.message === 'NEXT_REDIRECT' || error.digest?.startsWith('NEXT_REDIRECT')) {
+        throw error;
       }
-      throw new Error(error.message || 'Admin access required');
+
+      if (error.message === 'UNAUTHENTICATED') {
+        throw new Error('Authentication required');
+      }
+
+      if (error.message === 'FORBIDDEN') {
+        throw new Error('Admin access required');
+      }
+
+      console.error('Admin action error:', error);
+      throw new Error(error.message || 'Admin action failed');
     }
   };
 }
@@ -137,13 +152,15 @@ export function secureActionWithResponse<TArgs extends any[], TReturn>(
       const userId = user.uid;
       
       const result = await handler(userId, user, ...args);
-      
       return successResponse(result);
     } catch (error: any) {
-      // Only log unexpected errors
-      if (!error.message?.includes('Authentication required')) {
-          console.error('Secure action error:', error);
+      if (error.message === 'UNAUTHENTICATED') {
+        return errorResponse('Authentication required');
       }
+      if (error.message === 'FORBIDDEN') {
+        return errorResponse('Admin access required');
+      }
+      console.error('Secure action error:', error);
       return errorResponse(error.message || 'Operation failed');
     }
   };

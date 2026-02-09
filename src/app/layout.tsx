@@ -12,6 +12,8 @@ import { PrivacyProvider } from "@/context/privacy-context";
 import { LoadingProvider } from "@/contexts/loading-context";
 import { UnifiedLoader } from "@/components/ui/unified-loader";
 import { getGlobalBanner } from "@/app/actions/adminActions";
+import { Analytics } from "@vercel/analytics/react";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 export const metadata: Metadata = {
   title: "OptiManager Pro",
@@ -41,23 +43,28 @@ export default async function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Alegreya:wght@400;700&family=PT+Sans:wght@400;700&display=swap"
           rel="stylesheet"
         />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#2563eb" />
       </head>
       <body
         className={cn("font-body antialiased", "min-h-screen w-full")}
         suppressHydrationWarning
       >
-        <SessionProvider>
-          <LoadingProvider>
-            <PrivacyProvider>
-              <UnifiedLoader />
-              <AppShell banner={banner}>
-                {children}
-              </AppShell>
-            </PrivacyProvider>
-          </LoadingProvider>
+        <SessionProvider refetchInterval={5 * 60} refetchOnWindowFocus={false}>
+          <ErrorBoundary>
+            <LoadingProvider>
+              <PrivacyProvider>
+                <UnifiedLoader />
+                <AppShell banner={banner}>
+                  {children}
+                </AppShell>
+              </PrivacyProvider>
+            </LoadingProvider>
+          </ErrorBoundary>
         </SessionProvider>
         <Toaster />
         <SonnerToaster />
+        <Analytics />
       </body>
     </html>
   );

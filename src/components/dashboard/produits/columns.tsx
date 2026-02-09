@@ -27,16 +27,16 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import type { Product as ProductType } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { deleteProduct } from "@/features/products/actions";
+import { deleteProduct } from "@/app/actions/products-actions";
 import { BrandLoader } from '@/components/ui/loader-brand';
 
 // Extend Product type for table display with optional populated fields
-export type Product = ProductType & {
+export type ProductWithRelations = ProductType & {
     marque?: string;      // Populated brand name (if joined)
     categorie?: string;   // Populated category name (if joined)
 };
 
-export const columns: ColumnDef<Product>[] = [
+export const columns: ColumnDef<ProductWithRelations>[] = [
     {
         accessorKey: "reference",
         header: ({ column }) => {
@@ -169,16 +169,18 @@ export const columns: ColumnDef<Product>[] = [
     {
         id: "actions",
         header: "Actions",
-        cell: ({ row }) => {
+        cell: ({ row, table }) => {
             const product = row.original;
+            // @ts-ignore
+            const onDelete = table.options.meta?.deleteProduct;
 
-            return <ProductActions product={product} />;
+            return <ProductActions product={product} onDelete={onDelete} />;
         },
     },
 ];
 
 // Separate component for actions to use hooks
-function ProductActions({ product }: { product: Product }) {
+function ProductActions({ product, onDelete }: { product: ProductWithRelations, onDelete?: (id: string) => void }) {
     const router = useRouter();
     const [isPending, startTransition] = React.useTransition();
     const [isDeleting, setIsDeleting] = React.useState(false);
@@ -200,16 +202,25 @@ function ProductActions({ product }: { product: Product }) {
         setIsDeleting(true);
         startTransition(async () => {
             try {
-                // Feature action throws on error
-                await deleteProduct(product.id);
+                // Close dialog immediately for better UX
+                setShowDeleteDialog(false);
+
+                // ✅ OPTIMISTIC UPDATE
+                if (onDelete) {
+                    onDelete(product.id.toString());
+                }
+
+                const result = await deleteProduct(product.id);
+                
+                if (!result.success) {
+                    throw new Error(result.error || "Erreur inconnue");
+                }
 
                 toast({
                     title: "Produit supprimé",
                     description: `Le produit "${product.nomProduit}" a été supprimé avec succès.`,
                 });
-                // Close dialog
-                setShowDeleteDialog(false);
-                // Refresh data
+                
                 router.refresh();
 
             } catch (error: any) {

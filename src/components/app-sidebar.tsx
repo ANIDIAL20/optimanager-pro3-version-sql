@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/sidebar";
 
 import { UserProfile } from "@/components/user-profile";
+import { RemindersBadge } from "@/components/reminders/reminders-badge";
 
 import Image from 'next/image';
 
@@ -43,29 +44,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const user = session?.user;
     // const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL; // Deprecated
     // const isAdmin = user?.email === ADMIN_EMAIL; // Deprecated
-    const [reminderCount, setReminderCount] = React.useState(0);
-
-    React.useEffect(() => {
-        if (!user) return;
-        
-        // Fetch count on load
-        const fetchCount = async () => {
-            try {
-                // Dynamically import to avoid server-action issues in client component if strict
-                const { getUnreadReminderCount } = await import('@/app/actions/reminder-actions');
-                const count = await getUnreadReminderCount();
-                setReminderCount(count);
-            } catch (error) {
-                console.error("Failed to fetch reminders count", error);
-            }
-        };
-
-        fetchCount();
-
-        // Optional: Poll every minute
-        const interval = setInterval(fetchCount, 60000);
-        return () => clearInterval(interval);
-    }, [user, pathname]); // Re-fetch on navigation too
 
     return (
         <Sidebar collapsible="icon" {...props}>
@@ -199,11 +177,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                             <Link href="/dashboard/rappels">
                                 <Bell className="size-5" strokeWidth={1.5} />
                                 <span>Rappels</span>
-                                {reminderCount > 0 && (
-                                    <span className="absolute right-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white">
-                                        {reminderCount > 99 ? '99+' : reminderCount}
-                                    </span>
-                                )}
+                                <RemindersBadge />
                             </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>

@@ -52,9 +52,19 @@ interface LensOrder {
   orderDate: Date | null;
   receivedDate: Date | null;
   deliveredDate: Date | null;
-  notes: string | null;
-  rightEye: any;
-  leftEye: any;
+  // Explicit Eye Prescription
+  sphereR: string | null;
+  cylindreR: string | null;
+  axeR: string | null;
+  additionR: string | null;
+  hauteurR: string | null;
+  sphereL: string | null;
+  cylindreL: string | null;
+  axeL: string | null;
+  additionL: string | null;
+  hauteurL: string | null;
+  matiere: string | null;
+  indice: string | null;
 }
 
 const getStatusBadge = (status: string) => {
@@ -163,8 +173,8 @@ export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
       `• Type de verre: ${order.lensType}`,
       `• Type de commande: ${order.orderType}`,
       `• Traitement: ${order.treatment || 'Aucun'}`,
-      order.rightEye ? `• OD: ${JSON.stringify(order.rightEye)}` : '',
-      order.leftEye ? `• OG: ${JSON.stringify(order.leftEye)}` : '',
+      order.sphereR || order.cylindreR ? `• OD: Sph ${order.sphereR || '-'} Cyl ${order.cylindreR || '-'} Axe ${order.axeR || '-'} Add ${order.additionR || '-'}` : '',
+      order.sphereL || order.cylindreL ? `• OG: Sph ${order.sphereL || '-'} Cyl ${order.cylindreL || '-'} Axe ${order.axeL || '-'} Add ${order.additionL || '-'}` : '',
       '',
       '💰 PRIX:',
       `• Prix unitaire: ${parseFloat(order.unitPrice).toFixed(2)} DH`,
@@ -203,9 +213,21 @@ export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
   const handlePrint = () => {
     if (!selectedOrder) return;
     
-    // Parse eye data safely
-    const od = selectedOrder.rightEye || {};
-    const og = selectedOrder.leftEye || {};
+    // Map explicit columns to objects for the SVG helper
+    const od = {
+      sphere: selectedOrder.sphereR,
+      cylinder: selectedOrder.cylindreR,
+      axis: selectedOrder.axeR,
+      addition: selectedOrder.additionR,
+      hauteur: selectedOrder.hauteurR
+    };
+    const og = {
+      sphere: selectedOrder.sphereL,
+      cylinder: selectedOrder.cylindreL,
+      axis: selectedOrder.axeL,
+      addition: selectedOrder.additionL,
+      hauteur: selectedOrder.hauteurL
+    };
 
     // Helper to generate SVG for an eye
     const getLensSVG = (side: string, data: any) => {
@@ -845,6 +867,39 @@ import { BrandLoader } from '@/components/ui/loader-brand';
                   <p className="text-sm font-medium text-slate-500">Traitement</p>
                   <p className="text-base">{selectedOrder.treatment || 'Aucun'}</p>
                 </div>
+              </div>
+
+              {/* Prescription Details */}
+              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                <h4 className="text-sm font-semibold text-slate-900 mb-3 uppercase tracking-wider">Correction Optique</h4>
+                <div className="grid grid-cols-2 gap-6 text-sm">
+                  <div className="space-y-2">
+                    <p className="font-bold text-blue-700 border-b pb-1">Oeil Droit (OD)</p>
+                    <div className="grid grid-cols-2 gap-y-1 text-slate-600">
+                      <span>Sphère:</span> <span className="font-semibold text-slate-900">{selectedOrder.sphereR || '-'}</span>
+                      <span>Cylindre:</span> <span className="font-semibold text-slate-900">{selectedOrder.cylindreR || '-'}</span>
+                      <span>Axe:</span> <span className="font-semibold text-slate-900">{selectedOrder.axeR ? `${selectedOrder.axeR}°` : '-'}</span>
+                      <span>Addition:</span> <span className="font-semibold text-slate-900">{selectedOrder.additionR || '-'}</span>
+                      <span>Hauteur:</span> <span className="font-semibold text-slate-900">{selectedOrder.hauteurR || '-'}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="font-bold text-blue-700 border-b pb-1">Oeil Gauche (OG)</p>
+                    <div className="grid grid-cols-2 gap-y-1 text-slate-600">
+                      <span>Sphère:</span> <span className="font-semibold text-slate-900">{selectedOrder.sphereL || '-'}</span>
+                      <span>Cylindre:</span> <span className="font-semibold text-slate-900">{selectedOrder.cylindreL || '-'}</span>
+                      <span>Axe:</span> <span className="font-semibold text-slate-900">{selectedOrder.axeL ? `${selectedOrder.axeL}°` : '-'}</span>
+                      <span>Addition:</span> <span className="font-semibold text-slate-900">{selectedOrder.additionL || '-'}</span>
+                      <span>Hauteur:</span> <span className="font-semibold text-slate-900">{selectedOrder.hauteurL || '-'}</span>
+                    </div>
+                  </div>
+                </div>
+                {(selectedOrder.matiere || selectedOrder.indice) && (
+                  <div className="mt-4 pt-4 border-t grid grid-cols-2 gap-4 text-sm">
+                    {selectedOrder.matiere && <p><span className="text-slate-500">Matière:</span> <span className="font-medium">{selectedOrder.matiere}</span></p>}
+                    {selectedOrder.indice && <p><span className="text-slate-500">Indice:</span> <span className="font-medium">{selectedOrder.indice}</span></p>}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4 border-t pt-4">

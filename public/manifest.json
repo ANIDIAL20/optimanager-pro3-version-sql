@@ -1,0 +1,16 @@
+{
+  "name": "OptiManager Pro",
+  "short_name": "OptiManager",
+  "description": "Système de Gestion Cloud pour Opticiens",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

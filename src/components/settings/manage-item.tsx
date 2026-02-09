@@ -20,7 +20,7 @@ interface ManageItemProps {
   itemName: string;
   onSuccess: () => void;
   FormComponent?: React.FC<any>;
-  onDeleteClick: (item: Item) => void;
+  onDeleteClick?: (item: Item) => void;
 }
 
 const ItemCard: React.FC<ManageItemProps> = ({ item, collectionName, itemName, FormComponent, onSuccess, onDeleteClick }) => {
@@ -47,14 +47,16 @@ const ItemCard: React.FC<ManageItemProps> = ({ item, collectionName, itemName, F
         {/* Action Buttons Container */}
         <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100">
           {/* Delete Button - Standalone to avoid dropdown race condition */}
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50"
-            onClick={() => onDeleteClick(item)}
-          >
-            <Trash2 size={18} />
-          </Button>
+          {onDeleteClick && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50"
+              onClick={() => onDeleteClick(item)}
+            >
+              <Trash2 size={18} />
+            </Button>
+          )}
 
           {/* Edit Dropdown Menu */}
           <DropdownMenu>

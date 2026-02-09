@@ -37,10 +37,12 @@ const ReceiveOrderSchema = z.object({
 
 type ReceiveOrderFormValues = z.infer<typeof ReceiveOrderSchema>;
 
+import { type LensOrder } from '@/app/actions/lens-orders-actions';
+
 interface ReceiveOrderDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  order: any; // Using any for flexibility, but ideally strict LensOrder type
+  order: LensOrder | null;
   onSuccess?: () => void;
 }
 

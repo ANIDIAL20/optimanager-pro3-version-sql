@@ -1,6 +1,7 @@
 'use server';
 
-import { requireAdmin } from '@/lib/admin-utils';
+import { adminAction } from '@/lib/secure-action';
+import { requireAdmin } from '@/lib/auth-guard';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { products, users, clients, suppliers } from '@/db/schema';
@@ -37,14 +38,12 @@ export type SaaSStats = {
   churnRate: number;
 };
 
-export async function getSystemLogs(limitCount = 20) {
-  await requireAdmin();
+export const getSystemLogs = adminAction(async (user, limitCount = 20) => {
   return [];
-}
+});
 
-export async function createClient(formData: FormData) {
+export const createClient = adminAction(async (user, formData: FormData) => {
   try {
-    await requireAdmin();
 
     const displayName = formData.get('displayName') as string;
     const email = formData.get('email') as string;
@@ -130,74 +129,97 @@ export async function createClient(formData: FormData) {
     console.error("Error creating client:", error);
     return { success: false, error: "Erreur serveur: " + error.message };
   }
-}
+});
 
-export async function resetClientPassword(uid: string, newPassword: string) {
-  await requireAdmin();
+export const resetClientPassword = adminAction(async (user, uid: string, newPassword: string) => {
   return { success: false, error: "Admin features not yet migrated to Drizzle", message: "" };
-}
+});
 
 export async function getFinancialStats() {
   return getSaaSStats();
 }
 
-export async function getSaaSStats() {
-  await requireAdmin();
-  return {
-    totalRevenue: 0,
-    activeClients: 0,
-    suspendedClients: 0,
-    newSignups: 0,
-    churnRate: 0,
-  } as SaaSStats;
-}
+import { unstable_cache } from 'next/cache';
 
-export async function getAllClients() {
-  await requireAdmin();
-  return [];
-}
+export const getSaaSStats = adminAction(async (user) => {
+  return await unstable_cache(
+    async () => {
+      console.log('🔄 Fetching SaaS Stats (Cached)...');
+      const [allUsers, shopOwners] = await Promise.all([
+        db.select().from(users),
+        db.select().from(users).where(eq(users.role, 'USER'))
+      ]);
 
-export async function toggleClientStatus(uid: string, currentStatus: ClientData['status']) {
-  await requireAdmin();
-  return { success: false, error: "Admin features not yet migrated to Drizzle" };
-}
+      const activeClients = shopOwners.filter((u: any) => u.isActive).length;
+      const totalRevenue = shopOwners.reduce((sum: number, u: any) => sum + parseFloat(u.amountPaid || '0'), 0);
 
-export async function extendSubscription(uid: string, period: 'monthly' | 'yearly') {
-  await requireAdmin();
-  return { success: false, error: "Admin features not yet migrated to Drizzle" };
-}
+      return {
+        totalRevenue,
+        activeClients,
+        suspendedClients: shopOwners.length - activeClients,
+        newSignups: shopOwners.length,
+        churnRate: 2.4, // Keep mock for now as we don't have churn data
+      } as SaaSStats;
+    },
+    ['saas-stats'],
+    { revalidate: 3600, tags: ['admin-stats'] }
+  )();
+});
 
-export async function updateClientPlan(uid: string, data: { expiryDate: Date, gracePeriod: number, status: 'active' | 'suspended' | 'frozen' }) {
-  await requireAdmin();
-  return { success: false, error: "Admin features not yet migrated to Drizzle", message: "" }; // Type compatibility
-}
-
-export async function updateClientQuotas(
-    uid: string, 
-    data: { 
-        maxProducts: number, 
-        maxClients: number, 
-        maxSuppliers: number, 
-        status?: 'active' | 'suspended' | 'frozen', 
-        
-        // Dates
-        lastPaymentDate?: Date | undefined,
-        nextPaymentDate?: Date | undefined,
-        expiryDate?: Date | undefined,
-        
-        // Finance
-        paymentMode?: 'subscription' | 'lifetime',
-        billingCycle?: 'monthly' | 'yearly',
-        agreedPrice?: number,
-        trainingPrice?: number,
-        setupPrice?: number,
-        amountPaid?: number,
-        installmentsCount?: number,
-        nextInstallmentDate?: Date | undefined
+export const getAllClients = adminAction(async (user) => {
+  const allUsers = await db.select().from(users).where(eq(users.role, 'USER'));
+  
+  return allUsers.map((u: any) => ({
+    uid: u.id,
+    email: u.email,
+    displayName: u.name || 'Shop Owner',
+    phoneNumber: '', 
+    status: u.isActive ? 'active' : 'suspended',
+    subscriptionEndDate: u.subscriptionExpiry?.toISOString() || new Date(Date.now() + 30*24*60*60*1000).toISOString(),
+    plan: u.billingCycle || 'monthly',
+    revenue: parseFloat(u.amountPaid || '0'),
+    quotas: {
+        maxProducts: u.maxProducts,
+        maxClients: u.maxClients,
+        maxSuppliers: u.maxSuppliers
     }
-) {
+  })) as ClientData[];
+});
+
+export const toggleClientStatus = adminAction(async (user, uid: string, currentStatus: ClientData['status']) => {
+  return { success: false, error: "Admin features not yet migrated to Drizzle" };
+});
+
+export const extendSubscription = adminAction(async (user, uid: string, period: 'monthly' | 'yearly') => {
+  return { success: false, error: "Admin features not yet migrated to Drizzle" };
+});
+
+export const updateClientPlan = adminAction(async (user, uid: string, data: { expiryDate: Date, gracePeriod: number, status: 'active' | 'suspended' | 'frozen' }) => {
+  return { success: false, error: "Admin features not yet migrated to Drizzle", message: "" }; // Type compatibility
+});
+
+export const updateClientQuotas = adminAction(async (user, uid: string, data: { 
+    maxProducts: number, 
+    maxClients: number, 
+    maxSuppliers: number, 
+    status?: 'active' | 'suspended' | 'frozen', 
+    
+    // Dates
+    lastPaymentDate?: Date | undefined,
+    nextPaymentDate?: Date | undefined,
+    expiryDate?: Date | undefined,
+    
+    // Finance
+    paymentMode?: 'subscription' | 'lifetime',
+    billingCycle?: 'monthly' | 'yearly',
+    agreedPrice?: number,
+    trainingPrice?: number,
+    setupPrice?: number,
+    amountPaid?: number,
+    installmentsCount?: number,
+    nextInstallmentDate?: Date | undefined
+}) => {
   try {
-    await requireAdmin();
 
     const updateData: any = {
         maxProducts: data.maxProducts,
@@ -234,17 +256,15 @@ export async function updateClientQuotas(
     console.error("Error updating client:", error);
     return { success: false, error: "Erreur lors de la mise à jour: " + error.message };
   }
-}
+});
 
-export async function deleteClient(uid: string) {
-  await requireAdmin();
+export const deleteClient = adminAction(async (user, uid: string) => {
   return { success: false, error: "Admin features not yet migrated to Drizzle" };
-}
+});
 
-export async function updateGlobalBanner(data: { message: string, type: 'info' | 'warning' | 'critical', active: boolean }) {
-  await requireAdmin();
+export const updateGlobalBanner = adminAction(async (user, data: { message: string, type: 'info' | 'warning' | 'critical', active: boolean }) => {
   return { success: false, error: "Admin features not yet migrated to Drizzle" };
-}
+});
 
 export async function getGlobalBanner() {
   // This is called from layout, so don't require admin
@@ -252,33 +272,43 @@ export async function getGlobalBanner() {
 }
 
 export async function getClientUsageStats(uid: string) {
+  if (!uid) return { 
+    products: { count: 0, limit: 50 }, 
+    clients: { count: 0, limit: 20 }, 
+    suppliers: { count: 0, limit: 10 } 
+  };
+
   try {
-    // Run all 4 queries in parallel for faster response
-    const [productCountResult, clientCountResult, supplierCountResult, user] = await Promise.all([
-      db.select({ count: count() }).from(products).where(eq(products.userId, uid)),
-      db.select({ count: count() }).from(clients).where(eq(clients.userId, uid)),
-      db.select({ count: count() }).from(suppliers).where(eq(suppliers.userId, uid)),
+    const trimmedId = uid.trim();
+    console.log(`📊 Fetching usage stats for UID: ${trimmedId}`);
+    
+    // ✅ Parallel Drizzle queries (Option 3 Recommendation)
+    const [productsRes, clientsRes, suppliersRes, userRes] = await Promise.all([
+      db.select({ value: count() }).from(products).where(eq(products.userId, trimmedId)),
+      db.select({ value: count() }).from(clients).where(eq(clients.userId, trimmedId)),
+      db.select({ value: count() }).from(suppliers).where(eq(suppliers.userId, trimmedId)),
       db.query.users.findFirst({
-        where: eq(users.id, uid),
+        where: eq(users.id, trimmedId),
         columns: { maxProducts: true, maxClients: true, maxSuppliers: true },
-      }),
+      })
     ]);
 
-    const productCount = productCountResult[0]?.count || 0;
-    const clientCount = clientCountResult[0]?.count || 0;
-    const supplierCount = supplierCountResult[0]?.count || 0;
-
-    const maxProducts = user?.maxProducts || 50;
-    const maxClients = user?.maxClients || 20;
-    const maxSuppliers = user?.maxSuppliers || 10;
-
     return {
-      products: { count: productCount, limit: maxProducts },
-      clients: { count: clientCount, limit: maxClients },
-      suppliers: { count: supplierCount, limit: maxSuppliers },
+      products: { 
+        count: Number(productsRes[0]?.value || 0), 
+        limit: userRes?.maxProducts || 50 
+      },
+      clients: { 
+        count: Number(clientsRes[0]?.value || 0), 
+        limit: userRes?.maxClients || 20 
+      },
+      suppliers: { 
+        count: Number(suppliersRes[0]?.value || 0), 
+        limit: userRes?.maxSuppliers || 10 
+      },
     };
-  } catch (error) {
-    console.error("Error calculating usage:", error);
+  } catch (error: any) {
+    console.error("❌ Usage Stats Error:", error);
     return { 
         products: { count: 0, limit: 50 },
         clients: { count: 0, limit: 20 },

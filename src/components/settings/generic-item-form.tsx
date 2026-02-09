@@ -35,7 +35,6 @@ const collectionToTypeMap: Record<string, string> = {
   'banks': 'banks',
   'insurances': 'insurances',
   'marques': 'brands',
-  'categories': 'categories',
   'matieres': 'materials',
   'couleurs': 'colors',
   'traitements': 'treatments',

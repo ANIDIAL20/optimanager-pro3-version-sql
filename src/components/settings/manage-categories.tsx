@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ManageItem } from './manage-item';
 import type { Category } from '@/lib/types';
-import { GenericItemForm } from '@/generic-item-form';
+import { GenericItemForm } from './generic-item-form';
 import { getSettings } from '@/app/actions/settings-actions';
 
 
@@ -44,7 +44,7 @@ export function ManageCategories() {
         <AlertDescription>
           Impossible de charger les catégories. {error}
           <Button variant="outline" size="sm" onClick={fetchCategories} className="mt-2">
-            {isSeeding ? <BrandLoader size="xs" className="mr-2 inline-flex" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            <RefreshCw className="mr-2 h-4 w-4" />
             Réessayer
           </Button>
         </AlertDescription>

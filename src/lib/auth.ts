@@ -14,7 +14,7 @@ export interface AuthUser {
   displayName: string | null;
   name: string | null;
   image: string | null;
-  role: 'admin' | 'user';
+  role: 'ADMIN' | 'USER';
 }
 
 /**
@@ -51,7 +51,7 @@ export const getCurrentUser = cache(async (): Promise<AuthUser | null> => {
     displayName: session.user.name || null,
     name: session.user.name || null,
     image: session.user.image || null,
-    role: (session.user.role as 'admin' | 'user') || 'user',
+    role: (session.user.role as 'ADMIN' | 'USER') || 'USER',
   };
 });
 
@@ -85,7 +85,7 @@ export async function requireAdmin(): Promise<AuthUser> {
 
   const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
   
-  if (user.role !== 'admin' && user.email !== ADMIN_EMAIL) {
+  if (user.role !== 'ADMIN' && user.email !== ADMIN_EMAIL) {
     redirect('/dashboard');
   }
 
@@ -103,5 +103,5 @@ export async function isAdmin(): Promise<boolean> {
   }
 
   const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-  return user.role === 'admin' || user.email === ADMIN_EMAIL;
+  return user.role === 'ADMIN' || user.email === ADMIN_EMAIL;
 }

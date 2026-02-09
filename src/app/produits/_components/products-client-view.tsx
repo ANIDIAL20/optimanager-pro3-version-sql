@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { DataTable } from '@/components/ui/data-table';
-import { columns, type Product } from '@/components/dashboard/produits/columns';
+import { columns, type ProductWithRelations } from '@/components/dashboard/produits/columns';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,11 +20,11 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { getCategoryIcon } from '@/lib/category-icons';
 import { InvoiceScannerDialog } from '@/components/products/invoice-scanner-dialog';
-import { getProducts, getCategories } from '@/features/products/actions';
+import { getProducts, getCategories } from '@/app/actions/products-actions';
 import { useToast } from '@/hooks/use-toast';
 
 interface ProductsClientViewProps {
-    initialProducts: Product[];
+    initialProducts: ProductWithRelations[];
     initialCategories: { id: string, name: string }[];
     usageStats: { products: number, maxProducts: number };
 }
@@ -32,10 +32,19 @@ interface ProductsClientViewProps {
 export function ProductsClientView({ initialProducts, initialCategories, usageStats }: ProductsClientViewProps) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [categoryFilter, setCategoryFilter] = React.useState<string>('all');
-  const [products, setProducts] = React.useState<Product[]>(initialProducts);
+  const [products, setProducts] = React.useState<ProductWithRelations[]>(initialProducts);
+  const [optimisticProducts, addOptimisticProduct] = React.useOptimistic(
+    products,
+    (state, productId: string) => state.filter(p => p.id.toString() !== productId)
+  );
+
   const [categories, setCategories] = React.useState<{id: string, name: string}[]>(initialCategories);
   const [isLoading, setIsLoading] = React.useState(false);
   const { toast } = useToast();
+
+  const deleteProductLocally = (productId: string) => {
+    addOptimisticProduct(productId);
+  };
 
   // Sync props to state when Router refreshes (e.g. after delete)
   React.useEffect(() => {
@@ -58,24 +67,20 @@ export function ProductsClientView({ initialProducts, initialCategories, usageSt
     const timer = setTimeout(async () => {
       setIsLoading(true);
       try {
-        const productsData = await getProducts(searchTerm);
+        const result = await getProducts(searchTerm);
         
         if (isMounted) {
-            const mappedProducts: Product[] = productsData.map((p: any) => ({
-                id: p.id.toString(),
-                reference: p.reference || '',
-                nomProduit: p.nom,
-                prixAchat: parseFloat(p.prixAchat || '0'),
-                prixVente: parseFloat(p.prixVente || '0'),
-                quantiteStock: p.quantiteStock || 0,
-                stockMin: p.seuilAlerte || 5,
-                categorie: p.categorie || '',
-                marque: p.marque || '',
-                description: p.description,
-                categorieId: '',
-                marqueId: ''
-            }));
-            setProducts(mappedProducts);
+            if (result.success && result.data) {
+                // The action now returns mapped data matching Product interface
+                setProducts(result.data as ProductWithRelations[]);
+            } else {
+                console.error("Search failed:", result.error);
+                toast({
+                    title: "Erreur",
+                    description: "Impossible de rechercher les produits",
+                    variant: "destructive"
+                });
+            }
         }
       } catch (err) {
         console.error("Error searching:", err);
@@ -92,18 +97,18 @@ export function ProductsClientView({ initialProducts, initialCategories, usageSt
 
   // Filter products by Category Tab (Client-side filtering of current set)
   const filteredProducts = React.useMemo(() => {
-    if (categoryFilter === 'all') return products;
-    return products.filter(p => p.categorie === categoryFilter);
-  }, [products, categoryFilter]);
+    if (categoryFilter === 'all') return optimisticProducts;
+    return optimisticProducts.filter(p => p.categorie === categoryFilter);
+  }, [optimisticProducts, categoryFilter]);
 
   // Stats
   const stats = React.useMemo(() => {
     return {
-      total: products.length,
-      lowStock: products.filter(p => p.quantiteStock < (p.stockMin || 5)).length,
-      totalValue: products.reduce((acc, p) => acc + (p.prixVente * p.quantiteStock), 0),
+      total: optimisticProducts.length,
+      lowStock: optimisticProducts.filter(p => p.quantiteStock < (p.stockMin || 5)).length,
+      totalValue: optimisticProducts.reduce((acc, p) => acc + (p.prixVente * p.quantiteStock), 0),
     };
-  }, [products]);
+  }, [optimisticProducts]);
 
   return (
     <div className="space-y-6">
@@ -229,6 +234,10 @@ export function ProductsClientView({ initialProducts, initialCategories, usageSt
             data={filteredProducts}
             searchKey="reference"
             searchValue={searchTerm}
+            // @ts-ignore - custom meta for optimistic updates
+            meta={{
+                deleteProduct: deleteProductLocally
+            }}
         />
       )}
     </div>
