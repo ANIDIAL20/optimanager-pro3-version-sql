@@ -94,7 +94,7 @@ export class ProductRepository extends BaseRepository<Product, typeof products> 
       .from(products)
       .where(and(eq(products.userId, userId), eq(products.isActive, true)));
 
-    return results
+    return (results as Array<{ category: string | null }>)
       .map(r => r.category)
       .filter((c): c is string => !!c && c.trim() !== '')
       .sort();

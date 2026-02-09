@@ -6,6 +6,7 @@ import {
     SupplierOrder,
 } from '@/app/actions/supplier-orders-actions';
 import { useToast } from '@/hooks/use-toast';
+import Link from 'next/link';
 import { Truck, Plus, Package, AlertTriangle, Euro, Search, Clock } from 'lucide-react';
 import { DataTable } from '@/components/ui/data-table';
 import { columns, SupplierOrderUI } from '@/components/dashboard/supplier-orders/columns';
@@ -98,10 +99,12 @@ export default function SupplierOrdersPage() {
                         Suivez vos achats, réceptions et dettes fournisseurs.
                     </p>
                 </div>
-                <Button className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Nouvelle Commande
-                </Button>
+                <Link href="/dashboard/supplier-orders/new">
+                    <Button className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Nouvelle Commande
+                    </Button>
+                </Link>
             </div>
 
             {/* KPI Cards */}
@@ -118,7 +121,7 @@ export default function SupplierOrdersPage() {
                     </div>
                 </SpotlightCard>
 
-                <SpotlightCard className="bg-white border-slate-200/60 shadow-sm" from="red">
+                <SpotlightCard className="bg-white border-slate-200/60 shadow-sm" spotlightColor="rgba(239, 68, 68, 0.15)">
                     <div className="flex items-center gap-4">
                         <div className="p-3 bg-red-50 rounded-xl">
                             <AlertTriangle className="h-6 w-6 text-red-600" />
@@ -132,7 +135,7 @@ export default function SupplierOrdersPage() {
                     </div>
                 </SpotlightCard>
 
-                <SpotlightCard className="bg-white border-slate-200/60 shadow-sm" from="orange">
+                <SpotlightCard className="bg-white border-slate-200/60 shadow-sm" spotlightColor="rgba(249, 115, 22, 0.15)">
                     <div className="flex items-center gap-4">
                         <div className="p-3 bg-orange-50 rounded-xl">
                             <Clock className="h-6 w-6 text-orange-600" />

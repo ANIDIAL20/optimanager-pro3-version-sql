@@ -6,10 +6,13 @@
 'use server';
 
 import { db } from '@/db';
-import { sales, clients, products, lensOrders } from '@/db/schema';
-import { eq, and, desc, sql, inArray } from 'drizzle-orm';
+import { sales, clients, products, lensOrders, clientTransactions, devis } from '@/db/schema';
+import { eq, and, desc, sql, inArray, or } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
-import { logSuccess, logFailure } from '@/lib/audit-log';
+import { logSuccess, logFailure, logAudit } from '@/lib/audit-log';
+import { withTiming } from '@/lib/db-monitor';
+import { revalidatePath, revalidateTag } from 'next/cache';
+import { track } from '@vercel/analytics/server';
 
 // ========================================
 // TYPE DEFINITIONS
@@ -83,7 +86,7 @@ export const getSales = secureAction(async (userId, user) => {
 
         console.log(`✅ Found ${salesData.length} sales`);
 
-        const mappedSales: Sale[] = salesData.map(s => ({
+        const mappedSales: Sale[] = salesData.map((s: any) => ({
             id: s.id.toString(),
             clientId: s.clientId?.toString(),
             clientName: s.clientName || undefined,
@@ -108,7 +111,7 @@ export const getSales = secureAction(async (userId, user) => {
             lastPaymentDate: s.lastPaymentDate?.toISOString()
         }));
 
-        await logSuccess(userId, 'READ', 'sales', undefined, { count: mappedSales.length });
+        await logSuccess(userId, 'READ', 'sales', 'LIST_ALL', { count: mappedSales.length });
         return { success: true, sales: mappedSales };
 
     } catch (error: any) {
@@ -177,29 +180,27 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
         if (!data.items || data.items.length === 0) {
             return { success: false, error: 'Veuillez ajouter au moins un article' };
         }
+        const saleId = await withTiming('CREATE_SALE_COMPLETE', async () => {
+            return await db.transaction(async (tx: any) => {
+                // 1. Calculate totals
+                const items = data.items;
+                const totalHT = items.reduce((sum, item) => sum + item.total, 0);
+                const totalTVA = totalHT * 0.20;
+                const totalTTC = totalHT + totalTVA;
 
-        return await db.transaction(async (tx) => {
-            // 1. Calculate totals
-            const totalHT = data.items.reduce((sum, item) => sum + item.total, 0);
-            const totalTVA = totalHT * 0.20;
-            const totalTTC = totalHT + totalTVA;
-
-            // 2. Fetch Client Data + Snapshot
+                // 2. Fetch Client Data + Snapshot
             let clientSnapshot: any = {};
             let clientIdNum: number | undefined;
 
             if (data.clientId) {
                 clientIdNum = parseInt(data.clientId);
-                if (isNaN(clientIdNum)) {
-                     console.error("❌ Invalid Client ID:", data.clientId);
-                     throw new Error("ID Client invalide");
-                }
+                if (isNaN(clientIdNum)) throw new Error("ID Client invalide");
 
                 const client = await tx.query.clients.findFirst({
                     where: and(eq(clients.id, clientIdNum), eq(clients.userId, userId)),
                     with: {
                         prescriptions: {
-                            orderBy: (prescriptions, { desc }) => [desc(prescriptions.createdAt)],
+                            orderBy: (prescriptions: any, { desc }: any) => [desc(prescriptions.createdAt)],
                             limit: 1
                         }
                     }
@@ -209,7 +210,6 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                     clientSnapshot = {
                         clientName: client.fullName,
                         clientPhone: client.phone,
-                        // clientMutuelle: client.mutuelle, // Not in schema
                         clientAddress: client.address
                     };
 
@@ -224,56 +224,75 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
 
             // 3. Update Stock & Enrich Items
             const enrichedItems: SaleItem[] = [];
+            
+            // ✅ N+1 Fix: Fetch all products in bulk
+            const productRefs = data.items.map(i => i.productRef);
+            const possibleIds = productRefs.map(r => parseInt(r)).filter(id => !isNaN(id));
+            const possibleRefs = productRefs.filter(r => isNaN(parseInt(r)));
+
+            const fetchedProducts = await tx.query.products.findMany({
+                where: and(
+                    eq(products.userId, userId),
+                    or(
+                        possibleIds.length > 0 ? inArray(products.id, possibleIds) : undefined,
+                        possibleRefs.length > 0 ? inArray(products.reference, possibleRefs) : undefined
+                    )
+                )
+            });
 
             for (const item of data.items) {
-                let productId: number | null = parseInt(item.productRef);
-                let productToUpdate;
-
-                if (!isNaN(productId)) {
-                     // Try to find by ID
-                     productToUpdate = await tx.query.products.findFirst({
-                        where: and(eq(products.id, productId), eq(products.userId, userId))
-                     });
-                }
-                
-                if (!productToUpdate) {
-                    // Fallback: search by reference
-                    productToUpdate = await tx.query.products.findFirst({
-                        where: and(eq(products.reference, item.productRef), eq(products.userId, userId))
-                    });
-                }
+                const productToUpdate = fetchedProducts.find((p: any) => 
+                    p.id.toString() === item.productRef || p.reference === item.productRef
+                );
 
                 if (productToUpdate) {
-                    // Decrement stock
-                    await tx.update(products)
+                    // ✅ CHECK STOCK
+                    if ((productToUpdate.quantiteStock || 0) < item.quantity) {
+                        throw new Error(`STOCK_INSUFFISANT: ${productToUpdate.nom}`);
+                    }
+
+                    // ✅ OPTIMISTIC LOCKING UPDATE
+                    const updateResult = await tx.update(products)
                         .set({
                             quantiteStock: sql`${products.quantiteStock} - ${item.quantity}`,
+                            version: sql`${products.version} + 1`,
                             updatedAt: new Date()
                         })
-                        .where(eq(products.id, productToUpdate.id));
+                        .where(and(
+                            eq(products.id, productToUpdate.id),
+                            eq(products.version, productToUpdate.version) // Check current version
+                        ));
+                    
+                    if (updateResult.rowCount === 0) {
+                        throw new Error(`CONCURRENCY_ERROR: Le produit ${productToUpdate.nom} a été modifié par un autre utilisateur.`);
+                    }
+
+                    // Audit product change
+                    await logAudit({
+                        userId,
+                        entityType: 'product',
+                        entityId: productToUpdate.id.toString(),
+                        action: 'UPDATE_STOCK',
+                        oldValue: { stock: productToUpdate.quantiteStock, version: productToUpdate.version },
+                        newValue: { stock: productToUpdate.quantiteStock - item.quantity, version: productToUpdate.version + 1 },
+                        metadata: { saleRef: 'pending' },
+                        success: true
+                    });
                 } else {
-                    console.warn(`⚠️ Product not found for stock update: ${item.productRef}`);
+                    console.warn(`⚠️ Product not found: ${item.productRef}`);
                 }
 
-                // Enrich Item Snapshot
-                // Prefer provided values (custom price/name), fallback to DB
-                // Ensure we save the TEXT reference, not the ID, if possible
                 const finalRef = productToUpdate ? productToUpdate.reference : item.productRef;
-                const finalName = item.productName || (productToUpdate ? productToUpdate.nomProduit : 'Article Inconnu');
+                const finalName = item.productName || (productToUpdate ? productToUpdate.nom : 'Article Inconnu');
                 const finalPrice = item.unitPrice ?? (productToUpdate ? Number(productToUpdate.prixVente) : 0);
                 const finalTotal = item.total ?? (finalPrice * item.quantity);
 
-                // Fetch new details if available
-                const finalMarque = productToUpdate?.marque || undefined;
-                const finalModele = productToUpdate?.modele || undefined;
-                const finalCouleur = productToUpdate?.couleur || undefined;
-
                 enrichedItems.push({
-                    productRef: finalRef, // Save actual reference string
+                    productRef: finalRef,
                     productName: finalName,
-                    marque: finalMarque,
-                    modele: finalModele,
-                    couleur: finalCouleur,
+                    marque: productToUpdate?.marque || undefined,
+                    modele: productToUpdate?.modele || undefined,
+                    couleur: productToUpdate?.couleur || undefined,
                     quantity: item.quantity,
                     unitPrice: finalPrice,
                     total: finalTotal,
@@ -281,15 +300,13 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                 });
             }
 
-            // Recalculate totals based on enriched items for accuracy
             const calcTotalHT = enrichedItems.reduce((sum, item) => sum + item.total, 0);
             const calcTotalTVA = calcTotalHT * 0.20;
             const calcTotalTTC = calcTotalHT + calcTotalTVA;
 
-            // 4. Create Sale Record
             const saleNumber = `SALE-${Date.now().toString().slice(-8)}`;
 
-            const newSale = {
+            const saleData = {
                 userId,
                 clientId: clientIdNum,
                 saleNumber,
@@ -309,17 +326,15 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                 date: new Date()
             };
 
-            console.log("📝 Inserting sale:", newSale);
-
-            const result = await tx.insert(sales).values(newSale).returning();
+            const result = await tx.insert(sales).values(saleData).returning();
             const createdSaleId = result[0].id;
 
-            // 5. Link Lens Orders (PRO Workflow)
+            // 5. Link Lens Orders
             if (data.lensOrderIds && data.lensOrderIds.length > 0) {
                 await tx.update(lensOrders)
                     .set({
                         saleId: createdSaleId,
-                        status: 'delivered', // Assume sale = delivery to customer
+                        status: 'delivered', 
                         deliveredDate: new Date(),
                         updatedAt: new Date()
                     })
@@ -329,9 +344,64 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                     ));
             }
 
-            await logSuccess(userId, 'CREATE', 'sales', createdSaleId.toString());
-            return { success: true, id: createdSaleId.toString(), message: 'Vente créée avec succès' };
+            // 6. CLIENT LEDGER
+            if (clientIdNum) {
+                const client = await tx.query.clients.findFirst({ where: eq(clients.id, clientIdNum) });
+                if (client) {
+                    const currentBalance = Number(client.balance || 0);
+                    const saleAmount = calcTotalTTC;
+                    
+                    if (Number(client.creditLimit) > 0 && (currentBalance + saleAmount) > Number(client.creditLimit)) {
+                        throw new Error(`Crédit refusé. Solde: ${currentBalance.toFixed(2)}, Limite: ${client.creditLimit}`);
+                    }
+
+                    const newBalance = currentBalance + saleAmount;
+                    await tx.update(clients)
+                        .set({ 
+                            balance: newBalance.toFixed(2),
+                            totalSpent: sql`${clients.totalSpent} + ${saleAmount}`,
+                            updatedAt: new Date()
+                        })
+                        .where(eq(clients.id, clientIdNum));
+
+                    await tx.insert(clientTransactions).values({
+                        userId,
+                        clientId: clientIdNum,
+                        type: 'SALE',
+                        referenceId: createdSaleId.toString(),
+                        amount: saleAmount.toFixed(2),
+                        previousBalance: currentBalance.toFixed(2),
+                        newBalance: newBalance.toFixed(2),
+                        notes: `Vente #${saleNumber}`,
+                        date: new Date()
+                    });
+                }
+            }
+
+            await logSuccess(userId, 'CREATE', 'sales', createdSaleId.toString(), {
+                saleNumber,
+                totalAmount: calcTotalTTC,
+                clientId: clientIdNum
+            }, null, saleData);
+
+            // Track for analytics
+            track('sale_created', {
+                amount: calcTotalTTC,
+                userId: userId,
+                itemsCount: enrichedItems.length
+            });
+
+            revalidatePath('/dashboard/sales');
+            revalidatePath('/dashboard/stock');
+            if (clientIdNum) revalidatePath(`/dashboard/clients/${clientIdNum}`);
+            revalidateTag('sales', 'page');
+            revalidateTag('products', 'page');
+            
+            return { success: true, id: createdSaleId.toString(), message: `Vente #${saleNumber} créée avec succès` };
+            });
         });
+
+        return saleId;
 
     } catch (error: any) {
         console.error('💥 Error creating sale:', error);
@@ -348,17 +418,17 @@ export const deleteSale = secureAction(async (userId, user, saleId: string) => {
     try {
         const id = parseInt(saleId);
         
-        await db.transaction(async (tx) => {
+        await db.transaction(async (tx: any) => {
             // 1. Fetch sale to get items for stock reversion
-            const sale = await tx.query.sales.findFirst({
+            const saleDoc = await tx.query.sales.findFirst({
                 where: and(eq(sales.id, id), eq(sales.userId, userId))
             });
 
-            if (!sale) throw new Error("Vente introuvable");
+            if (!saleDoc) throw new Error("Vente introuvable");
 
             // 2. Revert Stock
-            if (sale.items && Array.isArray(sale.items)) {
-                for (const item of sale.items as SaleItem[]) {
+            if (saleDoc.items && Array.isArray(saleDoc.items)) {
+                for (const item of saleDoc.items as SaleItem[]) {
                     // Start logic similar to processReturn, but for full quantity
                     if (!item.productRef) continue;
 
@@ -394,7 +464,9 @@ export const deleteSale = secureAction(async (userId, user, saleId: string) => {
                 .where(eq(sales.id, id));
         });
 
-        await logSuccess(userId, 'DELETE', 'sales', saleId);
+        await logSuccess(userId, 'DELETE', 'sales', saleId, { action: 'delete_sale' });
+        revalidatePath('/dashboard/sales');
+        revalidatePath('/dashboard/stock');
         return { success: true, message: 'Vente supprimée et stock restauré avec succès' };
 
     } catch (error: any) {
@@ -409,7 +481,7 @@ export const processReturn = secureAction(async (userId, user, saleId: string, r
     try {
         const id = parseInt(saleId);
 
-        await db.transaction(async (tx) => {
+        await db.transaction(async (tx: any) => {
             const sale = await tx.query.sales.findFirst({
                 where: and(eq(sales.id, id), eq(sales.userId, userId))
             });
@@ -507,16 +579,20 @@ export const processReturn = secureAction(async (userId, user, saleId: string, r
                     totalTTC: newTotalTTC.toFixed(2),
                     totalNet: newTotalTTC.toFixed(2),
                     totalHT: newTotalHT.toFixed(2),
-                    totalTVA: newTotalTVA.toFixed(2), // Fix TVA
+                    totalTVA: newTotalTVA.toFixed(2),
                     totalPaye: newTotalPaid.toFixed(2),
                     resteAPayer: remaining.toFixed(2),
                     status: newStatus,
                     updatedAt: new Date()
                 })
                 .where(eq(sales.id, id));
+
+            await logSuccess(userId, 'RETURN', 'sales', saleId, { action: 'process_return', totalRefund: returnedTTC, actualRefund: refundAmount }, sale, { ...sale, items: updatedItems, totalTTC: newTotalTTC.toFixed(2), status: newStatus });
         });
 
-        await logSuccess(userId, 'RETURN', 'sales', saleId);
+        revalidatePath('/dashboard/sales');
+        revalidatePath(`/dashboard/sales/${saleId}`);
+        revalidatePath('/dashboard/stock');
         return { success: true, message: 'Retour effectué avec succès' };
 
     } catch (error: any) {
@@ -536,7 +612,7 @@ export const getClientSales = secureAction(async (userId, user, clientId: string
             orderBy: [desc(sales.createdAt)]
         });
 
-        const mappedSales = salesData.map(s => ({
+        const mappedSales = salesData.map((s: any) => ({
             id: s.id.toString(),
             // ... map same fields as getSales
             items: (s.items as SaleItem[]) || [],
@@ -558,17 +634,17 @@ export const addPayment = secureAction(async (userId, user, saleId: string, paym
     try {
         const id = parseInt(saleId);
         
-        await db.transaction(async (tx) => {
-            const sale = await tx.query.sales.findFirst({
+        await db.transaction(async (tx: any) => {
+            const saleDoc = await tx.query.sales.findFirst({
                 where: and(eq(sales.id, id), eq(sales.userId, userId))
             });
 
-            if (!sale) throw new Error("Vente introuvable");
+            if (!saleDoc) throw new Error("Vente introuvable");
 
             // Calculate new totals
-            const currentPaid = Number(sale.totalPaye || 0);
+            const currentPaid = Number(saleDoc.totalPaye || 0);
             const newPaid = currentPaid + payment.amount;
-            const totalTTC = Number(sale.totalTTC || sale.totalNet || 0);
+            const totalTTC = Number(saleDoc.totalTTC || saleDoc.totalNet || 0);
             const remaining = Math.max(0, totalTTC - newPaid);
             
             // Determine status
@@ -586,7 +662,7 @@ export const addPayment = secureAction(async (userId, user, saleId: string, paym
                 receivedBy: user.email || 'System'
             };
 
-            const currentHistory = (sale.paymentHistory as any[]) || [];
+            const currentHistory = (saleDoc.paymentHistory as any[]) || [];
 
             await tx.update(sales)
                 .set({
@@ -598,9 +674,47 @@ export const addPayment = secureAction(async (userId, user, saleId: string, paym
                     updatedAt: new Date()
                 })
                 .where(eq(sales.id, id));
+
+            // Ledger Update
+            if (saleDoc.clientId) {
+                const client = await tx.query.clients.findFirst({ where: eq(clients.id, saleDoc.clientId) });
+                if (client) {
+                   const amountPaid = payment.amount;
+                   const currentBalance = Number(client.balance || 0);
+                   // Logic: Payment reduces balance (debt)
+                   const newBalance = currentBalance - amountPaid;
+                   
+                   await tx.update(clients)
+                       .set({ 
+                           balance: newBalance.toFixed(2),
+                           updatedAt: new Date()
+                       })
+                       .where(eq(clients.id, saleDoc.clientId));
+
+                    await tx.insert(clientTransactions).values({
+                        userId,
+                        clientId: saleDoc.clientId,
+                        type: 'PAYMENT',
+                        referenceId: newPaymentRecord.id,
+                        amount: (-amountPaid).toFixed(2), // Negative = Credit
+                        previousBalance: currentBalance.toFixed(2),
+                        newBalance: newBalance.toFixed(2),
+                        notes: `Paiement Vente #${saleDoc.saleNumber || saleDoc.id}: ${payment.note || ''}`,
+                        date: new Date(payment.date || new Date())
+                    });
+                }
+            }
+            await logSuccess(userId, 'UPDATE', 'sales', saleId, { 
+                action: 'addPayment', 
+                amount: payment.amount,
+                saleNumber: saleDoc?.saleNumber
+            });
+
+            revalidatePath('/dashboard/sales');
+            revalidatePath(`/dashboard/sales/${saleId}`);
+            if (saleDoc.clientId) revalidatePath(`/dashboard/clients/${saleDoc.clientId}`);
         });
 
-        await logSuccess(userId, 'UPDATE', 'sales', saleId, { action: 'addPayment', amount: payment.amount });
         return { success: true, message: 'Paiement enregistré avec succès' };
 
     } catch (error: any) {

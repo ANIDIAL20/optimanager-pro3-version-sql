@@ -9,8 +9,8 @@ export interface Product {
   prixVente: number;
   quantiteStock: number;
   stockMin?: number; // Minimum stock threshold for alerts
-  categorieId: string;
-  marqueId: string;
+  categorieId?: string;
+  marqueId?: string;
   couleurId?: string;
   matiereId?: string;
   imageUrl?: string;

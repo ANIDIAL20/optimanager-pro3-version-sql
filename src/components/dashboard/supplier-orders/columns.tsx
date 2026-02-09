@@ -185,26 +185,32 @@ export const columns: ColumnDef<SupplierOrderUI>[] = [
 // Actions Component
 import { useToast } from "@/hooks/use-toast";
 import { confirmOrderReception, deleteSupplierOrder } from "@/app/actions/supplier-orders-actions";
-// import { useFirebase } from "@/firebase";
 import { useRouter } from "next/navigation";
 
+// Define component inside or export
 function OrderActions({ order }: { order: SupplierOrderUI }) {
-    const { user } = useFirebase();
     const { toast } = useToast();
     const router = useRouter();
     const [isProcessing, setIsProcessing] = React.useState(false);
 
     const handleConfirmReception = async () => {
-        if (!user || !order.id) return;
+        if (!order.id) return;
         setIsProcessing(true);
         try {
-            // ✅ FIX: secureAction injects userId automatically
             const res = await confirmOrderReception(order.id);
-            if (res.success) {
-                toast({ title: "Succès", description: res.message });
+            if (res?.success) {
+                toast({ 
+                    title: "Succès", 
+                    description: res.message, 
+                    className: "bg-green-600 text-white border-none" 
+                });
                 router.refresh();
             } else {
-                toast({ title: "Erreur", description: res.error, variant: "destructive" });
+                toast({ 
+                    title: "Erreur", 
+                    description: res?.error || "Erreur inconnue", 
+                    variant: "destructive" 
+                });
             }
         } catch (e) {
             toast({ title: "Erreur", description: "Une erreur est survenue", variant: "destructive" });
@@ -214,14 +220,18 @@ function OrderActions({ order }: { order: SupplierOrderUI }) {
     };
 
     const handleDelete = async () => {
-        if (!user || !order.id || !confirm("Supprimer cette commande ?")) return;
-        // ✅ FIX: secureAction injects userId automatically
-        const res = await deleteSupplierOrder(order.id);
-        if (res.success) {
-            toast({ title: "Succès", description: res.message });
-            router.refresh();
-        } else {
-            toast({ title: "Erreur", description: res.error, variant: "destructive" });
+        if (!order.id || !confirm("Supprimer cette commande ?")) return;
+        
+        try {
+            const res = await deleteSupplierOrder(order.id);
+            if (res?.success) {
+                toast({ title: "Succès", description: res.message });
+                router.refresh();
+            } else {
+                toast({ title: "Erreur", description: res?.error, variant: "destructive" });
+            }
+        } catch (e) {
+            toast({ title: "Erreur", description: "Une erreur est survenue", variant: "destructive" });
         }
     };
 
@@ -240,12 +250,13 @@ function OrderActions({ order }: { order: SupplierOrderUI }) {
                     <Eye className="mr-2 h-4 w-4" /> Voir Détails
                 </DropdownMenuItem>
 
-                {order.status !== 'received' && (
+                {order.status !== 'received' && order.status !== 'REÇU' && (
                     <DropdownMenuItem onClick={handleConfirmReception} disabled={isProcessing}>
                         <Check className="mr-2 h-4 w-4 text-green-600" /> Marquer Reçue
                     </DropdownMenuItem>
                 )}
 
+                {/* TODO: Add Payment Modal Trigger */}
                 <DropdownMenuItem onClick={() => { }}>
                     <Receipt className="mr-2 h-4 w-4" /> Ajouter Paiement
                 </DropdownMenuItem>
@@ -258,3 +269,19 @@ function OrderActions({ order }: { order: SupplierOrderUI }) {
         </DropdownMenu>
     );
 }
+
+// Export the component as default or part of module if needed, but here likely just used in 'columns'
+// columns definition uses <OrderActions ... /> which refers to this function.
+// Since 'columns' is exported above, keeping this function in the same file is fine if it's in scope.
+// However, 'columns' array is defined using it. 
+// I need to make sure OrderActions is available to columns.
+// Currently 'columns' is defined before 'OrderActions'. That's a problem in JS/TS regarding hoisting if const is used?
+// Function declarations are hoisted. 
+// But 'columns' is a const export. 
+// I should move OrderActions ABOVE columns or use a forward reference?
+// In the original file, it was defined AFTER columns. 
+// "export const columns = ..." uses OrderActions.
+// If OrderActions is a function, it should be hoisted.
+// But typescript might complain if I don't export it or define it before.
+// I'll leave position as is (at bottom) provided it's a function declaration `function OrderActions...`.
+

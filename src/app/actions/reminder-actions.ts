@@ -6,7 +6,8 @@ import { reminders, products, sales, supplierOrders } from '@/db/schema';
 
 import { auth } from '@/auth';
 import { eq, and, desc, lt, gte, or, lte, isNull, gt, sql } from 'drizzle-orm'; // verified
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
+import { getCachedReminders } from '@/lib/data-loaders';
 import { z } from 'zod';
 
 // Schema validation for reminders
@@ -186,6 +187,7 @@ export async function createReminder(data: any) {
       }
 
       revalidatePath('/dashboard');
+      revalidateTag('reminders');
       return { success: true, count: remindersToCreate.length };
 
   } else {
@@ -201,6 +203,7 @@ export async function createReminder(data: any) {
         .returning();
 
       revalidatePath('/dashboard');
+      revalidateTag('reminders');
       return newReminder;
   }
 }
@@ -231,6 +234,7 @@ export async function markReminderAsRead(id: number) {
 
   revalidatePath('/dashboard');
   revalidatePath('/', 'layout'); // Update sidebar badge
+  revalidateTag('reminders');
   return updated;
 }
 
@@ -260,6 +264,7 @@ export async function completeReminder(id: number) {
 
   revalidatePath('/dashboard');
   revalidatePath('/', 'layout'); // Update sidebar badge
+  revalidateTag('reminders');
   return updated;
 }
 
@@ -285,6 +290,7 @@ export async function deleteReminder(id: number) {
 
   revalidatePath('/dashboard');
   revalidatePath('/', 'layout'); // Update sidebar badge
+  revalidateTag('reminders');
   return deleted;
 }
 
@@ -481,6 +487,7 @@ export async function checkDeadlines(shouldRevalidate = true) {
   if (newRemindersCount > 0 && shouldRevalidate) {
     revalidatePath('/dashboard');
     revalidatePath('/', 'layout'); // Update sidebar badge
+    revalidateTag('reminders');
   }
   
   return { success: true, message: `Vérification terminée. ${newRemindersCount} nouveaux rappels.` };
@@ -497,19 +504,8 @@ export async function getUnreadReminderCount() {
   }
 
   try {
-    const result = await db
-      .select({
-        count: reminders.id
-      })
-      .from(reminders)
-      .where(
-        and(
-          eq(reminders.userId, session.user.id),
-          eq(reminders.status, 'pending')
-        )
-      );
-
-    return result.length;
+    const data = await getCachedReminders(session.user.id);
+    return data.length;
   } catch (error: any) {
     console.error('❌ REMINDER_QUERY_ERROR:', error);
     console.error('❌ ERROR_CODE:', error.code);

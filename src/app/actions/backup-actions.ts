@@ -22,8 +22,7 @@ import {
   treatments,
   mountingTypes,
   banks,
-  insurances,
-  auditLogs
+  insurances
 } from '@/db/schema';
 import { auth } from '@/auth';
 import { eq } from 'drizzle-orm';
@@ -526,7 +525,6 @@ export async function resetUserAccount() {
         await tx.delete(contactLensPrescriptions).where(eq(contactLensPrescriptions.userId, userId));
         await tx.delete(stockMovements).where(eq(stockMovements.userId, userId));
         await tx.delete(reminders).where(eq(reminders.userId, userId));
-        await tx.delete(auditLogs).where(eq(auditLogs.userId, userId));
         
         // Delete middle tables
         await tx.delete(sales).where(eq(sales.userId, userId));

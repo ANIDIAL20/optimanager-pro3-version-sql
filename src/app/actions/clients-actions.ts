@@ -9,8 +9,9 @@ import { db } from '@/db';
 import { clients, prescriptions, sales, lensOrders } from '@/db/schema';
 import { eq, and, or, like, desc } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
-import { logSuccess, logFailure } from '@/lib/audit-log';
+import { logSuccess, logFailure, logAudit } from '@/lib/audit-log';
 import { getClientUsageStats } from '@/app/actions/adminActions';
+import { revalidatePath } from 'next/cache';
 
 // ========================================
 // TYPE DEFINITIONS
@@ -45,7 +46,6 @@ export interface Client {
     gender?: string;
     cin?: string;
     mutuelle?: string;
-    mutuelle?: string;
     city?: string;
     address?: string;
     dateOfBirth?: string;
@@ -77,16 +77,21 @@ export const getClients = secureAction(async (userId, user, searchQuery?: string
         });
 
         // Transform to match Client interface
-        let transformedClients: Client[] = userClientsWithPrescriptions.map(client => ({
+        let transformedClients: Client[] = userClientsWithPrescriptions.map((client: any) => ({
             id: client.id.toString(),
             name: client.fullName,
-            phone: client.phone || '',
-            email: client.email || undefined,
-            city: client.city || undefined,
-            mutuelle: client.mutuelle || undefined, // TODO: Add if needed in schema
-            address: client.address || undefined,
-            dateOfBirth: undefined, // TODO: Add if needed in schema
-            prescriptions: client.prescriptions.map(p => p.prescriptionData as any) || [], // 👈 Prescriptions included!
+            prenom: client.prenom,
+            nom: client.nom,
+            phone: client.phone,
+            phone2: client.phone2,
+            email: client.email,
+            gender: client.gender,
+            cin: client.cin,
+            mutuelle: client.mutuelle,
+            address: client.address,
+            city: client.city,
+            dateOfBirth: client.dateOfBirth?.toISOString(),
+            prescriptions: (client.prescriptions || []).map((p: any) => p.prescriptionData as any) || [], // 👈 Prescriptions included!
             createdAt: client.createdAt?.toISOString() || new Date().toISOString(),
             updatedAt: client.updatedAt?.toISOString(),
         }));
@@ -102,7 +107,7 @@ export const getClients = secureAction(async (userId, user, searchQuery?: string
         }
 
         console.log(`✅ Found ${transformedClients.length} clients`);
-        await logSuccess(userId, 'READ', 'clients', undefined, { count: transformedClients.length, searchQuery });
+        await logSuccess(userId, 'READ', 'clients', 'LIST_ALL', { count: transformedClients.length, searchQuery });
 
         return { success: true, clients: transformedClients };
 
@@ -136,7 +141,7 @@ export const getClient = secureAction(async (userId, user, clientId: string) => 
             ),
             with: {
                 prescriptions: {
-                    orderBy: (prescriptions, { desc }) => [desc(prescriptions.date)], // 👈 Use callback syntax
+                    orderBy: (prescriptions: any, { desc }: { desc: any }) => [desc(prescriptions.createdAt)],
                 },
             },
         });
@@ -152,16 +157,23 @@ export const getClient = secureAction(async (userId, user, clientId: string) => 
         const client: Client = {
             id: clientWithPrescriptions.id.toString(),
             name: clientWithPrescriptions.fullName,
-            phone: clientWithPrescriptions.phone || '',
-            email: clientWithPrescriptions.email || undefined,
-            city: clientWithPrescriptions.city || undefined,
-            address: clientWithPrescriptions.address || undefined,
-            prescriptions: clientWithPrescriptions.prescriptions.map(p => p.prescriptionData as any) || [], // 👈 Prescriptions included!
+            prenom: clientWithPrescriptions.prenom,
+            nom: clientWithPrescriptions.nom,
+            phone: clientWithPrescriptions.phone,
+            phone2: clientWithPrescriptions.phone2,
+            email: clientWithPrescriptions.email,
+            gender: clientWithPrescriptions.gender,
+            cin: clientWithPrescriptions.cin,
+            mutuelle: clientWithPrescriptions.mutuelle,
+            address: clientWithPrescriptions.address,
+            city: clientWithPrescriptions.city,
+            dateOfBirth: clientWithPrescriptions.dateOfBirth?.toISOString(),
+            prescriptions: (clientWithPrescriptions.prescriptions || []).map((p: any) => p.prescriptionData as any),
             createdAt: clientWithPrescriptions.createdAt?.toISOString() || new Date().toISOString(),
             updatedAt: clientWithPrescriptions.updatedAt?.toISOString(),
         };
 
-        console.log(`✅ Client fetched: ${client.name} with ${client.prescriptions.length} prescriptions`);
+        console.log(`✅ Client fetched: ${client.name} with ${(client.prescriptions || []).length} prescriptions`);
         await logSuccess(userId, 'READ', 'clients', clientId);
 
         return { success: true, client };
@@ -210,7 +222,6 @@ export const createClient = secureAction(async (userId, user, data: Omit<Client,
             cin: data.cin || null,
             dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
             mutuelle: data.mutuelle || null,
-            mutuelle: data.mutuelle || null,
             address: data.address || null,
             city: data.city || null,
             notes: null,
@@ -223,10 +234,10 @@ export const createClient = secureAction(async (userId, user, data: Omit<Client,
         };
 
         const result = await db.insert(clients).values(clientData).returning();
+        
+        await logSuccess(userId, 'CREATE', 'clients', result[0].id.toString(), { name: data.name }, null, clientData);
 
-        console.log(`✅ Client created with ID: ${result[0].id}`);
-        await logSuccess(userId, 'CREATE', 'clients', result[0].id);
-
+        revalidatePath('/dashboard/clients');
         return {
             success: true,
             id: result[0].id.toString(),
@@ -294,9 +305,10 @@ export const updateClient = secureAction(async (userId, user, clientId: string, 
             .set(updateData)
             .where(eq(clients.id, clientIdNum));
 
-        console.log(`✅ Client updated`);
-        await logSuccess(userId, 'UPDATE', 'clients', clientId);
+        await logSuccess(userId, 'UPDATE', 'clients', clientId, { name: data.name || existing[0].fullName }, existing[0], { ...existing[0], ...updateData });
 
+        revalidatePath('/dashboard/clients');
+        revalidatePath(`/dashboard/clients/${clientId}`);
         return {
             success: true,
             message: 'Client mis à jour avec succès'
@@ -361,8 +373,9 @@ export const addPrescription = secureAction(async (
         await db.insert(prescriptions).values(prescription);
 
         console.log(`✅ Prescription added`);
-        await logSuccess(userId, 'CREATE', 'prescriptions', undefined, { clientId });
+        await logSuccess(userId, 'CREATE', 'prescriptions', clientId, { clientId });
 
+        revalidatePath(`/dashboard/clients/${clientId}`);
         return {
             success: true,
             message: 'Ordonnance ajoutée avec succès'
@@ -424,6 +437,7 @@ export const deleteClient = secureAction(async (userId, user, clientId: string) 
         console.log(`✅ Client deleted`);
         await logSuccess(userId, 'DELETE', 'clients', clientId);
 
+        revalidatePath('/dashboard/clients');
         return {
             success: true,
             message: 'Client supprimé avec succès'
@@ -491,8 +505,8 @@ export const getClientSnapshot = secureAction(async (userId, user, clientId: str
         });
 
         // Calculate total debt from sales
-        const totalDebt = recentSales.reduce((sum, s) => {
-            const remaining = parseFloat((s as any).resteAPayer || '0'); // 👈 Fixed field name
+        const totalDebt = recentSales.reduce((sum: number, s: any) => {
+            const remaining = parseFloat((s as any).resteAPayer || '0');
             return sum + remaining;
         }, 0);
 
@@ -503,7 +517,7 @@ export const getClientSnapshot = secureAction(async (userId, user, clientId: str
         const lastPrescription = recentPrescriptions.length > 0 ? recentPrescriptions[0] : null;
 
         console.log(`✅ Snapshot fetched with ${recentSales.length} sales, ${recentPrescriptions.length} prescriptions`);
-        await logSuccess(userId, 'READ', 'clients', clientId, { snapshot: true });
+        await logSuccess(userId, 'READ', 'clients', clientId || 'unknown', { snapshot: true });
 
         return {
             success: true,

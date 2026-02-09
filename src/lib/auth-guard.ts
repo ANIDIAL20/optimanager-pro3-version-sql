@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { users, auditLogs, sessions } from "@/db/schema";
+import { users, auditLog, sessions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
@@ -32,7 +32,7 @@ async function logSecurityEvent(
   const fingerprint = generateFingerprint(userAgent);
 
   try {
-    await db.insert(auditLogs).values({
+    await db.insert(auditLog).values({
       userId: userId || "anonymous",
       action,
       resource,
@@ -61,7 +61,7 @@ export async function requireAdmin() {
   // 1. Authentication Check
   if (!session?.user?.email) {
     await logSecurityEvent(null, "ADMIN_ACCESS_DENIED", false, "/admin", "INFO", { reason: "Not authenticated" });
-    redirect("/api/auth/signin?callbackUrl=/admin");
+    throw new Error('UNAUTHENTICATED');
   }
 
   // 2. Real-time DB Check
@@ -102,7 +102,7 @@ export async function requireAdmin() {
     );
 
     if (shouldLock) redirect("/account-locked?minutes=15");
-    redirect("/dashboard?error=unauthorized");
+    throw new Error('FORBIDDEN');
   }
 
   // 5. Session Fingerprint Validation (Anti-Hijacking)

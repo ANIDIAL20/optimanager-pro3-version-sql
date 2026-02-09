@@ -33,74 +33,88 @@ export interface DashboardStats {
  */
 export const getDashboardStats = secureAction(async (userId, user) => {
     try {
-        // Get today's date range
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const todayISO = today.toISOString();
+        console.log(`📊 Generating dashboard stats for user: ${userId}`);
+        
+        // 1. Get Today's Date Range (Timezone aware-ish)
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
-        // 1. Get ALL Sales for global revenue and counts
-        const allSales = await db.query.sales.findMany({
-            where: eq(sales.userId, userId),
-            orderBy: [desc(sales.createdAt)]
-        });
+        // 2. Fetch Sales Data (Parallel)
+        const [allSales, lowStockItems, recentDevis] = await Promise.all([
+            db.select().from(sales)
+                .where(eq(sales.userId, userId))
+                .orderBy(desc(sales.createdAt)),
+            
+            // Get all low stock items (no limit for count, but we slice for UI)
+            db.select().from(products)
+                .where(and(
+                    eq(products.userId, userId),
+                    sql`${products.quantiteStock} <= ${products.seuilAlerte}`
+                )),
 
-        // Calculate stats
+            db.select().from(devis)
+                .where(eq(devis.userId, userId))
+                .orderBy(desc(devis.createdAt))
+                .limit(5)
+        ]);
+
+        // 3. Process Revenue & Today's Counts
         let globalRevenue = 0;
         let todaySalesCount = 0;
 
         allSales.forEach(sale => {
-            // Global revenue
-            const revenue = Number(sale.totalNet || sale.totalTTC || 0);
-            globalRevenue += revenue;
+            // ✅ Revenue Fix: Strict priority for totalNet (actual collection target)
+            // Handle as numeric strings from DB
+            const revenueValue = parseFloat(sale.totalNet || sale.totalTTC || '0');
+            globalRevenue += isNaN(revenueValue) ? 0 : revenueValue;
 
-            // Today's sales count
+            // ✅ Today's Sales Fix: Precise date comparison
             const saleDate = sale.date || sale.createdAt;
-            if (saleDate) {
-                const saleDateObj = new Date(saleDate);
-                saleDateObj.setHours(0, 0, 0, 0);
-                if (saleDateObj.toISOString() === todayISO) {
-                    todaySalesCount++;
-                }
+            if (saleDate && saleDate >= startOfDay && saleDate <= endOfDay) {
+                todaySalesCount++;
             }
         });
 
         const totalSalesCount = allSales.length;
 
-        // 2. Get Stock Alerts (low stock products)
-        const lowStockProducts = await db.query.products.findMany({
-            where: and(
-                eq(products.userId, userId),
-                sql`${products.quantiteStock} <= 5`
-            ),
-            limit: 5
-        });
-
-        const stockAlertItems = lowStockProducts.map(p => ({
+        // 4. Process Stock Alerts
+        const stockAlerts = lowStockItems.length;
+        const stockAlertItems = lowStockItems.slice(0, 5).map(p => ({
             id: p.id.toString(),
             nom: p.nom || 'Produit sans nom',
             reference: p.reference || 'REF-???',
             quantite: p.quantiteStock || 0
         }));
 
-        const stockAlerts = stockAlertItems.length;
-
-        // 3. Recent Activity (last 5 sales)
-        const recentSales = allSales.slice(0, 5);
-        
-        const recentActivity = recentSales.map(sale => {
-            const reste = Number(sale.resteAPayer || 0);
-            const status = reste > 0 ? 'Impayé' : 'Payé';
-
+        // 5. Build Unified Recent Activity (Sales + Devis)
+        const mappedSales = allSales.slice(0, 5).map(s => {
+            const reste = parseFloat(s.resteAPayer || '0');
             return {
-                id: sale.id.toString(),
+                id: s.id.toString(),
                 type: 'sale' as const,
-                description: sale.clientName || 'Client Inconnu',
-                amount: Number(sale.totalTTC || 0),
-                date: (sale.createdAt || new Date()).toISOString(),
-                status,
+                description: s.clientName || 'Client Inconnu',
+                amount: parseFloat(s.totalTTC || '0'),
+                date: (s.createdAt || new Date()).toISOString(),
+                status: reste > 0 ? 'Impayé' : 'Payé',
                 resteAPayer: reste
             };
         });
+
+        const mappedDevis = recentDevis.map(d => ({
+            id: d.id.toString(),
+            type: 'devis' as const,
+            description: `Devis: ${d.clientName}`,
+            amount: parseFloat(d.totalTTC || '0'),
+            date: (d.createdAt || new Date()).toISOString(),
+            status: d.status || 'EN_ATTENTE',
+        }));
+
+        // Combine and sort by date descending
+        const recentActivity = [...mappedSales, ...mappedDevis]
+            // @ts-ignore
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            .slice(0, 5);
 
         const dashboardData: DashboardStats = {
             globalRevenue,
@@ -111,15 +125,15 @@ export const getDashboardStats = secureAction(async (userId, user) => {
             recentActivity
         };
 
-        await logSuccess(userId, 'READ', 'dashboard_stats', undefined);
+        await logSuccess(userId, 'READ', 'dashboard_stats', 'REFRESH');
         return { success: true, data: dashboardData };
 
     } catch (error: any) {
-        console.error('Error fetching dashboard stats:', error);
+        console.error('❌ DASHBOARD_STATS_ERROR:', error);
         await logFailure(userId, 'READ', 'dashboard_stats', error.message);
         return {
             success: false,
-            error: 'Erreur lors du chargement des statistiques',
+            error: 'Erreur lors du calcul des statistiques',
             data: null
         };
     }

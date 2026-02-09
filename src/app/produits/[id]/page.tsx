@@ -36,6 +36,8 @@ interface Product {
     seuilAlerte?: number;
     description?: string;
     isActive: boolean;
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 export default function ProductDetailsPage() {
@@ -240,6 +242,18 @@ export default function ProductDetailsPage() {
                             <div>
                                 <p className="text-sm font-medium text-slate-600">Catégorie</p>
                                 <p className="text-lg font-semibold text-slate-900">{categoryName}</p>
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-slate-600">Créé le</p>
+                                <p className="text-lg font-semibold text-slate-900">
+                                    {product.createdAt ? new Date(product.createdAt).toLocaleDateString('fr-FR') : '-'}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-slate-600">Mis à jour le</p>
+                                <p className="text-lg font-semibold text-slate-900">
+                                    {product.updatedAt ? new Date(product.updatedAt).toLocaleDateString('fr-FR') : '-'}
+                                </p>
                             </div>
                         </div>
                     </CardContent>

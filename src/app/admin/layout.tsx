@@ -1,12 +1,12 @@
-import { requireAdmin } from "@/lib/admin-utils";
+import { requireAdmin } from "@/lib/auth-guard";
 
 export default async function AdminLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
-    // This Layout acts as a strict security barrier.
-    // No page inside /admin will render unless this passes.
+    // 🔒 Security barrier: No page inside /admin will render unless this passes.
+    // This provides Page-Level (Fallback) protection as a secondary layer to Middleware.
     await requireAdmin();
 
     return (

@@ -1,9 +1,15 @@
+import { ErrorBoundary } from '@/components/error-boundary';
+
 export default function DashboardLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
-    // The AppShell component already provides the sidebar and layout
-    // So this layout just passes through the children
-    return <>{children}</>;
+    return (
+        <ErrorBoundary>
+            <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+                {children}
+            </div>
+        </ErrorBoundary>
+    );
 }

@@ -3,6 +3,7 @@ import { drizzle } from 'drizzle-orm/neon-http';
 import * as schema from '../db/schema';
 import * as fs from 'fs';
 import * as path from 'path';
+import dotenv from 'dotenv';
 import 'dotenv/config';
 
 // Configure WebSocket for Neon
@@ -21,7 +22,7 @@ async function main() {
     );
     
     // Execute the SQL directly using the neon client
-    await sql(migrationSql);
+    await (sql as any)(migrationSql);
     
     console.log('✅ Migration 0005 applied successfully');
   } catch (error) {

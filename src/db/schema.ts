@@ -1,6 +1,6 @@
-import { pgTable, serial, text, timestamp, boolean, decimal, integer, json, primaryKey, uuid } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, timestamp, boolean, decimal, integer, json, primaryKey, uuid, index } from 'drizzle-orm/pg-core';
 import type { AdapterAccount } from "next-auth/adapters";
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 // ========================================
 // 1. CLIENTS TABLE (Déjà migré)
@@ -33,14 +33,22 @@ export const clients = pgTable('clients', {
   notes: text('notes'),
   
   balance: decimal('balance', { precision: 10, scale: 2 }).default('0'),
+  creditLimit: decimal('credit_limit', { precision: 10, scale: 2 }).default('5000'), // 🆕 Max credit allowed
   totalSpent: decimal('total_spent', { precision: 10, scale: 2 }).default('0'),
   
   isActive: boolean('is_active').default(true),
+  lastVisit: timestamp('last_visit'), // Legacy field preserved for safety
   
-  lastVisit: timestamp('last_visit'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-});
+}, (table) => ({
+  userIdIdx: index('clients_user_id_idx').on(table.userId),
+  fullNameIdx: index('clients_full_name_idx').on(table.fullName),
+  phoneIdx: index('clients_phone_idx').on(table.phone),
+  // ✅ GIN index for full-text search (Requires raw SQL usually, or custom in Drizzle)
+  // We'll add standard index for now, GIN often needs a database migration script
+  idx_clients_fullname_search: index('idx_clients_fullname_search').on(table.fullName),
+}));
 
 // ========================================
 // 2. PRODUCTS TABLE
@@ -57,7 +65,9 @@ export const products = pgTable('products', {
   categorie: text('categorie'),
   marque: text('marque'),
   modele: text('modele'), // Model number/name
-  couleur: text('couleur'), // Color
+  couleur: text('couleur'), // Color (Legacy)
+  matiereId: integer('matiere_id').references(() => materials.id),
+  couleurId: integer('couleur_id').references(() => colors.id),
   fournisseur: text('fournisseur'),
   
   // Pricing
@@ -71,10 +81,18 @@ export const products = pgTable('products', {
   
   // Metadata
   description: text('description'),
+  details: text('details'), // Simple string storage inherited from legacy structure
   isActive: boolean('is_active').default(true),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-});
+  version: integer('version').default(0).notNull(), // 🆕 Optimistic Locking
+  createdAt: timestamp('created_at', { mode: 'string' }).defaultNow(),
+  updatedAt: timestamp('updated_at', { mode: 'string' }),
+}, (table) => ({
+  userIdIdx: index('products_user_id_idx').on(table.userId),
+  referenceIdx: index('products_reference_idx').on(table.reference),
+  nomIdx: index('products_nom_idx').on(table.nom),
+  idx_products_user_marque: index('idx_products_user_marque').on(table.userId, table.marque), // ✅ Composite
+  searchIdx: index('products_search_idx').on(table.marque, table.fournisseur),
+}));
 
 // ========================================
 // 3. SALES TABLE
@@ -109,13 +127,18 @@ export const sales = pgTable('sales', {
   items: json('items').$type<any[]>().notNull(),
   paymentHistory: json('payment_history').$type<any[]>(),
   prescriptionSnapshot: json('prescription_snapshot'),
+  lastPaymentDate: timestamp('last_payment_date'), // Preserve legacy field for safety
   
   notes: text('notes'),
   date: timestamp('date'),
-  lastPaymentDate: timestamp('last_payment_date'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-});
+}, (table) => ({
+  userIdIdx: index('sales_user_id_idx').on(table.userId),
+  saleNumberIdx: index('sales_sale_number_idx').on(table.saleNumber),
+  clientIdIdx: index('sales_client_id_idx').on(table.clientId),
+  idx_sales_user_date: index('idx_sales_user_date').on(table.userId, table.createdAt), // ✅ Composite
+}));
 
 // ========================================
 // 4. DEVIS TABLE
@@ -147,37 +170,9 @@ export const devis = pgTable('devis', {
 });
 
 // ========================================
-// 5. SUPPLIER ORDERS TABLE
 // ========================================
-export const supplierOrders = pgTable('supplier_orders', {
-  id: serial('id').primaryKey(),
-  firebaseId: text('firebase_id').unique(),
-  userId: text('user_id').notNull(),
-  
-  // Supplier
-  fournisseur: text('fournisseur').notNull(),
-  
-  // Items (JSON array)
-  items: json('items').$type<any[]>().notNull(),
-  
-  // Financial
-  montantTotal: decimal('montant_total', { precision: 10, scale: 2 }).notNull(),
-  montantPaye: decimal('montant_paye', { precision: 10, scale: 2 }).default('0'),
-  resteAPayer: decimal('reste_a_payer', { precision: 10, scale: 2 }),
-  
-  // Status
-  statut: text('statut').default('EN_COURS'), // EN_COURS, REÇU, ANNULÉ
-  
-  // Dates
-  dateCommande: timestamp('date_commande'),
-  dateReception: timestamp('date_reception'),
-  
-  notes: text('notes'),
-  dueDate: timestamp('due_date'), // Date d'échéance calculée
-
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-});
+// 11. REMOVED LEGACY TABLE
+// ========================================
 
 // ========================================
 // 6. STOCK MOVEMENTS TABLE
@@ -212,6 +207,34 @@ export const settings = pgTable('settings', {
   
   // Store as JSON for flexibility
   value: json('value').notNull(),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+// ========================================
+// 7b. SHOP PROFILES TABLE
+// ========================================
+export const shopProfiles = pgTable('shop_profiles', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  
+  shopName: text('shop_name').notNull(),
+  address: text('address'),
+  phone: text('phone'),
+  ice: text('ice'),
+  rib: text('rib'),
+  logoUrl: text('logo_url'),
+  
+  // Missing columns restored to prevent data loss
+  paymentMethods: text('payment_methods'),
+  rc: text('rc'),
+  if: text('if'),
+  patente: text('patente'),
+  tvaRate: text('tva_rate'),
+  paymentTerms: text('payment_terms'),
+  
+  isActive: boolean('is_active').default(true),
   
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
@@ -275,12 +298,30 @@ export const lensOrders = pgTable('lens_orders', {
   // Order details
   orderType: text('order_type').notNull(), // 'progressive', 'bifocal', 'unifocal', 'contact'
   lensType: text('lens_type').notNull(),
+  supplierId: uuid('supplier_id').references(() => suppliers.id),
+  supplierOrderId: integer('supplier_order_id').references(() => supplierOrders.id),
   treatment: text('treatment'),
   supplierName: text('supplier_name').notNull(),
   
-  // Prescription details (stored as JSON if needed)
+  // Explicit Prescription Details (Replacing JSON)
+  sphereR: text('sphere_r'),
+  cylindreR: text('cylindre_r'),
+  axeR: text('axe_r'),
+  additionR: text('addition_r'),
+  hauteurR: text('hauteur_r'),
+  
+  sphereL: text('sphere_l'),
+  cylindreL: text('cylindre_l'),
+  axeL: text('axe_l'),
+  additionL: text('addition_l'),
+  hauteurL: text('hauteur_l'),
+  
+  // Keep legacy JSON fields to prevent data loss 🛡️
   rightEye: json('right_eye'),
   leftEye: json('left_eye'),
+  
+  matiere: text('matiere'),
+  indice: text('indice'),
   
   // ========================================
   // PROFESSIONAL PRICING WORKFLOW
@@ -316,10 +357,20 @@ export const lensOrders = pgTable('lens_orders', {
   // Additional info
   notes: text('notes'),
   
-  // Audit
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-});
+}, (table) => ({
+  userIdIdx: index('lens_orders_user_id_idx').on(table.userId),
+  clientIdIdx: index('lens_orders_client_id_idx').on(table.clientId),
+  saleIdIdx: index('lens_orders_sale_id_idx').on(table.saleId),
+  supplierIdIdx: index('lens_orders_supplier_id_idx').on(table.supplierId),
+  sphereRIdx: index('lens_orders_sphere_r_idx').on(table.sphereR),
+  sphereLIdx: index('lens_orders_sphere_l_idx').on(table.sphereL),
+  // ✅ Partial index for pending orders
+  idx_lens_orders_pending: index('idx_lens_orders_pending')
+    .on(table.userId, table.createdAt)
+    .where(sql`status = 'pending'`),
+}));
 
 // ========================================
 // RELATIONS (for Drizzle Relational Queries)
@@ -378,13 +429,23 @@ export const devisRelations = relations(devis, ({ one }) => ({
 }));
 
 // ========================================
-// REMINDERS TABLE (Removed duplicate)
+// REMINDERS TABLE
 // ========================================
-
-
-// ========================================
-// AUTH.JS TABLES
-// ========================================
+export const reminders = pgTable('reminders', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(), // Data isolation
+  type: text('type').notNull(), // 'cheque', 'payment', 'stock', 'order', 'appointment', 'maintenance', 'admin'
+  priority: text('priority').notNull().default('normal'), // 'urgent', 'important', 'normal', 'info'
+  title: text('title').notNull(),
+  message: text('message'),
+  status: text('status').notNull().default('pending'), // 'pending', 'read', 'completed', 'ignored'
+  dueDate: timestamp('due_date'),
+  relatedId: integer('related_id'), // Generic FK
+  relatedType: text('related_type'), // Table name for FK
+  metadata: json('metadata'), // Extra data (amount, action link, etc.)
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
 
 // ========================================
 // AUTH.JS TABLES (ENHANCED SECURITY)
@@ -497,9 +558,93 @@ export const verificationTokens = pgTable(
 );
 
 // ========================================
-// SUPPLIERS TABLE
+// 4. REFERENCE TABLES (SETTINGS)
 // ========================================
+export const brands = pgTable('brands', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  category: text('category'),
+  active: boolean('active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
 
+export const categories = pgTable('categories', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  active: boolean('active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+export const materials = pgTable('materials', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  category: text('category'), // Preserve existing data
+  active: boolean('active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+export const colors = pgTable('colors', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  code: text('code'),
+  active: boolean('active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+export const treatments = pgTable('treatments', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  category: text('category'),
+  price: decimal('price', { precision: 10, scale: 2 }).default('0'),
+  active: boolean('active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+export const mountingTypes = pgTable('mounting_types', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  active: boolean('active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+export const banks = pgTable('banks', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  rib: text('rib'),
+  active: boolean('active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+export const insurances = pgTable('insurances', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  email: text('email'),
+  phone: text('phone'),
+  address: text('address'),
+  active: boolean('active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+// ========================================
+// ========================================
+// 5. SUPPLIERS TABLE
+// ========================================
 
 export const suppliers = pgTable('suppliers', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -509,6 +654,7 @@ export const suppliers = pgTable('suppliers', {
   
   // Basic Info
   name: text('name').notNull(),
+  contactPerson: text('contact_person'),
   email: text('email'),
   phone: text('phone'),
   address: text('address'),
@@ -522,13 +668,17 @@ export const suppliers = pgTable('suppliers', {
   
   // Financial
   category: text('category'),
-  paymentTerms: text('payment_terms'), // 'Comptant', '30 jours', etc.
-  paymentMethod: text('payment_method'), // 'Virement', 'Chèque', etc.
+  paymentTerms: text('payment_terms').default('30'),
+  creditLimit: decimal('credit_limit', { precision: 10, scale: 2 }).default('0'),
+  currentBalance: decimal('current_balance', { precision: 10, scale: 2 }).default('0'),
+  paymentMethod: text('payment_method'),
   bank: text('bank'),
   rib: text('rib'),
 
   // Metadata
   notes: text('notes'),
+  rating: text('rating'),
+  isActive: boolean('is_active').default(true),
   status: text('status').default('Actif'),
   
   createdAt: timestamp('created_at').defaultNow(),
@@ -536,186 +686,278 @@ export const suppliers = pgTable('suppliers', {
 });
 
 // ========================================
-// SHOP PROFILES TABLE
+// 6. SUPPLIER ORDERS TABLE
 // ========================================
-
-export const shopProfiles = pgTable('shop_profiles', {
-  id: serial('id').primaryKey(),
-  userId: text('user_id').notNull().unique(), // One profile per user
-  
-  // Basic info
-  shopName: text('shop_name').notNull(),
-  address: text('address'),
-  phone: text('phone'),
-  
-  // Business info
-  ice: text('ice'), // Identifiant Commun de l'Entreprise (Morocco)
-  rc: text('rc'), // Registre de Commerce
-  if: text('if'), // Identifiant Fiscal
-  patente: text('patente'), // Patente
-  rib: text('rib'), // Relevé d'Identité Bancaire
-  
-  // VAT Settings
-  tvaRate: decimal('tva_rate', { precision: 5, scale: 2 }).default('20.00'),
-  
-  // Payment Information
-  paymentTerms: text('payment_terms'), // e.g., "Paiement comptant à réception"
-  paymentMethods: json('payment_methods').$type<string[]>(), // Array of accepted payment methods
-  
-  // Logo (stored as base64 or URL)
-  logoUrl: text('logo_url'),
-  
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-});
-
-// ========================================
-// SETTINGS TABLES (Generic structure)
-// ========================================
-
-// Brands (Marques)
-export const brands = pgTable('brands', {
-  id: serial('id').primaryKey(),
-  userId: text('user_id').notNull(),
-  name: text('name').notNull(),
-  category: text('category'), // Premium, Populaire, Française, Autre
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-});
-
-// Categories (Catégories de produits)
-export const categories = pgTable('categories', {
-  id: serial('id').primaryKey(),
-  userId: text('user_id').notNull(),
-  name: text('name').notNull(),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-});
-
-// Materials (Matières)
-export const materials = pgTable('materials', {
-  id: serial('id').primaryKey(),
-  userId: text('user_id').notNull(),
-  name: text('name').notNull(),
-  category: text('category'), // Monture, Verre, Lentille
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-});
-
-// ========================================
-// 11. PURCHASES TABLE (Achats / Dettes Fournisseurs)
-// ========================================
-export const purchases = pgTable('purchases', {
+export const supplierOrders = pgTable('supplier_orders', {
   id: serial('id').primaryKey(),
   firebaseId: text('firebase_id').unique(),
   userId: text('user_id').notNull(),
   
-  // Link to Supplier
+  // Identity
+  orderNumber: text('order_number').unique(), // 🆕 BC-2026-XXXXXX
   supplierId: uuid('supplier_id').references(() => suppliers.id),
-  supplierName: text('supplier_name').notNull(), // Fallback if ID deleted
+  fournisseur: text('fournisseur').notNull(),
+  supplierPhone: text('supplier_phone'),
   
-  // Transaction Details
-  type: text('type').notNull(), // 'LENS_ORDER', 'FRAME_ORDER', 'STOCK_ORDER', 'OTHER'
-  reference: text('reference'), // BL Ref / Invoice Ref
+  // Items 
+  items: json('items').$type<any[]>(),
   
-  // Financials
-  totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull(),
-  amountPaid: decimal('amount_paid', { precision: 10, scale: 2 }).default('0'),
-  status: text('status').default('UNPAID').notNull(), // 'UNPAID', 'PARTIAL', 'PAID'
+  // Financial
+  subTotal: decimal('sub_total', { precision: 10, scale: 2 }),
+  tva: decimal('tva', { precision: 10, scale: 2 }),
+  discount: decimal('discount', { precision: 10, scale: 2 }),
+  shippingCost: decimal('shipping_cost', { precision: 10, scale: 2 }),
+  
+  montantTotal: decimal('montant_total', { precision: 10, scale: 2 }).notNull(),
+  montantPaye: decimal('montant_paye', { precision: 10, scale: 2 }).default('0'),
+  resteAPayer: decimal('reste_a_payer', { precision: 10, scale: 2 }),
+  
+  // Status
+  statut: text('statut').default('pending'),
+  deliveryStatus: text('delivery_status').default('pending'),
   
   // Dates
-  date: timestamp('date').defaultNow(),
+  dateCommande: timestamp('date_commande'),
+  expectedDelivery: timestamp('expected_delivery'),
+  dateReception: timestamp('date_reception'),
   dueDate: timestamp('due_date'),
   
-  // Audit
   notes: text('notes'),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-});
-
-// Colors (Couleurs)
-export const colors = pgTable('colors', {
-  id: serial('id').primaryKey(),
-  userId: text('user_id').notNull(),
-  name: text('name').notNull(),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-});
-
-// Treatments (Traitements)
-export const treatments = pgTable('treatments', {
-  id: serial('id').primaryKey(),
-  userId: text('user_id').notNull(),
-  name: text('name').notNull(),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-});
-
-// Mounting Types (Types de montage)
-export const mountingTypes = pgTable('mounting_types', {
-  id: serial('id').primaryKey(),
-  userId: text('user_id').notNull(),
-  name: text('name').notNull(),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-});
-
-// Banks (Banques)
-export const banks = pgTable('banks', {
-  id: serial('id').primaryKey(),
-  userId: text('user_id').notNull(),
-  name: text('name').notNull(),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-});
-
-// Insurances/Mutuelles (Assurances)
-export const insurances = pgTable('insurances', {
-  id: serial('id').primaryKey(),
-  userId: text('user_id').notNull(),
-  name: text('name').notNull(),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-});
-
-// Reminder System (Système de Rappels)
-export const reminders = pgTable('reminders', {
-  id: serial('id').primaryKey(),
-  userId: text('user_id').notNull(), // Data isolation
-  type: text('type').notNull(), // 'cheque', 'payment', 'stock', 'order', 'appointment', 'maintenance', 'admin'
-  priority: text('priority').notNull().default('normal'), // 'urgent', 'important', 'normal', 'info'
-  title: text('title').notNull(),
-  message: text('message'),
-  status: text('status').notNull().default('pending'), // 'pending', 'read', 'completed', 'ignored'
-  dueDate: timestamp('due_date'),
-  relatedId: integer('related_id'), // Generic FK
-  relatedType: text('related_type'), // Table name for FK
-  metadata: json('metadata'), // Extra data (amount, action link, etc.)
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-});
-
-
-// ========================================
-// AUDIT LOGS - Complete Security Trail
-// ========================================
-export const auditLogs = pgTable("audit_log", {
-  id: serial("id").primaryKey(),
-  userId: text("user_id"), // Can be null for anonymous
-  action: text("action").notNull(), 
-  resource: text("resource"), 
-  success: boolean("success").notNull(),
+  orderReference: text('order_reference'),
   
-  // 🌐 REQUEST CONTEXT
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+// ========================================
+// 7. SUPPLIER ORDER ITEMS
+// ========================================
+export const supplierOrderItems = pgTable('supplier_order_items', {
+  id: serial('id').primaryKey(),
+  supplierOrderId: integer('supplier_order_id').references(() => supplierOrders.id, { onDelete: 'cascade' }),
+  
+  productType: text('product_type'),
+  productName: text('product_name'),
+  description: text('description'),
+  
+  // Specific specs
+  lensType: text('lens_type'),
+  lensMaterial: text('lens_material'),
+  lensIndex: text('lens_index'),
+  coating: text('coating'),
+  
+  // Specific specs (Explicit)
+  sphere: text('sphere'),
+  cylindre: text('cylindre'),
+  axe: text('axe'),
+  addition: text('addition'),
+  hauteur: text('hauteur'),
+  
+  quantity: integer('quantity').notNull(),
+  receivedQuantity: integer('received_quantity').default(0),
+  
+  unitPrice: decimal('unit_price', { precision: 10, scale: 2 }),
+  totalPrice: decimal('total_price', { precision: 10, scale: 2 }),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// ========================================
+// 8. SUPPLIER PAYMENTS
+// ========================================
+export const supplierPayments = pgTable('supplier_payments', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  firebaseId: text('firebase_id').unique(),
+  userId: text('user_id').notNull(),
+  
+  paymentNumber: text('payment_number').unique(),
+  
+  supplierId: uuid('supplier_id').references(() => suppliers.id),
+  supplierName: text('supplier_name').notNull(),
+  
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  method: text('method').notNull(),
+  
+  // Details
+  reference: text('reference'),
+  chequeNumber: text('cheque_number'),
+  bank: text('bank'),
+  
+  dueDate: timestamp('due_date'),
+  status: text('status').default('COMPLETED'),
+  
+  date: timestamp('date').defaultNow(),
+  notes: text('notes'),
+  
+  createdBy: text('created_by'),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+});
+
+// Link Payments to Orders
+export const supplierOrderPayments = pgTable('supplier_order_payments', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  
+  paymentId: uuid('payment_id').references(() => supplierPayments.id, { onDelete: 'cascade' }),
+  orderId: integer('order_id').references(() => supplierOrders.id, { onDelete: 'cascade' }),
+  
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+
+
+
+
+
+
+
+
+
+
+
+// 3. Client Transactions Ledger (Compte Client Détaillé)
+export const clientTransactions = pgTable('client_transactions', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  
+  clientId: integer('client_id').references(() => clients.id, { onDelete: 'cascade' }),
+  
+  type: text('type').notNull(), // 'SALE', 'PAYMENT', 'RETURN', 'ADJUSTMENT', 'OPENING_BALANCE'
+  referenceId: text('reference_id'), // Sale ID, Payment Ref
+  
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(), 
+  // Convention: 
+  // + Positive = Debit (Client uses credit/buys) -> Increases Balance
+  // - Negative = Credit (Client pays) -> Decreases Balance
+  
+  previousBalance: decimal('previous_balance', { precision: 10, scale: 2 }).notNull(),
+  newBalance: decimal('new_balance', { precision: 10, scale: 2 }).notNull(),
+  
+  date: timestamp('date').defaultNow(),
+  notes: text('notes'),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// ========================================
+// RELATIONS UPDATES
+// ========================================
+
+export const supplierPaymentsRelations = relations(supplierPayments, ({ one, many }) => ({
+    supplier: one(suppliers, {
+        fields: [supplierPayments.supplierId],
+        references: [suppliers.id],
+    }),
+    allocations: many(supplierOrderPayments),
+})); // End of relations
+
+// ========================================
+// 9. LEGACY TABLES (Preserved for Data Safety)
+// ========================================
+
+export const auditLog = pgTable("audit_log", {
+  id: serial('id').primaryKey(),
+  userId: text("user_id"),
+  action: text("action").notNull(),
+  resource: text("resource"),
+  success: boolean("success").notNull(),
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
-  fingerprint: text("fingerprint"), 
-  
-  // 🚨 SEVERITY LEVEL
-  severity: text("severity").$type<"INFO" | "WARNING" | "CRITICAL">()
-    .default("INFO"),
-  
-  // 📝 METADATA
-  metadata: text("metadata"), // JSON string
+  fingerprint: text("fingerprint"),
+  severity: text("severity").default('INFO'),
+  metadata: text("metadata"),
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
+
+// ✅ Structured Audit Logs (NEW)
+export const auditLogs = pgTable('audit_logs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id),
+  entityType: text('entity_type').notNull(), // 'sale', 'product', 'client'
+  entityId: text('entity_id').notNull(),
+  action: text('action').notNull(), // 'create', 'update', 'delete', 'login'
+  oldValue: json('old_value'),
+  newValue: json('new_value'),
+  metadata: json('metadata'), // { saleNumber, totalAmount, etc }
+  ipAddress: text('ip_address'),
+  userAgent: text('user_agent'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const purchases = pgTable("purchases", {
+  id: serial('id').primaryKey(),
+  firebaseId: text("firebase_id"),
+  userId: text("user_id").notNull(),
+  supplierId: uuid("supplier_id"),
+  supplierName: text("supplier_name").notNull(),
+  type: text("type").notNull(),
+  reference: text("reference"),
+  totalAmount: decimal("total_amount", { precision: 10, scale:  2 }).notNull(),
+  amountPaid: decimal("amount_paid", { precision: 10, scale:  2 }).default('0'),
+  status: text("status").default('UNPAID').notNull(),
+  date: timestamp("date"),
+  dueDate: timestamp("due_date"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
+});
+
+
+export const supplierOrderPaymentsRelations = relations(supplierOrderPayments, ({ one }) => ({
+    payment: one(supplierPayments, {
+        fields: [supplierOrderPayments.paymentId],
+        references: [supplierPayments.id],
+    }),
+    order: one(supplierOrders, {
+        fields: [supplierOrderPayments.orderId],
+        references: [supplierOrders.id],
+    }),
+}));
+
+export const supplierOrdersRelations = relations(supplierOrders, ({ one, many }) => ({
+    supplier: one(suppliers, {
+        fields: [supplierOrders.supplierId],
+        references: [suppliers.id],
+    }),
+    payments: many(supplierOrderPayments),
+}));
+
+export const clientTransactionsRelations = relations(clientTransactions, ({ one }) => ({
+    client: one(clients, {
+        fields: [clientTransactions.clientId],
+        references: [clients.id],
+    }),
+}));
+
+// ========================================
+// 12. EXPENSES (CHARGES) TABLE
+// ========================================
+export const expenses = pgTable('expenses', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(), // Multi-tenancy
+  
+  title: text('title').notNull(),
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  
+  // 'EAU', 'ELECTRICITE', 'LOYER', 'INTERNET', 'SALAIRE', 'AUTRE', 'IMPOT', 'TRANSPORT'
+  category: text('category').notNull().default('AUTRE'), 
+  
+  status: text('status').default('PAYE'), // 'PAYE', 'IMPAYE'
+  date: timestamp('date').defaultNow().notNull(),
+  
+  // Metadata
+  proofUrl: text('proof_url'), // Link to receipt/invoice image
+  notes: text('notes'),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+}, (table) => ({
+  userIdIdx: index('expenses_user_id_idx').on(table.userId),
+  dateIdx: index('expenses_date_idx').on(table.date),
+  categoryIdx: index('expenses_category_idx').on(table.category),
+}));

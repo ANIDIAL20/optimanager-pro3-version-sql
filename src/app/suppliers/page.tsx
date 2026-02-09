@@ -1,7 +1,8 @@
+'use client';
+
 import * as React from 'react';
 import { getSuppliersList } from '@/app/actions/supplier-actions';
 
-import { DataTable } from '@/components/ui/data-table';
 import { columns as supplierColumns } from '@/components/dashboard/fournisseurs/columns';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { Button } from '@/components/ui/button';
@@ -14,19 +15,43 @@ import {
 import Link from 'next/link';
 import { Separator } from '@/components/ui/separator';
 import { SuppliersClientView } from './_components/suppliers-client-view';
+import { BrandLoader } from '@/components/ui/loader-brand';
 
 export const dynamic = 'force-dynamic';
 
-export default async function SuppliersPage() {
-  // Fetch suppliers on the server
-  const suppliers = await getSuppliersList();
+export default function SuppliersPage() {
+  const [suppliers, setSuppliers] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    const fetchSuppliers = async () => {
+      try {
+        const data = await getSuppliersList();
+        setSuppliers(data);
+      } catch (error) {
+        console.error("Failed to fetch suppliers:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSuppliers();
+  }, []);
 
   // Calculate stats
-  const stats = {
+  const stats = React.useMemo(() => ({
     total: suppliers.length,
     verres: suppliers.filter(s => s.category?.includes('Verres') || s.category?.includes('Lenses')).length,
     montures: suppliers.filter(s => s.category?.includes('Montures') || s.category?.includes('Frames')).length,
-  };
+  }), [suppliers]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full min-h-[400px]">
+        <BrandLoader size="lg" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
