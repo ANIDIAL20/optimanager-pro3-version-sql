@@ -16,7 +16,8 @@ import {
     Receipt,
     FileSpreadsheet,
     Warehouse,
-    Bell
+    Bell,
+    Banknote
 } from "lucide-react";
 
 import {
@@ -158,6 +159,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     <SidebarGroupLabel>Comptabilité</SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton asChild isActive={pathname.startsWith('/expenses')} tooltip="Les Charges">
+                                    <Link href="/expenses">
+                                        <Banknote className="size-5" strokeWidth={1.5} />
+                                        <span>Les Charges</span>
+                                    </Link>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+
                             <SidebarMenuItem>
                                 <SidebarMenuButton asChild isActive={pathname === '/dashboard/compta'} tooltip="Exports & Rapports">
                                     <Link href="/dashboard/compta">
