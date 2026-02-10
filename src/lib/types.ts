@@ -22,6 +22,7 @@ export interface Product {
   marque?: string;
   modele?: string;
   couleur?: string;
+  fournisseur?: string;
 }
 
 
@@ -256,6 +257,7 @@ export interface Color {
 
 export interface Supplier {
   id: string;
+  name: string;
   nomCommercial: string;
   raisonSociale?: string;
   typeProduits?: string[];
@@ -278,6 +280,7 @@ export interface Supplier {
   notes?: string;
   statut: "Actif" | "Inactif";
   totalAchats?: number;
+  defaultTaxMode?: "HT" | "TTC";
   dateCreation: any;
   dateModification: any;
 }

@@ -3,6 +3,7 @@ import type { Supplier } from './types';
 
 export const generateTestSuppliers = (): Omit<Supplier, 'id' | 'dateCreation' | 'dateModification' | 'totalAchats'>[] => [
   {
+    name: "OptiVision Maroc",
     nomCommercial: "OptiVision Maroc",
     raisonSociale: "OptiVision Distribution SARL",
     email: "contact@optivision.ma",
@@ -26,6 +27,7 @@ export const generateTestSuppliers = (): Omit<Supplier, 'id' | 'dateCreation' | 
     statut: "Actif"
   },
   {
+    name: "Frames International",
     nomCommercial: "Frames International",
     raisonSociale: "Frames International SA",
     email: "sales@framesintl.ma",
@@ -49,6 +51,7 @@ export const generateTestSuppliers = (): Omit<Supplier, 'id' | 'dateCreation' | 
     statut: "Actif"
   },
   {
+    name: "Lenses Pro",
     nomCommercial: "Lenses Pro",
     raisonSociale: "Lenses Pro Distribution",
     email: "info@lensespro.ma",
@@ -71,6 +74,7 @@ export const generateTestSuppliers = (): Omit<Supplier, 'id' | 'dateCreation' | 
     statut: "Actif"
   },
   {
+    name: "Contact Lens Supply",
     nomCommercial: "Contact Lens Supply",
     raisonSociale: "CLS Maroc SARL",
     email: "commande@clsmaroc.ma",
@@ -94,6 +98,7 @@ export const generateTestSuppliers = (): Omit<Supplier, 'id' | 'dateCreation' | 
     statut: "Actif"
   },
   {
+    name: "AccessoOptic",
     nomCommercial: "AccessoOptic",
     raisonSociale: "AccessoOptic Distribution",
     email: "support@accessooptic.ma",

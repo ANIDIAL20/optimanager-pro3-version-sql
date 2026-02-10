@@ -17,7 +17,7 @@ import {
   banks,
   insurances,
 } from '@/db/schema';
-import { eq, and, inArray, sql } from 'drizzle-orm';
+import { eq, and, inArray, sql, asc } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { z } from 'zod';
 
@@ -94,36 +94,32 @@ import { secureAction } from '@/lib/secure-action';
 /**
  * Get all items from a settings table
  */
+/**
+ * Get all items from a settings table
+ */
 export const getSettings = secureAction(async (userId, user, type: SettingType) => {
   noStore();
   
-  // Table mapping verification
-  let tableName: string;
-  switch (type) {
-    case 'brands': tableName = 'brands'; break;
-    case 'categories': tableName = 'categories'; break;
-    case 'materials': tableName = 'materials'; break;
-    case 'colors': tableName = 'colors'; break;
-    case 'treatments': tableName = 'treatments'; break;
-    case 'mountingTypes': tableName = 'mounting_types'; break;
-    case 'banks': tableName = 'banks'; break;
-    case 'insurances': tableName = 'insurances'; break;
-    default:
-      throw new Error(`Invalid setting type: ${type}`);
-  }
+  const table = tableMap[type];
+  if (!table) throw new Error(`Invalid setting type: ${type}`);
 
   try {
-    // 🔒 SECURE: Use parameterized query for userId
-    // tableName is safe because it comes from the whitelist switch above
-    const query = sql`SELECT * FROM ${sql.raw(`"${tableName}"`)} WHERE "user_id" = ${userId} ORDER BY "name" ASC`;
+    const results = await db.select()
+        .from(table)
+        .where(eq(table.userId, userId))
+        // @ts-ignore - 'name' exists on all setting tables
+        .orderBy(asc(table.name));
     
-    const result = await db.execute(query);
-
-    return result.rows.map((row: any) => ({
+    return results.map((row: any) => ({
       ...row,
-      userId: row.user_id, // Ensure camelCase availability
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
+      id: row.id.toString(),
+      // Drizzle handles camelCase mapping if setup, but schema defines snake_case columns
+      // If we used drizzle-orm/postgres-js or similar, it might be automatic.
+      // With 'pg' and Drizzle, it usually respects the schema definition.
+      // However, for safety in this specific "Revert" where we want strict Drizzle usage:
+      userId: row.userId, 
+      createdAt: row.createdAt ? (typeof row.createdAt === 'string' ? row.createdAt : row.createdAt.toISOString()) : null,
+      updatedAt: row.updatedAt ? (typeof row.updatedAt === 'string' ? row.updatedAt : row.updatedAt.toISOString()) : null
     }));
 
   } catch (error: any) {
@@ -135,60 +131,58 @@ export const getSettings = secureAction(async (userId, user, type: SettingType) 
 /**
  * Create a new setting item
  */
-/**
- * Create a new setting item
- */
 export const createSetting = secureAction(async (userId, user, type: SettingType, data: SettingItemInput) => {
   const validated = settingItemSchema.parse(data);
   const table = tableMap[type];
-
-  // Whitelist check to prevent arbitrary table insertion effectively
   if (!table) throw new Error("Invalid table type");
 
-  const [created] = await db
-    .insert(table)
-    .values({
-      userId, // Injected from secureAction
-      ...validated,
-    } as any)
-    .returning();
+  try {
+    const [created] = await db.insert(table).values({
+        userId,
+        name: validated.name,
+        // @ts-ignore - 'category' only exists on brands, but safe if undefined/null
+        category: validated.category || null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    }).returning();
 
-  console.log(`[createSetting] Created ${type}:`, created);
-  return created;
+    console.log(`[createSetting] Created ${type} (Drizzle):`, created);
+    return created;
+  } catch (error: any) {
+    console.error(`💥 Error creating ${type} (Drizzle):`, error);
+    throw new Error(`Erreur lors de la création de ${type}: ${error.message}`);
+  }
 });
 
-/**
- * Update a setting item
- */
 /**
  * Update a setting item
  */
 export const updateSetting = secureAction(async (userId, user, type: SettingType, id: number, data: SettingItemInput) => {
   const validated = settingItemSchema.parse(data);
   const table = tableMap[type];
-
   if (!table) throw new Error("Invalid table type");
 
-  const [updated] = await db
-    .update(table)
-    .set({
-      ...validated,
-      updatedAt: new Date(),
-    } as any)
-    .where(
-      and(
-        eq(table.id, id),
-        eq(table.userId, userId) // Security: user can only update their own
-      )
-    )
-    .returning();
+  try {
+    const [updated] = await db.update(table)
+        .set({
+            name: validated.name,
+            // @ts-ignore
+            category: validated.category || null,
+            updatedAt: new Date().toISOString()
+        })
+        .where(and(eq(table.id, id), eq(table.userId, userId)))
+        .returning();
 
-  if (!updated) {
-    throw new Error('Item non trouvé ou non autorisé');
+    if (!updated) {
+        throw new Error('Item non trouvé ou non autorisé');
+    }
+
+    console.log(`[updateSetting] Updated ${type} (Drizzle):`, updated);
+    return updated;
+  } catch (error: any) {
+    console.error(`💥 Error updating ${type} (Drizzle):`, error);
+    throw new Error(`Erreur lors de la mise à jour de ${type}: ${error.message}`);
   }
-
-  console.log(`[updateSetting] Updated ${type}:`, updated);
-  return updated;
 });
 
 /**

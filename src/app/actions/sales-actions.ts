@@ -78,22 +78,26 @@ export interface CreateSaleInput {
  */
 export const getSales = secureAction(async (userId, user) => {
     try {
-        console.log('📊 Fetching sales for userId:', userId);
+        console.log('📊 Fetching sales for userId (Drizzle):', userId);
         
-        const salesData = await db.select().from(sales)
-            .where(eq(sales.userId, userId))
-            .orderBy(desc(sales.createdAt));
+        const results = await db.query.sales.findMany({
+            where: eq(sales.userId, userId),
+            orderBy: [desc(sales.createdAt)],
+            with: {
+                client: true
+            }
+        });
 
-        console.log(`✅ Found ${salesData.length} sales`);
+        console.log(`✅ Found ${results.length} sales (Drizzle)`);
 
-        const mappedSales: Sale[] = salesData.map((s: any) => ({
+        const mappedSales: Sale[] = results.map((s: any) => ({
             id: s.id.toString(),
             clientId: s.clientId?.toString(),
-            clientName: s.clientName || undefined,
-            clientPhone: s.clientPhone || undefined,
-            clientMutuelle: s.clientMutuelle || undefined,
-            clientAddress: s.clientAddress || undefined,
-            saleNumber: s.saleNumber || undefined,
+            clientName: s.clientName || s.client?.fullName,
+            clientPhone: s.clientPhone || s.client?.phone,
+            clientMutuelle: s.clientMutuelle || s.client?.mutuelle,
+            clientAddress: s.clientAddress || s.client?.address,
+            saleNumber: s.saleNumber,
             prescriptionSnapshot: s.prescriptionSnapshot,
             items: (s.items as SaleItem[]) || [],
             totalHT: Number(s.totalHT),
@@ -103,21 +107,19 @@ export const getSales = secureAction(async (userId, user) => {
             totalPaye: Number(s.totalPaye),
             resteAPayer: Number(s.resteAPayer),
             status: s.status || 'impaye',
-            paymentMethod: s.paymentMethod || undefined,
+            paymentMethod: s.paymentMethod,
             paymentHistory: (s.paymentHistory as any[]) || [],
-            notes: s.notes || undefined,
-            createdAt: s.createdAt?.toISOString() || new Date().toISOString(),
-            date: s.date?.toISOString(),
-            lastPaymentDate: s.lastPaymentDate?.toISOString()
+            notes: s.notes,
+            createdAt: s.createdAt ? (typeof s.createdAt === 'string' ? s.createdAt : s.createdAt.toISOString()) : new Date().toISOString(),
+            date: s.date ? (typeof s.date === 'string' ? s.date : s.date.toISOString()) : undefined,
+            lastPaymentDate: s.lastPaymentDate ? (typeof s.lastPaymentDate === 'string' ? s.lastPaymentDate : s.lastPaymentDate.toISOString()) : undefined
         }));
 
         await logSuccess(userId, 'READ', 'sales', 'LIST_ALL', { count: mappedSales.length });
         return { success: true, sales: mappedSales };
 
     } catch (error: any) {
-        console.error('💥 ERROR in getSales:', error);
-        console.error('💥 Error message:', error.message);
-        console.error('💥 Error stack:', error.stack);
+        console.error('💥 ERROR in getSales (Drizzle):', error);
         await logFailure(userId, 'READ', 'sales', error.message);
         return { success: false, error: `Erreur lors de la récupération des ventes: ${error.message}`, sales: [] };
     }
@@ -129,8 +131,13 @@ export const getSales = secureAction(async (userId, user) => {
 export const getSale = secureAction(async (userId, user, saleId: string) => {
     try {
         const id = parseInt(saleId);
+        if (isNaN(id)) return { success: false, error: 'ID vente invalide' };
+
         const sale = await db.query.sales.findFirst({
-            where: and(eq(sales.id, id), eq(sales.userId, userId))
+            where: and(eq(sales.id, id), eq(sales.userId, userId)),
+            with: {
+                client: true
+            }
         });
 
         if (!sale) return { success: false, error: 'Vente introuvable' };
@@ -138,11 +145,11 @@ export const getSale = secureAction(async (userId, user, saleId: string) => {
         const mappedSale: Sale = {
             id: sale.id.toString(),
             clientId: sale.clientId?.toString(),
-            clientName: sale.clientName || undefined,
-            clientPhone: sale.clientPhone || undefined,
-            clientMutuelle: sale.clientMutuelle || undefined,
-            clientAddress: sale.clientAddress || undefined,
-            saleNumber: sale.saleNumber || undefined,
+            clientName: sale.clientName || sale.client?.fullName,
+            clientPhone: sale.clientPhone || sale.client?.phone,
+            clientMutuelle: sale.clientMutuelle || sale.client?.mutuelle,
+            clientAddress: sale.clientAddress || sale.client?.address,
+            saleNumber: sale.saleNumber,
             prescriptionSnapshot: sale.prescriptionSnapshot,
             items: (sale.items as SaleItem[]) || [],
             totalHT: Number(sale.totalHT),
@@ -152,17 +159,18 @@ export const getSale = secureAction(async (userId, user, saleId: string) => {
             totalPaye: Number(sale.totalPaye),
             resteAPayer: Number(sale.resteAPayer),
             status: sale.status || 'impaye',
-            paymentMethod: sale.paymentMethod || undefined,
+            paymentMethod: sale.paymentMethod,
             paymentHistory: (sale.paymentHistory as any[]) || [],
-            notes: sale.notes || undefined,
-            createdAt: sale.createdAt?.toISOString() || new Date().toISOString(),
-            date: sale.date?.toISOString(),
-            lastPaymentDate: sale.lastPaymentDate?.toISOString()
+            notes: sale.notes,
+            createdAt: sale.createdAt ? (typeof sale.createdAt === 'string' ? sale.createdAt : sale.createdAt.toISOString()) : new Date().toISOString(),
+            date: sale.date ? (typeof sale.date === 'string' ? sale.date : sale.date.toISOString()) : undefined,
+            lastPaymentDate: sale.lastPaymentDate ? (typeof sale.lastPaymentDate === 'string' ? sale.lastPaymentDate : sale.lastPaymentDate.toISOString()) : undefined
         };
 
         return { success: true, sale: mappedSale };
 
     } catch (error: any) {
+        console.error('💥 Error fetching sale (Drizzle):', error);
         return { success: false, error: error.message };
     }
 });

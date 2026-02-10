@@ -40,7 +40,7 @@ export const clients = pgTable('clients', {
   lastVisit: timestamp('last_visit'), // Legacy field preserved for safety
   
   createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
   userIdIdx: index('clients_user_id_idx').on(table.userId),
   fullNameIdx: index('clients_full_name_idx').on(table.fullName),
@@ -680,6 +680,7 @@ export const suppliers = pgTable('suppliers', {
   rating: text('rating'),
   isActive: boolean('is_active').default(true),
   status: text('status').default('Actif'),
+  defaultTaxMode: text('default_tax_mode').default('HT'), // 'HT' or 'TTC'
   
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
