@@ -44,6 +44,7 @@ import { cn } from '@/lib/utils';
 
 // Actions
 import { getSuppliersList as getSuppliers } from '@/app/actions/supplier-actions';
+import { createSupplierOrder } from '@/app/actions/supplier-orders-actions';
 import type { Supplier } from '@/lib/types';
 import { OrderItemRow } from './order-item-row';
 
@@ -139,8 +140,8 @@ export function CreateOrderButton() {
             setIsLoadingSuppliers(true);
             try {
                 const result = await getSuppliers();
-                if (result.success) {
-                    setSuppliers(result.suppliers);
+                if (result.success && result.data) {
+                    setSuppliers(result.data);
                 } else {
                     toast({
                         title: "Erreur",

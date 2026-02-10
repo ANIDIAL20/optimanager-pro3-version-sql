@@ -91,11 +91,12 @@ export function StockUpdateDialog({
 
         setIsSubmitting(true);
         try {
-            const result = await updateStock(
-                product.id, 
-                qty, 
-                movementType === 'in' ? 'add' : 'remove'
-            );
+            const result = await updateStock({
+                productId: product.id,
+                quantity: qty,
+                type: movementType === 'in' ? 'IN' : 'OUT',
+                reason: reason.trim(),
+            });
 
             if (result.success) {
                 const newStock = result.newStock ?? (movementType === 'in' ? currentStock + qty : currentStock - qty);
@@ -162,18 +163,31 @@ export function StockUpdateDialog({
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                     {/* Current Stock Display */}
-                    <div className="bg-slate-50 p-4 rounded-lg border">
-                        <p className="text-sm text-slate-600 mb-1">Stock Actuel</p>
-                        <div className="flex items-baseline gap-2">
-                            <span className="text-4xl font-bold text-slate-900">
-                                {currentStock}
-                            </span>
-                            <span className="text-slate-500">unités</span>
+                    <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-200/60 shadow-sm">
+                        <div className="flex items-center justify-between">
+                             <div>
+                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Stock Actuel</p>
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-4xl font-black text-slate-900 tracking-tight">
+                                        {currentStock}
+                                    </span>
+                                    <span className="text-sm font-bold text-slate-500">unités</span>
+                                </div>
+                             </div>
+                             <div className={cn(
+                                "h-12 w-12 rounded-xl flex items-center justify-center shadow-sm border",
+                                currentStock < 3 ? "bg-red-50 border-red-100 text-red-600" :
+                                currentStock < 10 ? "bg-orange-50 border-orange-100 text-orange-600" :
+                                "bg-emerald-50 border-emerald-100 text-emerald-600"
+                             )}>
+                                <Package className="h-6 w-6" />
+                             </div>
                         </div>
                         {product.stockMin && (
-                            <p className="text-xs text-slate-500 mt-1">
-                                Minimum: {product.stockMin} unités
-                            </p>
+                            <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-slate-500 bg-white px-3 py-1.5 rounded-full w-fit border border-slate-100 shadow-sm">
+                                <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                                Minimum requis: {product.stockMin} unités
+                            </div>
                         )}
                     </div>
 

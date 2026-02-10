@@ -14,8 +14,7 @@ import { SensitiveData } from '@/components/ui/sensitive-data';
 import { cn } from '@/lib/utils';
 
 // Server Actions
-import { getProducts } from '@/app/actions/products-actions';
-import { getCategories } from '@/app/actions/products-actions';
+import { getProducts, getCategories } from '@/app/actions/products-actions';
 import { createSale } from '@/app/actions/sales-actions';
 import { getPendingLensOrders, type LensOrder } from '@/app/actions/lens-orders-actions';
 import { BrandLoader } from '@/components/ui/loader-brand';

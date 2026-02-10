@@ -5,7 +5,7 @@ import { requireAdmin } from '@/lib/auth-guard';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { products, users, clients, suppliers } from '@/db/schema';
-import { eq, count } from 'drizzle-orm';
+import { eq, count, sql } from 'drizzle-orm';
 
 // TODO: These admin actions need to be refactored to use Drizzle
 // For now, returning stub responses to unblock the build
@@ -86,9 +86,8 @@ export const createClient = adminAction(async (user, formData: FormData) => {
     }
 
     // Check existing
-    const existingUser = await db.query.users.findFirst({
-        where: eq(users.email, email)
-    });
+    const existingResult = await db.execute(sql`SELECT id FROM "users" WHERE "email" = ${email} LIMIT 1`);
+    const existingUser = existingResult[0];
 
     if (existingUser) {
         return { success: false, error: "Un utilisateur avec cet email existe déjà." };
@@ -144,14 +143,14 @@ import { unstable_cache } from 'next/cache';
 export const getSaaSStats = adminAction(async (user) => {
   return await unstable_cache(
     async () => {
-      console.log('🔄 Fetching SaaS Stats (Cached)...');
+      console.log('🔄 Fetching SaaS Stats (Cached - SQL)...');
       const [allUsers, shopOwners] = await Promise.all([
-        db.select().from(users),
-        db.select().from(users).where(eq(users.role, 'USER'))
+        db.execute(sql`SELECT * FROM "users"`),
+        db.execute(sql`SELECT * FROM "users" WHERE "role" = 'USER'`)
       ]);
 
-      const activeClients = shopOwners.filter((u: any) => u.isActive).length;
-      const totalRevenue = shopOwners.reduce((sum: number, u: any) => sum + parseFloat(u.amountPaid || '0'), 0);
+      const activeClients = shopOwners.filter((u: any) => u.is_active).length;
+      const totalRevenue = shopOwners.reduce((sum: number, u: any) => sum + parseFloat(u.amount_paid || '0'), 0);
 
       return {
         totalRevenue,
@@ -167,21 +166,21 @@ export const getSaaSStats = adminAction(async (user) => {
 });
 
 export const getAllClients = adminAction(async (user) => {
-  const allUsers = await db.select().from(users).where(eq(users.role, 'USER'));
+  const allUsers = await db.execute(sql`SELECT * FROM "users" WHERE "role" = 'USER'`);
   
   return allUsers.map((u: any) => ({
     uid: u.id,
     email: u.email,
     displayName: u.name || 'Shop Owner',
     phoneNumber: '', 
-    status: u.isActive ? 'active' : 'suspended',
-    subscriptionEndDate: u.subscriptionExpiry?.toISOString() || new Date(Date.now() + 30*24*60*60*1000).toISOString(),
-    plan: u.billingCycle || 'monthly',
-    revenue: parseFloat(u.amountPaid || '0'),
+    status: u.is_active ? 'active' : 'suspended',
+    subscriptionEndDate: u.subscription_expiry ? (typeof u.subscription_expiry === 'string' ? u.subscription_expiry : u.subscription_expiry.toISOString()) : new Date(Date.now() + 30*24*60*60*1000).toISOString(),
+    plan: u.billing_cycle || 'monthly',
+    revenue: parseFloat(u.amount_paid || '0'),
     quotas: {
-        maxProducts: u.maxProducts,
-        maxClients: u.maxClients,
-        maxSuppliers: u.maxSuppliers
+        maxProducts: u.max_products,
+        maxClients: u.max_clients,
+        maxSuppliers: u.max_suppliers
     }
   })) as ClientData[];
 });
@@ -271,48 +270,69 @@ export async function getGlobalBanner() {
   return null;
 }
 
-export async function getClientUsageStats(uid: string) {
-  if (!uid) return { 
-    products: { count: 0, limit: 50 }, 
-    clients: { count: 0, limit: 20 }, 
-    suppliers: { count: 0, limit: 10 } 
-  };
 
+export async function getClientUsageStats(uid: string) {
   try {
+    if (!uid) {
+        console.warn("⚠️ getClientUsageStats called without uid");
+        return { 
+            products: { count: 0, limit: 50 },
+            clients: { count: 0, limit: 20 },
+            suppliers: { count: 0, limit: 10 }
+        };
+    }
     const trimmedId = uid.trim();
-    console.log(`📊 Fetching usage stats for UID: ${trimmedId}`);
     
-    // ✅ Parallel Drizzle queries (Option 3 Recommendation)
-    const [productsRes, clientsRes, suppliersRes, userRes] = await Promise.all([
-      db.select({ value: count() }).from(products).where(eq(products.userId, trimmedId)),
-      db.select({ value: count() }).from(clients).where(eq(clients.userId, trimmedId)),
-      db.select({ value: count() }).from(suppliers).where(eq(suppliers.userId, trimmedId)),
+    // Parallelize queries for performance using Drizzle ORM
+    // Using Number() explicitly as Neon HTTP might return counts as strings
+    const [pRes, cRes, sRes, user] = await Promise.all([
+      db.select({ value: sql<number>`count(*)` }).from(products).where(eq(products.userId, trimmedId)),
+      db.select({ value: sql<number>`count(*)` }).from(clients).where(eq(clients.userId, trimmedId)),
+      db.select({ value: sql<number>`count(*)` }).from(suppliers).where(eq(suppliers.userId, trimmedId)),
       db.query.users.findFirst({
         where: eq(users.id, trimmedId),
-        columns: { maxProducts: true, maxClients: true, maxSuppliers: true },
+        columns: {
+          maxProducts: true,
+          maxClients: true,
+          maxSuppliers: true,
+        }
       })
-    ]);
+    ]).catch(err => {
+        console.error("💥 Promise.all failed in getClientUsageStats:", err);
+        throw err;
+    });
 
     return {
       products: { 
-        count: Number(productsRes[0]?.value || 0), 
-        limit: userRes?.maxProducts || 50 
+        count: Number(pRes[0]?.value || 0), 
+        limit: Number(user?.maxProducts || 50) 
       },
       clients: { 
-        count: Number(clientsRes[0]?.value || 0), 
-        limit: userRes?.maxClients || 20 
+        count: Number(cRes[0]?.value || 0), 
+        limit: Number(user?.maxClients || 20) 
       },
       suppliers: { 
-        count: Number(suppliersRes[0]?.value || 0), 
-        limit: userRes?.maxSuppliers || 10 
+        count: Number(sRes[0]?.value || 0), 
+        limit: Number(user?.maxSuppliers || 10) 
       },
     };
   } catch (error: any) {
-    console.error("❌ Usage Stats Error:", error);
+    console.error("❌ Usage Stats Error (Drizzle):", error);
+    // Return safe defaults to prevent UI crash
     return { 
         products: { count: 0, limit: 50 },
         clients: { count: 0, limit: 20 },
         suppliers: { count: 0, limit: 10 }
     };
   }
+}
+
+export async function dbCheck() {
+    try {
+        const tables = await db.execute(sql`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`);
+        const columns = await db.execute(sql`SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' ORDER BY table_name, ordinal_position`);
+        return { tables, columns };
+    } catch (e: any) {
+        return { error: e.message };
+    }
 }

@@ -56,61 +56,59 @@ export default function AppShell({ children, banner }: { children: React.ReactNo
                 />
 
                 <SidebarProvider>
-                    <AppSidebar />
-                    <SidebarInset>
-                        {/* Global Banner */}
-                        {banner?.active && isBannerVisible && (
-                            <div className={`w-full px-4 py-2 flex items-center justify-between text-sm font-medium ${banner.type === 'critical' ? 'bg-red-600 text-white' :
-                                banner.type === 'warning' ? 'bg-orange-500 text-white' :
-                                    'bg-blue-600 text-white'
-                                }`}>
-                                <div className="flex items-center gap-2">
-                                    <span>📢</span>
-                                    <p>{banner.message}</p>
+                    <div className="flex min-h-screen w-full">
+                        <AppSidebar />
+                        <SidebarInset className="flex-1 overflow-hidden">
+                            {/* Global Banner */}
+                            {banner?.active && isBannerVisible && (
+                                <div className={`w-full px-4 py-2 flex items-center justify-between text-sm font-medium ${banner.type === 'critical' ? 'bg-red-600 text-white' :
+                                    banner.type === 'warning' ? 'bg-orange-500 text-white' :
+                                        'bg-blue-600 text-white'
+                                    }`}>
+                                    <div className="flex items-center gap-2">
+                                        <span>📢</span>
+                                        <p>{banner.message}</p>
+                                    </div>
+                                    <button onClick={() => setIsBannerVisible(false)} className="opacity-80 hover:opacity-100">
+                                        ✕
+                                    </button>
                                 </div>
-                                <button onClick={() => setIsBannerVisible(false)} className="opacity-80 hover:opacity-100">
-                                    ✕
-                                </button>
-                            </div>
-                        )}
+                            )}
 
-                        <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200/60 px-4 bg-white/80 backdrop-blur-xl sticky top-0 z-10">
-                            <SidebarTrigger className="-ml-1" />
-                            <div className="h-4 w-px bg-slate-200 mx-2" />
-                            <span className="text-sm font-medium text-slate-700 capitalize">
-                                {(() => {
-                                    // Generate breadcrumb from pathname
-                                    const pathSegments = pathname?.split('/').filter(Boolean) || [];
+                            <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200/60 px-6 bg-white/80 backdrop-blur-xl sticky top-0 z-40">
+                                <SidebarTrigger className="-ml-1" />
+                                <div className="h-4 w-px bg-slate-200 mx-2" />
+                                <span className="text-sm font-semibold text-slate-600 tracking-tight">
+                                    {(() => {
+                                        // Generate breadcrumb from pathname
+                                        const pathSegments = pathname?.split('/').filter(Boolean) || [];
 
-                                    // Sanitize segments - replace Firebase IDs with friendly names
-                                    const sanitizedSegments = pathSegments.map((segment, index) => {
-                                        // If segment looks like a Firebase ID (long alphanumeric string > 15 chars)
-                                        if (segment.length > 15 && /^[a-zA-Z0-9]{15,}$/.test(segment)) {
-                                            // Replace with context-specific label
-                                            if (pathSegments[index - 1] === 'clients') {
-                                                return 'Dossier Client';
+                                        // Sanitize segments - replace Firebase IDs with friendly names
+                                        const sanitizedSegments = pathSegments.map((segment, index) => {
+                                            // If segment looks like a Firebase ID (long alphanumeric string > 15 chars)
+                                            if (segment.length > 15 && /^[a-zA-Z0-9]{15,}$/.test(segment)) {
+                                                // Replace with context-specific label
+                                                if (pathSegments[index - 1] === 'clients') return 'Dossier Client';
+                                                if (pathSegments[index - 1] === 'products') return 'Fiche Produit';
+                                                if (pathSegments[index - 1] === 'commandes') return 'Détails Commande';
+                                                return 'Détails';
                                             }
-                                            if (pathSegments[index - 1] === 'products') {
-                                                return 'Fiche Produit';
-                                            }
-                                            if (pathSegments[index - 1] === 'commandes') {
-                                                return 'Détails Commande';
-                                            }
-                                            return 'Détails';
-                                        }
-                                        // Normal segments - capitalize and replace hyphens
-                                        return segment.replace(/-/g, ' ');
-                                    });
+                                            // Normal segments - capitalize and replace hyphens
+                                            return segment.replace(/-/g, ' ');
+                                        });
 
-                                    return sanitizedSegments.join(' / ') || 'Tableau de bord';
-                                })()}
-                            </span>
-                        </header>
+                                        return sanitizedSegments.join(' / ') || 'Tableau de bord';
+                                    })()}
+                                </span>
+                            </header>
 
-                        <main className="flex-1 overflow-auto p-6">
-                            {children}
-                        </main>
-                    </SidebarInset>
+                            <main className="flex-1 overflow-y-auto bg-slate-50/50">
+                                <div className="p-4 md:p-8">
+                                    {children}
+                                </div>
+                            </main>
+                        </SidebarInset>
+                    </div>
                 </SidebarProvider>
             </div>
         );

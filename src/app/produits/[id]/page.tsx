@@ -13,32 +13,9 @@ import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { StockUpdateDialog } from '@/components/dashboard/produits/stock-update-dialog';
 import { BackButton } from '@/components/ui/back-button';
 import { getProduct } from '@/app/actions/products-actions';
+import type { Product } from '@/lib/types';
 
-interface Product {
-    id: string;
-    name?: string;
-    nomProduit?: string;
-    reference: string;
-    category?: string;
-    categorie?: string;
-    categorieId?: string;
-    brand?: string;
-    marque?: string;
-    marqueId?: string;
-    purchasePrice?: string | number;
-    prixAchat?: number;
-    salePrice?: string | number;
-    prixVente?: number;
-    stock?: number;
-    quantiteStock?: number;
-    minStock?: number;
-    stockMin?: number;
-    seuilAlerte?: number;
-    description?: string;
-    isActive: boolean;
-    createdAt?: string;
-    updatedAt?: string;
-}
+
 
 export default function ProductDetailsPage() {
     const params = useParams();
@@ -112,6 +89,9 @@ export default function ProductDetailsPage() {
     const stockMin = product.stockMin || product.minStock || product.seuilAlerte || 0;
     const brandName = product.marque || product.brand || product.marqueId || '-';
     const categoryName = product.categorie || product.category || product.categorieId || '-';
+    const supplierName = product.fournisseur || '-';
+    const modelName = product.modele || '-';
+    const colorName = product.couleur || '-';
 
     const stockStatus = quantiteStock < 3 ? 'critical' : quantiteStock < 10 ? 'low' : 'good';
 
@@ -244,15 +224,27 @@ export default function ProductDetailsPage() {
                                 <p className="text-lg font-semibold text-slate-900">{categoryName}</p>
                             </div>
                             <div>
+                                <p className="text-sm font-medium text-slate-600">Fournisseur</p>
+                                <p className="text-lg font-semibold text-slate-900">{supplierName}</p>
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-slate-600">Modèle</p>
+                                <p className="text-lg font-semibold text-slate-900">{modelName}</p>
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-slate-600">Couleur</p>
+                                <p className="text-lg font-semibold text-slate-900">{colorName}</p>
+                            </div>
+                            <div>
                                 <p className="text-sm font-medium text-slate-600">Créé le</p>
                                 <p className="text-lg font-semibold text-slate-900">
-                                    {product.createdAt ? new Date(product.createdAt).toLocaleDateString('fr-FR') : '-'}
+                                    {(product.createdAt && product.createdAt !== '') ? new Date(product.createdAt).toLocaleDateString('fr-FR') : '-'}
                                 </p>
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-slate-600">Mis à jour le</p>
                                 <p className="text-lg font-semibold text-slate-900">
-                                    {product.updatedAt ? new Date(product.updatedAt).toLocaleDateString('fr-FR') : '-'}
+                                    {(product.updatedAt && product.updatedAt !== '') ? new Date(product.updatedAt).toLocaleDateString('fr-FR') : '-'}
                                 </p>
                             </div>
                         </div>
