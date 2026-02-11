@@ -5,7 +5,7 @@ import { db } from '@/db';
 import { reminders, products, sales, supplierOrders } from '@/db/schema';
 
 import { auth } from '@/auth';
-import { eq, and, desc, lt, gte, or, lte, isNull, gt, sql } from 'drizzle-orm'; // verified
+import { eq, and, desc, asc, lt, gte, or, lte, isNull, gt, sql } from 'drizzle-orm'; // verified
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { getCachedReminders } from '@/lib/data-loaders';
 import { z } from 'zod';
@@ -33,34 +33,60 @@ export async function getReminders(filters?: {
   priority?: string;
   type?: string;
   limit?: number;
+  startDate?: string;
+  endDate?: string;
+  search?: string; // For searching in title (e.g. Client Name)
 }) {
   const session = await auth();
-  
+
   if (!session?.user?.id) {
     throw new Error('Non authentifié');
+  }
+
+  let conditions = [eq(reminders.userId, session.user.id)];
+
+  // Apply filters
+  if (filters?.status && filters.status !== 'all') {
+    conditions.push(eq(reminders.status, filters.status));
+  }
+
+  if (filters?.priority && filters.priority !== 'all') {
+    conditions.push(eq(reminders.priority, filters.priority));
+  }
+
+  if (filters?.type && filters.type !== 'all') {
+    conditions.push(eq(reminders.type, filters.type));
+  }
+
+  if (filters?.startDate) {
+    const start = new Date(filters.startDate);
+    start.setHours(0, 0, 0, 0);
+    conditions.push(gte(reminders.dueDate, start));
+  }
+
+  if (filters?.endDate) {
+    const end = new Date(filters.endDate);
+    end.setHours(23, 59, 59, 999);
+    conditions.push(lte(reminders.dueDate, end));
+  }
+
+  if (filters?.search) {
+    const searchPattern = `%${filters.search}%`;
+    conditions.push(or(
+      sql`${reminders.title} ILIKE ${searchPattern}`,
+      sql`${reminders.message} ILIKE ${searchPattern}`
+    ) as any);
   }
 
   let query = db
     .select()
     .from(reminders)
-    .where(eq(reminders.userId, session.user.id))
-    .orderBy(desc(reminders.createdAt));
-
-  // Apply filters
-  if (filters?.status && filters.status !== 'all') {
-    // @ts-ignore
-    query = query.where(eq(reminders.status, filters.status));
-  }
-  
-  if (filters?.priority && filters.priority !== 'all') {
-    // @ts-ignore
-    query = query.where(eq(reminders.priority, filters.priority));
-  }
-
-  if (filters?.type && filters.type !== 'all') {
-    // @ts-ignore
-    query = query.where(eq(reminders.type, filters.type));
-  }
+    .where(and(...conditions))
+    .orderBy(
+      sql`CASE WHEN ${reminders.dueDate} IS NULL THEN 1 ELSE 0 END`,
+      asc(reminders.dueDate),
+      desc(reminders.createdAt)
+    );
 
   if (filters?.limit) {
     // @ts-ignore
@@ -76,7 +102,7 @@ export async function getReminders(filters?: {
  */
 export async function getReminderStats() {
   const session = await auth();
-  
+
   if (!session?.user?.id) {
     throw new Error('Non authentifié');
   }
@@ -114,7 +140,7 @@ export async function getReminderStats() {
  */
 export async function createReminder(data: any) {
   const session = await auth();
-  
+
   if (!session?.user?.id) {
     throw new Error('Non authentifié');
   }
@@ -123,88 +149,100 @@ export async function createReminder(data: any) {
   const batchConfig = data.metadata?.batchConfig;
 
   if (batchConfig && batchConfig.mode !== 'simple') {
-      // --- BATCH CREATION ---
-      const remindersToCreate: any[] = [];
-      const startDate = data.dueDate ? new Date(data.dueDate) : new Date();
+    // --- BATCH CREATION ---
+    const remindersToCreate: any[] = [];
+    const startDate = data.dueDate ? new Date(data.dueDate) : new Date();
 
-      if (batchConfig.mode === 'recurring') {
-          // Recurring Logic
-          const count = batchConfig.count || 1;
-          const frequency = batchConfig.frequency || 'weekly';
+    if (batchConfig.mode === 'recurring') {
+      // Recurring Logic
+      const count = batchConfig.count || 1;
+      const frequency = batchConfig.frequency || 'weekly';
 
-          for (let i = 0; i < count; i++) {
-              const currentDate = new Date(startDate);
-               
-              // Add offset based on frequency
-              if (frequency === 'daily') currentDate.setDate(startDate.getDate() + i);
-              if (frequency === 'weekly') currentDate.setDate(startDate.getDate() + (i * 7));
-              if (frequency === 'monthly') currentDate.setMonth(startDate.getMonth() + i);
+      for (let i = 0; i < count; i++) {
+        const currentDate = new Date(startDate);
 
-              remindersToCreate.push({
-                  userId: session.user.id,
-                  ...data,
-                  title: `${data.title} (${i + 1}/${count})`,
-                  dueDate: currentDate,
-                  metadata: JSON.stringify({ 
-                      ...data.metadata,
-                      batchId: Date.now().toString(), // Group ID
-                      index: i + 1,
-                      total: count 
-                  })
-              });
-          }
+        // Add offset based on frequency
+        if (frequency === 'daily') currentDate.setDate(startDate.getDate() + i);
+        if (frequency === 'weekly') currentDate.setDate(startDate.getDate() + (i * 7));
+        if (frequency === 'bimensuelle') currentDate.setDate(startDate.getDate() + (i * 14));
+        if (frequency === 'monthly') currentDate.setMonth(startDate.getMonth() + i);
+        if (frequency === 'bimestrielle') currentDate.setMonth(startDate.getMonth() + (i * 2));
+        if (frequency === 'trimestrielle') currentDate.setMonth(startDate.getMonth() + (i * 3));
+        if (frequency === 'semestrielle') currentDate.setMonth(startDate.getMonth() + (i * 6));
+        if (frequency === 'annuelle') currentDate.setFullYear(startDate.getFullYear() + i);
 
-      } else if (batchConfig.mode === 'installment') {
-          // Installment Logic
-          const months = batchConfig.months || 1;
-          const totalAmount = batchConfig.totalAmount || 0;
-          const monthlyAmount = (totalAmount / months).toFixed(2);
-
-          for (let i = 0; i < months; i++) {
-              const currentDate = new Date(startDate);
-              currentDate.setMonth(startDate.getMonth() + i);
-
-              remindersToCreate.push({
-                  userId: session.user.id,
-                  ...data,
-                  title: `${data.title} (${i + 1}/${months})`,
-                  message: `${data.message || ''}\n\nÉchéance ${i + 1}/${months}: ${monthlyAmount} DH`,
-                  dueDate: currentDate,
-                  metadata: JSON.stringify({ 
-                      ...data.metadata,
-                      batchId: Date.now().toString(),
-                      installmentAmount: monthlyAmount,
-                      installmentIndex: i + 1,
-                      installmentTotal: months 
-                  })
-              });
-          }
-      }
-
-      // Bulk Insert
-      if (remindersToCreate.length > 0) {
-          await db.insert(reminders).values(remindersToCreate);
-      }
-
-      revalidatePath('/dashboard');
-      revalidateTag('reminders');
-      return { success: true, count: remindersToCreate.length };
-
-  } else {
-      // --- SINGLE CREATION (Legacy) ---
-      const [newReminder] = await db
-        .insert(reminders)
-        .values({
+        remindersToCreate.push({
           userId: session.user.id,
           ...data,
-          dueDate: data.dueDate ? new Date(data.dueDate) : null,
-          metadata: data.metadata ? JSON.stringify(data.metadata) : null,
-        } as any)
-        .returning();
+          title: count > 1 ? `${data.title} (${i + 1}/${count})` : data.title,
+          dueDate: currentDate,
+          metadata: {
+            ...data.metadata,
+            batchId: count > 1 ? Date.now().toString() : undefined, // Group ID
+            index: i + 1,
+            total: count,
+            infinite: batchConfig.isInfinite || false
+          }
+        });
+      }
 
-      revalidatePath('/dashboard');
-      revalidateTag('reminders');
-      return newReminder;
+    } else if (batchConfig.mode === 'installment') {
+      // Installment Logic
+      const count = batchConfig.months || batchConfig.count || 1;
+      const frequency = batchConfig.frequency || 'monthly';
+      const totalAmount = batchConfig.totalAmount || 0;
+      const amountPerInstallment = (totalAmount / count).toFixed(2);
+
+      for (let i = 0; i < count; i++) {
+        const currentDate = new Date(startDate);
+
+        // Add offset based on frequency
+        if (frequency === 'weekly') currentDate.setDate(startDate.getDate() + (i * 7));
+        else if (frequency === 'bimensuelle') currentDate.setDate(startDate.getDate() + (i * 14));
+        else currentDate.setMonth(startDate.getMonth() + i); // Default monthly
+
+        remindersToCreate.push({
+          userId: session.user.id,
+          ...data,
+          title: `${data.title} (${i + 1}/${count})`,
+          message: `${data.message || ''}\n\nÉchéance ${i + 1}/${count}: ${amountPerInstallment} DH`,
+          dueDate: currentDate,
+          metadata: {
+            ...data.metadata,
+            batchId: Date.now().toString(),
+            installmentAmount: amountPerInstallment,
+            installmentIndex: i + 1,
+            installmentTotal: count,
+            installmentFrequency: frequency
+          }
+        });
+      }
+    }
+
+    // Bulk Insert
+    if (remindersToCreate.length > 0) {
+      await db.insert(reminders).values(remindersToCreate);
+    }
+
+    revalidatePath('/dashboard', 'page');
+    revalidateTag('reminders');
+    return { success: true, count: remindersToCreate.length };
+
+  } else {
+    // --- SINGLE CREATION (Legacy) ---
+    const [newReminder] = await db
+      .insert(reminders)
+      .values({
+        userId: session.user.id,
+        ...data,
+        dueDate: data.dueDate ? new Date(data.dueDate) : null,
+        metadata: data.metadata || null,
+      } as any)
+      .returning();
+
+    revalidatePath('/dashboard', 'page');
+    revalidateTag('reminders');
+    return newReminder;
   }
 }
 
@@ -213,7 +251,7 @@ export async function createReminder(data: any) {
  */
 export async function markReminderAsRead(id: number) {
   const session = await auth();
-  
+
   if (!session?.user?.id) {
     throw new Error('Non authentifié');
   }
@@ -232,7 +270,7 @@ export async function markReminderAsRead(id: number) {
     )
     .returning();
 
-  revalidatePath('/dashboard');
+  revalidatePath('/dashboard', 'page');
   revalidatePath('/', 'layout'); // Update sidebar badge
   revalidateTag('reminders');
   return updated;
@@ -243,7 +281,7 @@ export async function markReminderAsRead(id: number) {
  */
 export async function completeReminder(id: number) {
   const session = await auth();
-  
+
   if (!session?.user?.id) {
     throw new Error('Non authentifié');
   }
@@ -262,7 +300,7 @@ export async function completeReminder(id: number) {
     )
     .returning();
 
-  revalidatePath('/dashboard');
+  revalidatePath('/dashboard', 'page');
   revalidatePath('/', 'layout'); // Update sidebar badge
   revalidateTag('reminders');
   return updated;
@@ -273,7 +311,7 @@ export async function completeReminder(id: number) {
  */
 export async function deleteReminder(id: number) {
   const session = await auth();
-  
+
   if (!session?.user?.id) {
     throw new Error('Non authentifié');
   }
@@ -288,10 +326,42 @@ export async function deleteReminder(id: number) {
     )
     .returning();
 
-  revalidatePath('/dashboard');
+  revalidatePath('/dashboard', 'page');
   revalidatePath('/', 'layout'); // Update sidebar badge
   revalidateTag('reminders');
   return deleted;
+}
+
+/**
+ * Update an existing reminder
+ */
+export async function updateReminder(id: number, data: any) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    throw new Error('Non authentifié');
+  }
+
+  const [updated] = await db
+    .update(reminders)
+    .set({
+      ...data,
+      dueDate: data.dueDate ? new Date(data.dueDate) : null,
+      metadata: data.metadata || undefined, // Don't stringify, Drizzle handles it
+      updatedAt: new Date(),
+    } as any)
+    .where(
+      and(
+        eq(reminders.id, id),
+        eq(reminders.userId, session.user.id)
+      )
+    )
+    .returning();
+
+  revalidatePath('/dashboard', 'page');
+  revalidatePath('/', 'layout');
+  revalidateTag('reminders');
+  return updated;
 }
 
 /**
@@ -300,7 +370,7 @@ export async function deleteReminder(id: number) {
  */
 export async function checkDeadlines(shouldRevalidate = true) {
   const session = await auth();
-  
+
   if (!session?.user?.id) {
     return { success: false, error: 'Non authentifié' };
   }
@@ -352,7 +422,7 @@ export async function checkDeadlines(shouldRevalidate = true) {
         relatedId: product.id,
         relatedType: 'products',
         dueDate: new Date(),
-        metadata: JSON.stringify({ details: `Référence: ${product.reference}` }),
+        metadata: { details: `Référence: ${product.reference}` },
       } as any);
       newRemindersCount++;
     }
@@ -391,7 +461,7 @@ export async function checkDeadlines(shouldRevalidate = true) {
       // Check if it's due (e.g., older than 7 days)
       const saleDate = sale.date ? new Date(sale.date) : new Date();
       const diffTime = Math.abs(new Date().getTime() - saleDate.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
       if (diffDays >= 7) {
         await db.insert(reminders).values({
@@ -404,7 +474,7 @@ export async function checkDeadlines(shouldRevalidate = true) {
           relatedId: sale.id,
           relatedType: 'sales',
           dueDate: new Date(), // Due immediately
-          metadata: JSON.stringify({ details: `Vente du ${saleDate.toLocaleDateString()}` }),
+          metadata: { details: `Vente du ${saleDate.toLocaleDateString()}`, totalAmount: sale.totalTTC, resteAPayer: sale.resteAPayer },
         } as any);
         newRemindersCount++;
       }
@@ -474,22 +544,24 @@ export async function checkDeadlines(shouldRevalidate = true) {
           relatedId: order.id,
           relatedType: 'supplier_orders',
           dueDate: order.dueDate,
-          metadata: JSON.stringify({ 
-             details: `Montant dû: ${order.resteAPayer} DH`,
-             orderId: order.id
-          }),
+          metadata: {
+            details: `Montant dû: ${order.resteAPayer} DH`,
+            orderId: order.id,
+            totalAmount: order.montantTotal,
+            resteAPayer: order.resteAPayer
+          },
         } as any);
         newRemindersCount++;
       }
     }
   }
-  
+
   if (newRemindersCount > 0 && shouldRevalidate) {
     revalidatePath('/dashboard');
     revalidatePath('/', 'layout'); // Update sidebar badge
     revalidateTag('reminders');
   }
-  
+
   return { success: true, message: `Vérification terminée. ${newRemindersCount} nouveaux rappels.` };
 }
 
@@ -498,7 +570,7 @@ export async function checkDeadlines(shouldRevalidate = true) {
  */
 export async function getUnreadReminderCount() {
   const session = await auth();
-  
+
   if (!session?.user?.id) {
     return 0;
   }
