@@ -1,4 +1,4 @@
-import { requireUser } from '@/lib/auth';
+import { requireUser } from '@/lib/auth-helpers';
 import DashboardClient from './_components/dashboard-client';
 import { getClientUsageStats } from '@/app/actions/adminActions';
 

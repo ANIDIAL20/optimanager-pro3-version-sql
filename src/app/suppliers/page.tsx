@@ -54,19 +54,30 @@ export default function SuppliersPage() {
   }
 
   return (
-    <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold tracking-tight">Fournisseurs</h2>
+    <div className="flex-1 space-y-8 p-4 md:p-8 pt-6">
+      {/* Header - Standardized theme */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-center gap-4">
+          <div className="h-12 w-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 shadow-sm border border-blue-100">
+            <Truck className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+              Fournisseurs
+            </h1>
+            <p className="text-slate-500 mt-1">
+              Gérez votre réseau de partenaires et suivez vos approvisionnements.
+            </p>
+          </div>
+        </div>
+
         <Link href="/suppliers/new">
-          <Button className="bg-primary hover:bg-primary/90 text-white shadow-md">
-            <Plus className="mr-2 h-4 w-4" />
+          <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md gap-2">
+            <Plus className="h-4 w-4" />
             Nouveau Fournisseur
           </Button>
         </Link>
       </div>
-
-      <Separator />
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-3">

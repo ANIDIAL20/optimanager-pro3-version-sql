@@ -6,7 +6,7 @@
 'use server';
 
 import { db } from '@/db';
-import { prescriptions, clients } from '@/db/schema';
+import { prescriptionsLegacy as prescriptions, prescriptions as newPrescriptionsTable, clients } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
@@ -54,37 +54,81 @@ export interface Prescription {
 /**
  * Get all prescriptions (optionally filtered by client)
  */
+// Consolidated Get Prescriptions function
 export const getPrescriptions = secureAction(async (userId, user, clientId?: string) => {
     try {
-        const query = db.query.prescriptions.findMany({
+        // 1. Fetch from LEGACY table
+        const legacyQuery = db.query.prescriptionsLegacy.findMany({
             where: and(
                 eq(prescriptions.userId, userId),
                 clientId ? eq(prescriptions.clientId, parseInt(clientId)) : undefined
             ),
-            with: {
-                client: true
-            },
-            orderBy: [desc(prescriptions.date)]
+            with: { client: true }
         });
 
-        const results = await query;
+        // 2. Fetch from NEW table (AI Scanner)
+        const newPrescriptionsQuery = db.query.prescriptions.findMany({
+            where: and(
+                eq(newPrescriptionsTable.userId, userId),
+                clientId ? eq(newPrescriptionsTable.clientId, parseInt(clientId)) : undefined
+            ),
+             with: { client: true }
+        });
 
-        const mapped: Prescription[] = results.map(p => ({
-            id: p.id.toString(),
+        const [legacyResults, newResults] = await Promise.all([legacyQuery, newPrescriptionsQuery]);
+
+        // 3. Map LEGACY results
+        const mappedLegacy: Prescription[] = legacyResults.map((p: any) => ({
+            id: p.id?.toString(),
             clientId: p.clientId?.toString() || '',
-            clientName: p.client?.fullName,
-            date: p.date?.toISOString() || '',
+            clientName: (p as any).client?.fullName || 'N/A',
+            date: p.date instanceof Date ? p.date.toISOString() : (p.date || ''),
             data: p.prescriptionData as PrescriptionData,
             notes: p.notes || '',
-            createdAt: p.createdAt?.toISOString() || ''
+            createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : (p.createdAt || ''),
+            source: 'legacy'
         }));
 
-        await logSuccess(userId, 'READ', 'prescriptions', undefined, { count: mapped.length });
-        return { success: true, data: mapped };
+        // 4. Map NEW results
+        const mappedNew: Prescription[] = newResults.map((p: any) => ({
+            id: p.id,
+            clientId: p.clientId?.toString() || '',
+            clientName: (p as any).client?.fullName || 'N/A',
+            date: p.prescriptionDate instanceof Date ? p.prescriptionDate.toISOString() : (p.prescriptionDate || ''),
+            data: {
+                od: {
+                    sphere: p.odSph?.toString() || '',
+                    cylinder: p.odCyl?.toString() || '',
+                    axis: p.odAxis?.toString() || '',
+                    addition: p.odAdd?.toString() || ''
+                },
+                og: {
+                    sphere: p.osSph?.toString() || '',
+                    cylinder: p.osCyl?.toString() || '',
+                    axis: p.osAxis?.toString() || '',
+                    addition: p.osAdd?.toString() || ''
+                },
+                pd: p.pd?.toString() || '',
+                doctorName: p.doctorName || ''
+            },
+            notes: p.notes || '',
+            createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : (p.createdAt || ''),
+            imageUrl: p.imageUrl,
+            source: 'scan'
+        }));
+
+        // 5. Combine and Sort by Date
+        const allPrescriptions = [...mappedNew, ...mappedLegacy].sort((a, b) => {
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        });
+
+        await logSuccess(userId, 'READ', 'prescriptions', 'list', { count: allPrescriptions.length });
+        return { success: true, data: allPrescriptions };
 
     } catch (error: any) {
+        console.error('💥 Error fetching prescriptions:', error);
         await logFailure(userId, 'READ', 'prescriptions', error.message);
-        return { success: false, error: 'Erreur lors de la récupération des ordonnances' };
+        return { success: false, error: `Erreur récupération ordonnances: ${error.message}` };
     }
 });
 
@@ -94,7 +138,7 @@ export const getPrescriptions = secureAction(async (userId, user, clientId?: str
 export const getPrescription = secureAction(async (userId, user, id: string) => {
     try {
         const prescriptionId = parseInt(id);
-        const result = await db.query.prescriptions.findFirst({
+        const result = await db.query.prescriptionsLegacy.findFirst({
             where: and(
                 eq(prescriptions.id, prescriptionId),
                 eq(prescriptions.userId, userId)
@@ -193,15 +237,29 @@ export const updatePrescription = secureAction(async (userId, user, id: string, 
  */
 export const deletePrescription = secureAction(async (userId, user, id: string) => {
     try {
-        const prescriptionId = parseInt(id);
+        let deleted = false;
 
-        const result = await db.delete(prescriptions)
-            .where(and(eq(prescriptions.id, prescriptionId), eq(prescriptions.userId, userId)))
-            .returning();
+        // 1. Try deleting from LEGACY table (if ID is integer)
+        const prescriptionId = parseInt(id);
+        if (!isNaN(prescriptionId)) {
+            const result = await db.delete(prescriptions)
+                .where(and(eq(prescriptions.id, prescriptionId), eq(prescriptions.userId, userId)))
+                .returning();
+            if (result.length > 0) deleted = true;
+        }
+
+        // 2. If not found, try deleting from NEW table (UUID)
+        if (!deleted) {
+             const result = await db.delete(newPrescriptionsTable)
+                .where(and(eq(newPrescriptionsTable.id, id), eq(newPrescriptionsTable.userId, userId)))
+                .returning();
+             if (result.length > 0) deleted = true;
+        }
         
-        if (result.length === 0) return { success: false, error: 'Ordonnance introuvable' };
+        if (!deleted) return { success: false, error: 'Ordonnance introuvable' };
 
         await logSuccess(userId, 'DELETE', 'prescriptions', id);
+        revalidatePath('/dashboard/clients'); // Ensure cache is cleared
         return { success: true, message: 'Ordonnance supprimée' };
 
     } catch (error: any) {

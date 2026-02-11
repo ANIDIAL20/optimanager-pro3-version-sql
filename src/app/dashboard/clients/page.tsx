@@ -214,16 +214,20 @@ export default function ClientsPage() {
 
     return (
         <div className="container mx-auto p-6 space-y-6">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-2">
-                        <Users className="h-8 w-8" />
-                        Clients / Patients
-                    </h1>
-                    <p className="text-slate-600 mt-1">
-                        Gérez vos clients, suivez leurs soldes et historiques.
-                    </p>
+            {/* Header - Standardized theme */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 shadow-sm border border-blue-100">
+                        <Users className="h-6 w-6" />
+                    </div>
+                    <div>
+                        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+                            Clients / Patients
+                        </h1>
+                        <p className="text-slate-500 mt-1">
+                            Gérez vos clients, suivez leurs soldes et historiques.
+                        </p>
+                    </div>
                 </div>
 
                 <Button asChild className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md">

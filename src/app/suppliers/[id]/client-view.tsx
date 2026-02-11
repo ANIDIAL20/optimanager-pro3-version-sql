@@ -10,7 +10,6 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PageHeader } from '@/components/page-header';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
     AlertDialog,
@@ -23,9 +22,9 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, Edit, Trash2, ChevronLeft, FileText, CreditCard, LayoutDashboard } from 'lucide-react';
+import { AlertCircle, Edit, Trash2, ArrowLeft, Truck, FileText, CreditCard, LayoutDashboard } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { BackButton } from '@/components/ui/back-button';
+import Link from 'next/link';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
     Table,
@@ -163,31 +162,35 @@ export default function SupplierView({ supplier, orders = [], payments = [], err
     };
 
     return (
-        <div className="flex flex-1 flex-col gap-6">
+        <div className="flex flex-1 flex-col gap-6 p-6">
             {/* Header Area */}
-            <div className="flex flex-col gap-4">
-                <Button
-                    variant="ghost"
-                    onClick={() => router.push('/suppliers')}
-                    className="w-fit flex items-center text-sm text-slate-500 hover:text-slate-900 transition-colors"
-                >
-                    <ChevronLeft className="mr-1 h-4 w-4" />
-                    Retour à la liste
-                </Button>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="flex items-center gap-4">
+                    <Button variant="ghost" size="icon" asChild className="rounded-full hover:bg-slate-100 h-10 w-10">
+                        <Link href="/suppliers">
+                            <ArrowLeft className="h-5 w-5 text-slate-500" />
+                        </Link>
+                    </Button>
+                    <div>
+                        <div className="flex items-center gap-3 mb-1">
+                            <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+                                <div className="h-10 w-10 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
+                                    <Truck className="h-6 w-6" />
+                                </div>
+                                {s.nomCommercial}
+                            </h1>
+                        </div>
+                        <p className="text-slate-500 ml-1">{s.raisonSociale || 'Détails du fournisseur'}</p>
+                    </div>
+                </div>
 
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight text-slate-900">{s.nomCommercial}</h1>
-                        <p className="text-slate-500">{s.raisonSociale || 'Détails du fournisseur'}</p>
-                     </div>
-                     <div className="flex gap-2">
-                        <Button variant="outline" onClick={() => router.push(`/suppliers/${s.id}/edit`)}>
-                            <Edit className="mr-2 h-4 w-4" /> Modifier
-                        </Button>
-                        <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} disabled={isDeleting}>
-                            <Trash2 className="mr-2 h-4 w-4" /> Supprimer
-                        </Button>
-                     </div>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => router.push(`/suppliers/${s.id}/edit`)}>
+                        <Edit className="mr-2 h-4 w-4" /> Modifier
+                    </Button>
+                    <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} disabled={isDeleting}>
+                        <Trash2 className="mr-2 h-4 w-4" /> Supprimer
+                    </Button>
                 </div>
             </div>
 

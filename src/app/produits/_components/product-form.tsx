@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useForm, useFieldArray, useWatch, Control, UseFormReturn } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Card,
@@ -27,6 +28,7 @@ import { Trash2, Plus, Copy, ArrowDownToLine, ArrowLeft, Package, Truck, FileTex
 import type { Brand, Material, Category, Color, Product, Supplier } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { Badge } from '@/components/ui/badge';
 import { createBulkProducts, updateProduct } from '@/app/actions/products-actions';
 import { getBrands, getCategories, getMaterials, getColors, createSetting } from '@/app/actions/settings-actions';
 import { getSuppliersList } from '@/app/actions/supplier-actions';
@@ -44,14 +46,15 @@ import {
 } from "@/components/ui/collapsible";
 import { CreditCard, Wallet } from 'lucide-react';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
+import { BreadcrumbCustom } from "@/components/ui/breadcrumb-custom";
 
-const GRID_LAYOUT = "grid grid-cols-[45px_1fr_240px_350px_70px] items-center";
+const GRID_LAYOUT = "grid grid-cols-[50px_1fr_200px_300px_80px] items-center gap-4";
 
 const COLUMNS = [
     { id: 'index', label: '#', align: 'center' },
-    { id: 'identity', label: 'INFO PRODUIT (Nom • Réf • Marque • Catégorie)', align: 'left' },
-    { id: 'specs', label: 'TECHNIQUE (Matière • Couleur)', align: 'left' },
-    { id: 'financials', label: 'OFFRE & STOCK (Prix • Marge • Quantité)', align: 'right' },
+    { id: 'identity', label: 'Produit', align: 'left' },
+    { id: 'specs', label: 'Détails', align: 'left' },
+    { id: 'financials', label: 'Offre & Stock', align: 'right' },
     { id: 'actions', label: '', align: 'center' },
 ] as const;
 
@@ -364,58 +367,33 @@ export function ProductForm({ product }: ProductFormProps) {
     <TooltipProvider>
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="w-full max-w-[1600px] mx-auto px-6 pb-12">
-        {/* Breadcrumb Navigation */}
-        <div className="flex items-center gap-2 mb-4">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-primary transition-colors cursor-pointer" onClick={() => router.push('/dashboard')}>Tableau de bord</span>
-            <span className="text-slate-300 text-[10px]">/</span>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-primary transition-colors cursor-pointer" onClick={() => router.push('/produits')}>Produits</span>
-            <span className="text-slate-300 text-[10px]">/</span>
-            <span className="text-[10px] font-black text-primary uppercase tracking-widest">
-                {isEditMode ? "Modification" : "Nouvelle Entrée"}
-            </span>
-        </div>
-
-        <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-100 pb-6">
+        <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-center gap-4">
-                <div className="h-12 w-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary shadow-inner">
-                    <Package className="h-6 w-6" />
-                </div>
+                <Button variant="ghost" size="icon" asChild className="rounded-full hover:bg-slate-100 h-10 w-10">
+                    <Link href="/produits">
+                        <ArrowLeft className="h-5 w-5 text-slate-500" />
+                    </Link>
+                </Button>
                 <div>
                     <div className="flex items-center gap-3 mb-1">
-                        <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-                            {isEditMode ? "Modifier le Produit" : "Nouvelle Entrée en Stock"}
+                        <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+                            <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">
+                                <Package className="h-6 w-6" />
+                            </div>
+                            {isEditMode ? "Modifier le Produit" : "Nouvelle Entrée"}
                         </h1>
                         {!isEditMode && (
-                            <span className="bg-primary/10 text-primary text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest border border-primary/20">
+                            <Badge variant="outline" className="bg-blue-50/50 text-blue-700 border-blue-100 font-bold px-2.5 py-0.5 rounded-full">
                                 Étape 1/2
-                            </span>
+                            </Badge>
                         )}
                     </div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-tighter">
+                    <p className="text-slate-500 ml-1">
                         {isEditMode 
                             ? `ID Produit: ${product?.id} — Réf: ${product?.reference}` 
                             : "Configurez les produits et les détails de la facture fournisseur"}
                     </p>
                 </div>
-            </div>
-            <div className="flex items-center gap-3">
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="outline" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest text-slate-500 gap-2 border-slate-200 hover:bg-slate-50 transition-all rounded-xl">
-                            <Keyboard className="h-3.5 w-3.5" /> Raccourcis
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="text-[10px] font-bold">Ctrl+Enter: Nouvelle Ligne | Ctrl+D: Dupliquer</TooltipContent>
-                </Tooltip>
-                
-                <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-9 px-4 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 gap-2 rounded-xl"
-                    onClick={() => router.back()}
-                >
-                    <ArrowLeft className="h-3.5 w-3.5" /> Retour
-                </Button>
             </div>
         </div>
 
@@ -439,47 +417,47 @@ export function ProductForm({ product }: ProductFormProps) {
                             <div className="grid grid-cols-2 gap-4">
                                 <SpotlightCard className="p-4" spotlightColor="rgba(59, 130, 246, 0.1)">
                                     <div className="flex items-center justify-between mb-2">
-                                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Total HT</span>
-                                        <div className="h-6 w-6 rounded-md bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm">
-                                            <CreditCard className="h-3 w-3 text-white" />
+                                        <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">Total HT</span>
+                                        <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                                            <CreditCard className="h-4 w-4 text-blue-600" />
                                         </div>
                                     </div>
                                     <div className="flex flex-col">
-                                        <span className="text-xl font-black text-slate-800 tracking-tight">
+                                        <span className="text-2xl font-bold text-slate-900 tracking-tight">
                                             {totals.totalCostHT.toLocaleString('fr-FR', { minimumFractionDigits: 2 })}
                                         </span>
-                                        <span className="text-[10px] font-bold text-slate-400">DH Hors Taxe</span>
+                                        <span className="text-xs font-medium text-slate-500">DH Hors Taxe</span>
                                     </div>
                                 </SpotlightCard>
 
                                 <SpotlightCard className="p-4" spotlightColor="rgba(16, 185, 129, 0.1)">
                                     <div className="flex items-center justify-between mb-2">
-                                        <span className="text-[9px] font-black uppercase text-emerald-600/70 tracking-wider">Total TTC</span>
-                                        <div className="h-6 w-6 rounded-md bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-sm">
-                                            <Wallet className="h-3 w-3 text-white" />
+                                        <span className="text-xs font-semibold uppercase text-emerald-700 tracking-wider">Total TTC</span>
+                                        <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+                                            <Wallet className="h-4 w-4 text-emerald-600" />
                                         </div>
                                     </div>
                                     <div className="flex flex-col">
-                                        <span className="text-xl font-black text-emerald-600 tracking-tight">
+                                        <span className="text-2xl font-bold text-emerald-600 tracking-tight">
                                             {totals.totalCostTTC.toLocaleString('fr-FR', { minimumFractionDigits: 2 })}
                                         </span>
-                                        <span className="text-[10px] font-bold text-emerald-600/60">DH TTC</span>
+                                        <span className="text-xs font-medium text-emerald-600/80">DH TTC</span>
                                     </div>
                                 </SpotlightCard>
                             </div>
 
                             {/* Stats & Actions */}
-                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col justify-between flex-1">
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col justify-between flex-1">
                                 <div className="flex items-center justify-between mb-4">
-                                    <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-6">
                                         <div className="flex flex-col">
-                                            <span className="text-[9px] font-black uppercase text-slate-400">Articles</span>
-                                            <span className="text-sm font-black text-slate-800">{totals.units}</span>
+                                            <span className="text-xs font-medium text-slate-500 uppercase">Articles</span>
+                                            <span className="text-2xl font-bold text-slate-900">{totals.units}</span>
                                         </div>
-                                        <div className="h-8 w-px bg-slate-100 mx-2" />
+                                        <div className="h-8 w-px bg-slate-100" />
                                         <div className="flex flex-col">
-                                            <span className="text-[9px] font-black uppercase text-slate-400">Lignes</span>
-                                            <span className="text-sm font-black text-slate-800">{totals.count}</span>
+                                            <span className="text-xs font-medium text-slate-500 uppercase">Lignes</span>
+                                            <span className="text-2xl font-bold text-slate-900">{totals.count}</span>
                                         </div>
                                     </div>
                                     {invalidLinesCount > 0 && (
@@ -489,18 +467,18 @@ export function ProductForm({ product }: ProductFormProps) {
                                         </div>
                                     )}
                                 </div>
-                                <div className="flex bg-white gap-2 mt-4">
+                                <div className="flex bg-white gap-3 mt-6">
                                     <SubmitButton 
                                         isLoading={isSubmitting} 
                                         disabled={invalidLinesCount > 0}
-                                        className="flex-1 shadow-md hover:shadow-lg transition-all h-10 font-black uppercase tracking-widest text-[10px] rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700" 
+                                        className="flex-1 shadow-md hover:shadow-lg transition-all h-10 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700" 
                                     >
-                                        <span className="flex items-center gap-2 justify-center">
-                                            <Truck className="h-3.5 w-3.5" />
+                                        <span className="flex items-center gap-2 justify-center font-semibold">
+                                            <Truck className="h-4 w-4" />
                                             {`Valider (${totals.count})`}
                                         </span>
                                     </SubmitButton>
-                                    <Button type="button" variant="ghost" className="h-10 px-4 text-slate-400 hover:text-slate-600 font-bold text-[9px] uppercase tracking-widest border border-slate-100 rounded-lg hover:bg-slate-50" onClick={() => router.back()}>
+                                    <Button type="button" variant="ghost" className="h-10 px-4 text-slate-500 hover:text-slate-800 font-medium" onClick={() => router.back()}>
                                         Abandonner
                                     </Button>
                                 </div>
@@ -546,14 +524,14 @@ export function ProductForm({ product }: ProductFormProps) {
                 </div>
             )}
 
-            <div className="flex items-center justify-between px-4 py-2 bg-blue-50/50 border border-blue-100 rounded-lg">
-                <div className="flex items-center gap-2 text-[11px] font-bold text-blue-600">
-                    <Info className="h-3.5 w-3.5 fill-blue-100" />
+            <div className="flex items-center justify-between px-6 py-3 bg-blue-50/50 border border-blue-100 rounded-lg">
+                <div className="flex items-center gap-2 text-sm font-medium text-blue-700">
+                    <Info className="h-4 w-4 fill-blue-200" />
                     <span>Saisie assistée : {selectedSupplier ? `${selectedSupplier.name} (${selectedSupplier.defaultTaxMode || 'HT'})` : "Sélectionnez un fournisseur."}</span>
                 </div>
                 {hasMixedTaxes && (
-                    <div className="flex items-center gap-2 text-[11px] font-black text-amber-600 animate-pulse uppercase tracking-tighter">
-                        <AlertCircle className="h-3.5 w-3.5" />
+                    <div className="flex items-center gap-2 text-sm font-semibold text-amber-600 animate-pulse">
+                        <AlertCircle className="h-4 w-4" />
                         <span>Attention : Mélange HT/TTC</span>
                     </div>
                 )}
@@ -566,11 +544,11 @@ export function ProductForm({ product }: ProductFormProps) {
                             {COLUMNS.map((col) => (
                                 <TableHead 
                                     key={col.id} 
-                                    className="py-4 font-black text-[10px] uppercase tracking-[0.15em] text-slate-500 whitespace-nowrap border-b border-slate-200"
+                                    className="py-4 font-semibold text-xs text-slate-500 border-b border-slate-200"
                                     style={{ textAlign: col.align as any }}
                                 >
                                     <div className={cn(
-                                        "flex items-center gap-2",
+                                        "flex items-center gap-2 mb-2",
                                         col.align === 'right' ? 'justify-end' : col.align === 'center' ? 'justify-center' : 'justify-start'
                                     )}>
                                         {col.label}
@@ -626,8 +604,8 @@ export function ProductForm({ product }: ProductFormProps) {
                         <Plus className="h-5 w-5 text-slate-500 group-hover:text-primary" />
                     </div>
                     <div className="text-left">
-                        <span className="block text-sm font-black text-slate-700 group-hover:text-primary transition-colors uppercase tracking-widest">Ajouter une ligne</span>
-                        <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Nouveau produit ou ligne vide</span>
+                        <span className="block text-sm font-semibold text-slate-700 group-hover:text-primary transition-colors">Ajouter une ligne</span>
+                        <span className="block text-xs text-slate-400">Nouveau produit ou ligne vide</span>
                     </div>
                 </Button>
             </div>
@@ -651,10 +629,10 @@ function InvoiceInfoPanel({
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="w-full space-y-0 overflow-hidden bg-white">
       <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-100">
         <div className="flex items-center gap-3">
-            <div className="bg-primary/10 p-1.5 rounded-lg"><Package className="h-4 w-4 text-primary" /></div>
+            <div className="bg-primary/10 p-2 rounded-lg"><Package className="h-5 w-5 text-primary" /></div>
             <div>
-                <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Entrée Stock</h3>
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Information Facture</p>
+                <h3 className="text-sm font-bold text-slate-800">Entrée Stock</h3>
+                <p className="text-xs text-slate-500">Information Facture</p>
             </div>
         </div>
         <CollapsibleTrigger asChild>
@@ -670,8 +648,8 @@ function InvoiceInfoPanel({
             <div className="md:col-span-6">
                 <FormField control={form.control} name="fournisseurId" render={({ field }) => (
                     <FormItem className="space-y-2">
-                    <FormLabel className="text-[10px] font-bold uppercase text-slate-500 tracking-wider flex items-center gap-2">
-                        <Truck className="h-3.5 w-3.5 text-slate-400" /> 
+                    <FormLabel className="flex items-center gap-2 text-slate-600">
+                        <Truck className="h-4 w-4" /> 
                         Fournisseur
                     </FormLabel>
                     <SearchableSelect 
@@ -687,8 +665,8 @@ function InvoiceInfoPanel({
             <div className="md:col-span-3">
                 <FormField control={form.control} name="numFacture" render={({ field }) => (
                     <FormItem className="space-y-2">
-                    <FormLabel className="text-[10px] font-bold uppercase text-slate-500 tracking-wider flex items-center gap-2">
-                        <FileText className="h-3.5 w-3.5 text-slate-400" /> 
+                    <FormLabel className="flex items-center gap-2 text-slate-600">
+                        <FileText className="h-4 w-4" /> 
                         N° Facture
                     </FormLabel>
                     <FormControl>
@@ -706,8 +684,8 @@ function InvoiceInfoPanel({
             <div className="md:col-span-3">
                 <FormField control={form.control} name="dateAchat" render={({ field }) => (
                     <FormItem className="space-y-2">
-                    <FormLabel className="text-[10px] font-bold uppercase text-slate-500 tracking-wider flex items-center gap-2">
-                        <Calendar className="h-3.5 w-3.5 text-slate-400" /> 
+                    <FormLabel className="flex items-center gap-2 text-slate-600">
+                        <Calendar className="h-4 w-4" /> 
                         Date
                     </FormLabel>
                     <FormControl>
@@ -724,8 +702,8 @@ function InvoiceInfoPanel({
             {/* ROW 2: Tax Mode, Spacer, Quantity & Add */}
             <div className="md:col-span-4">
                 <div className="space-y-2">
-                    <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider flex items-center gap-2">
-                        <Receipt className="h-3.5 w-3.5 text-slate-400" />
+                    <span className="flex items-center gap-2 text-sm text-slate-600 font-medium">
+                        <Receipt className="h-4 w-4" />
                         Format Global
                     </span>
                     <div className="flex p-1 bg-slate-200/50 rounded-lg border border-slate-200/60">
@@ -733,9 +711,9 @@ function InvoiceInfoPanel({
                             type="button"
                             onClick={() => toggleGlobalTaxMode(false)}
                             className={cn(
-                                "flex-1 py-2 rounded-md text-[10px] font-black transition-all duration-200",
+                                "flex-1 py-2 rounded-md text-xs font-bold transition-all duration-200",
                                 !isGlobalTTC 
-                                    ? "bg-white text-slate-800 shadow-sm ring-1 ring-black/5" 
+                                    ? "bg-white text-slate-900 shadow-sm ring-1 ring-black/5" 
                                     : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                             )}
                         >
@@ -745,7 +723,7 @@ function InvoiceInfoPanel({
                             type="button"
                             onClick={() => toggleGlobalTaxMode(true)}
                             className={cn(
-                                "flex-1 py-1.5 rounded-md text-[10px] font-black transition-all duration-200",
+                                "flex-1 py-1.5 rounded-md text-xs font-bold transition-all duration-200",
                                 isGlobalTTC 
                                     ? "bg-white text-indigo-600 shadow-sm ring-1 ring-black/5" 
                                     : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
@@ -761,8 +739,8 @@ function InvoiceInfoPanel({
 
             <div className="md:col-span-4">
                 <div className="space-y-2">
-                     <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider flex items-center gap-2">
-                        <PlusCircle className="h-3.5 w-3.5 text-slate-400" />
+                    <span className="flex items-center gap-2 text-sm text-slate-600 font-medium">
+                        <PlusCircle className="h-4 w-4" />
                         Ajout Rapide
                     </span>
                     <div className="flex gap-2">
@@ -779,7 +757,7 @@ function InvoiceInfoPanel({
                         <Button 
                             type="button" 
                             variant="default" 
-                            className="flex-1 h-10 bg-slate-800 hover:bg-slate-900 text-white font-bold uppercase tracking-wider text-[10px] shadow-sm hover:shadow-md transition-all gap-2" 
+                            className="flex-1 h-10 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs shadow-sm hover:shadow-md transition-all gap-2" 
                             onClick={() => onAddRow(linesToAdd)}
                         >
                             <Plus className="h-4 w-4" /> 
@@ -847,7 +825,7 @@ function ProductRow({
             !isIncomplete && "hover:bg-blue-50/20"
         )}>
             {/* Index */}
-            <TableCell className="text-center text-[10px] font-black text-slate-300 py-4 h-full border-r border-slate-50">
+            <TableCell className="text-center text-xs font-medium text-slate-400 py-4 h-full border-r border-slate-50">
                 {String(index + 1).padStart(2, '0')}
             </TableCell>
             
@@ -857,10 +835,10 @@ function ProductRow({
                     {/* Nom & Reference Row */}
                     <div className="flex items-center gap-2">
                         <FormField control={control} name={`items.${index}.nomProduit`} render={({ field }) => (
-                            <FormControl><Input placeholder="Désignation du produit (Modèle, Série...)" {...field} onKeyDown={handleKeyDown} className={cn("h-9 text-sm font-black border-slate-200 bg-white focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all shadow-sm placeholder:text-slate-300 w-full", !nomProduit && "border-red-200 bg-red-50/30 placeholder:text-red-300")} /></FormControl>
+                            <FormControl><Input placeholder="Désignation du produit (Modèle, Série...)" {...field} onKeyDown={handleKeyDown} className={cn("h-10 text-sm font-medium border-slate-200 bg-white focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all shadow-sm placeholder:text-slate-400 w-full", !nomProduit && "border-red-200 bg-red-50/30 placeholder:text-red-300")} /></FormControl>
                         )} />
                         <FormField control={control} name={`items.${index}.reference`} render={({ field }) => (
-                            <FormControl><Input placeholder="RÉF" {...field} onKeyDown={handleKeyDown} className="h-9 w-[100px] text-[11px] font-mono border-slate-200 bg-white focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all shadow-sm uppercase placeholder:text-slate-300 shrink-0" /></FormControl>
+                            <FormControl><Input placeholder="RÉF" {...field} onKeyDown={handleKeyDown} className="h-10 w-[120px] text-xs font-mono border-slate-200 bg-white focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all shadow-sm uppercase placeholder:text-slate-400 shrink-0" /></FormControl>
                         )} />
                     </div>
 
@@ -868,12 +846,12 @@ function ProductRow({
                     <div className="flex items-center gap-2">
                         <FormField control={control} name={`items.${index}.marqueId`} render={({ field }) => (
                             <div className="flex-1">
-                                <SearchableSelect options={brands.map(b => ({ label: b.name, value: b.id }))} value={field.value} onChange={field.onChange} placeholder="Marque..." className={cn("h-8 text-[11px] font-bold border-slate-200 bg-white shadow-sm w-full", !marqueId && "border-red-200 text-red-500")} onCreateNew={(name) => handleQuickCreate('brands', name, setBrands, `items.${index}.marqueId`)} isCreating={isCreatingSetting} />
+                                <SearchableSelect options={brands.map(b => ({ label: b.name, value: b.id }))} value={field.value} onChange={field.onChange} placeholder="Marque..." className={cn("h-10 text-xs font-medium border-slate-200 bg-white shadow-sm w-full", !marqueId && "border-red-200 text-red-500")} onCreateNew={(name) => handleQuickCreate('brands', name, setBrands, `items.${index}.marqueId`)} isCreating={isCreatingSetting} />
                             </div>
                         )} />
                         <FormField control={control} name={`items.${index}.categorieId`} render={({ field }) => (
                            <div className="flex-1">
-                                <SearchableSelect options={categories.map(c => ({ label: c.name, value: c.id }))} value={field.value} onChange={field.onChange} placeholder="Catégorie..." className={cn("h-8 text-[11px] font-bold border-slate-200 bg-white shadow-sm w-full", !categorieId && "border-red-200 text-red-500")} onCreateNew={(name) => handleQuickCreate('categories', name, setCategories, `items.${index}.categorieId`)} isCreating={isCreatingSetting} />
+                                <SearchableSelect options={categories.map(c => ({ label: c.name, value: c.id }))} value={field.value} onChange={field.onChange} placeholder="Catégorie..." className={cn("h-10 text-xs font-medium border-slate-200 bg-white shadow-sm w-full", !categorieId && "border-red-200 text-red-500")} onCreateNew={(name) => handleQuickCreate('categories', name, setCategories, `items.${index}.categorieId`)} isCreating={isCreatingSetting} />
                            </div>
                         )} />
                     </div>
@@ -883,11 +861,11 @@ function ProductRow({
              {/* Technical - Column 2 */}
             <TableCell className="py-3 px-4 h-full border-r border-slate-50">
                  <div className="flex flex-col gap-2.5 h-full">
-                    <FormField control={control} name={`items.${index}.matiereId`} render={({ field }) => (
-                        <SearchableSelect options={materials.map(m => ({ label: m.name, value: m.id }))} value={field.value} onChange={field.onChange} placeholder="Matière (Acétate...)" className="h-9 text-[11px] border-slate-200 bg-slate-50/50 hover:bg-white shadow-none focus:bg-white transition-all w-full" onCreateNew={(name) => handleQuickCreate('materials', name, setMaterials, `items.${index}.matiereId`)} isCreating={isCreatingSetting} />
+                     <FormField control={control} name={`items.${index}.matiereId`} render={({ field }) => (
+                        <SearchableSelect options={materials.map(m => ({ label: m.name, value: m.id }))} value={field.value} onChange={field.onChange} placeholder="Matière (Acétate...)" className="h-10 text-xs border-slate-200 bg-slate-50/50 hover:bg-white shadow-none focus:bg-white transition-all w-full" onCreateNew={(name) => handleQuickCreate('materials', name, setMaterials, `items.${index}.matiereId`)} isCreating={isCreatingSetting} />
                     )} />
                     <FormField control={control} name={`items.${index}.couleurId`} render={({ field }) => (
-                        <SearchableSelect options={colors.map(c => ({ label: c.name, value: c.id }))} value={field.value} onChange={field.onChange} placeholder="Couleur (Noir...)" className="h-8 text-[11px] border-slate-200 bg-slate-50/50 hover:bg-white shadow-none focus:bg-white transition-all w-full" onCreateNew={(name) => handleQuickCreate('colors', name, setColors, `items.${index}.couleurId`)} isCreating={isCreatingSetting} />
+                        <SearchableSelect options={colors.map(c => ({ label: c.name, value: c.id }))} value={field.value} onChange={field.onChange} placeholder="Couleur (Noir...)" className="h-10 text-xs border-slate-200 bg-slate-50/50 hover:bg-white shadow-none focus:bg-white transition-all w-full" onCreateNew={(name) => handleQuickCreate('colors', name, setColors, `items.${index}.couleurId`)} isCreating={isCreatingSetting} />
                     )} />
                 </div>
             </TableCell>
@@ -899,13 +877,13 @@ function ProductRow({
                         <FormField control={control} name={`items.${index}.prixAchat`} render={({ field }) => (
                             <div className="relative group/price flex flex-col">
                                 <div className="relative flex items-center">
-                                    <span className="absolute left-2 top-[3px] text-[7px] font-black text-slate-400 uppercase tracking-widest z-10 pointer-events-none">Achat</span>
-                                    <Input type="number" step="0.01" {...field} onKeyDown={handleKeyDown} className="h-10 pt-3 text-right pr-7 pl-2 font-mono text-[13px] font-bold border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-primary/10 w-full" />
+                                    <span className="absolute left-2 top-[3px] text-[10px] font-bold text-slate-400 uppercase tracking-wider z-10 pointer-events-none">Achat</span>
+                                    <Input type="number" step="0.01" {...field} onKeyDown={handleKeyDown} className="no-spinner h-11 pt-4 text-right pr-9 pl-2 font-mono text-sm font-bold border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-primary/10 w-full" />
                                     <FormField control={control} name={`items.${index}.isAchatTTC`} render={({ field }) => (
                                         <div 
                                             onClick={() => field.onChange(!field.value)} 
                                             className={cn(
-                                                "absolute right-1 top-[4px] h-8 w-6 rounded flex items-center justify-center cursor-pointer transition-all border text-[8px] font-black z-20",
+                                                "absolute right-1 top-[6px] h-8 w-6 rounded flex items-center justify-center cursor-pointer transition-all border text-[10px] font-bold z-20",
                                                 field.value ? "bg-green-50 border-green-200 text-green-600" : "bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100"
                                             )}
                                         >
@@ -914,7 +892,7 @@ function ProductRow({
                                     )} />
                                 </div>
                                 <div className="mt-1 flex justify-end px-1">
-                                    <span className="text-[9px] font-bold text-slate-400 tabular-nums">
+                                    <span className="text-[10px] font-medium text-slate-400 tabular-nums">
                                         Eq. {isAchatTTC ? (valPrixAchat / 1.2).toFixed(2) : (valPrixAchat * 1.2).toFixed(2)} {isAchatTTC ? 'HT' : 'TTC'}
                                     </span>
                                 </div>
@@ -922,27 +900,27 @@ function ProductRow({
                         )} />
                          <FormField control={control} name={`items.${index}.prixVente`} render={({ field }) => (
                             <div className="relative">
-                                <span className="absolute left-2 top-[3px] text-[7px] font-black text-slate-400 uppercase tracking-widest pointer-events-none">Vente TTC</span>
-                                <Input type="number" step="0.01" {...field} onKeyDown={handleKeyDown} className={cn("h-10 pt-3 text-right pr-2 pl-2 font-mono font-black text-[13px] border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-emerald-500/20", isLowMargin ? "text-red-500" : "text-emerald-600")} />
+                                <span className="absolute left-2 top-[3px] text-[10px] font-bold text-slate-400 uppercase tracking-wider pointer-events-none">Vente TTC</span>
+                                <Input type="number" step="0.01" {...field} onKeyDown={handleKeyDown} className={cn("no-spinner h-11 pt-4 text-right pr-2 pl-2 font-mono font-bold text-sm border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-emerald-500/20", isLowMargin ? "text-red-500" : "text-emerald-600")} />
                             </div>
                         )} />
                     </div>
                     
                     <div className="grid grid-cols-[1fr_1fr_60px] items-center gap-1 p-1 bg-slate-50 rounded-lg border border-slate-100">
                         <div className="flex items-center gap-1.5 pl-1.5">
-                            <span className="text-[9px] font-black uppercase text-slate-400 shrink-0">Stock</span>
+                            <span className="text-[10px] font-bold uppercase text-slate-400 shrink-0">Stock</span>
                             <FormField control={control} name={`items.${index}.quantiteStock`} render={({ field }) => (
-                                <Input type="number" {...field} onKeyDown={handleKeyDown} className="h-5 w-full text-center font-mono text-[11px] font-black border-transparent bg-white shadow-sm p-0 rounded focus:ring-0" />
+                                <Input type="number" {...field} onKeyDown={handleKeyDown} className="no-spinner h-8 w-full text-center font-mono text-xs font-bold border-transparent bg-white shadow-sm p-0 rounded focus:ring-0" />
                             )} />
                         </div>
                         <div className="flex items-center gap-1.5 border-l border-slate-200 pl-1.5">
-                            <span className="text-[8px] font-black uppercase text-slate-400 shrink-0">Min</span>
+                            <span className="text-[10px] font-bold uppercase text-slate-400 shrink-0">Min</span>
                             <FormField control={control} name={`items.${index}.stockMin`} render={({ field }) => (
-                                <Input type="number" {...field} onKeyDown={handleKeyDown} className="h-5 w-full text-center font-mono text-[10px] font-bold border-transparent bg-white shadow-sm p-0 rounded focus:ring-0" />
+                                <Input type="number" {...field} onKeyDown={handleKeyDown} className="no-spinner h-8 w-full text-center font-mono text-xs font-bold border-transparent bg-white shadow-sm p-0 rounded focus:ring-0" />
                             )} />
                         </div>
                         <div className="flex justify-center border-l border-slate-200">
-                            <span className={cn("text-[10px] font-black tabular-nums tracking-tighter", valPrixVente === 0 ? "text-slate-200" : isLowMargin ? "text-red-500" : "text-emerald-600")}>
+                            <span className={cn("text-xs font-bold tabular-nums", valPrixVente === 0 ? "text-slate-200" : isLowMargin ? "text-red-500" : "text-emerald-600")}>
                                 {isFinite(marginPercent) ? `${marginPercent.toFixed(0)}%` : '-'}
                             </span>
                         </div>

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth-helpers';
 import { getSales } from '@/app/actions/sales-actions';
 import { getClients } from '@/app/actions/clients-actions';
 import { VentesClientPage } from './ventes-client';
@@ -17,11 +17,11 @@ export default async function VentesPage() {
     
     // Strict security: require authenticated user
     if (!user) {
-        console.warn('⚠️ Unauthorized access attempt to /dashboard/ventes');
+        console.warn('âš ï¸ Unauthorized access attempt to /dashboard/ventes');
         redirect('/login');
     }
 
-    console.log('✅ Authenticated user accessing ventes:', user.uid);
+    console.log('âœ… Authenticated user accessing ventes:', user.uid);
 
     // ============================================
     // 2. DATA FETCHING WITH ERROR HANDLING
@@ -42,7 +42,7 @@ export default async function VentesPage() {
         // Handle sales response
         if (salesRes.success && salesRes.sales) {
             sales = salesRes.sales as Sale[];
-            console.log(`✅ Loaded ${sales.length} sales`);
+            console.log(`âœ… Loaded ${sales.length} sales`);
         } else {
             throw new Error(salesRes.error || 'Failed to load sales');
         }
@@ -63,14 +63,14 @@ export default async function VentesPage() {
                     id: c.id?.toString() || '',
                 } as any;
             });
-            console.log(`✅ Loaded ${clients.length} clients`);
+            console.log(`âœ… Loaded ${clients.length} clients`);
         } else {
             // Non-critical - UI still works without client data
-            console.warn('⚠️ Failed to load clients:', clientsRes.error);
+            console.warn('âš ï¸ Failed to load clients:', clientsRes.error);
         }
 
     } catch (err: any) {
-        console.error('❌ Error loading ventes data:', err);
+        console.error('âŒ Error loading ventes data:', err);
         error = err.message || 'Impossible de charger les ventes.';
     }
 

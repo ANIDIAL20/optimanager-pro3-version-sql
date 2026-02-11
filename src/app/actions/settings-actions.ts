@@ -87,7 +87,7 @@ import { unstable_noStore as noStore, revalidatePath } from 'next/cache';
 /**
  * Get all items from a settings table
  */
-import { secureAction } from '@/lib/secure-action';
+import { secureAction, secureActionWithResponse } from '@/lib/secure-action';
 
 // ... (keep imports)
 
@@ -97,7 +97,7 @@ import { secureAction } from '@/lib/secure-action';
 /**
  * Get all items from a settings table
  */
-export const getSettings = secureAction(async (userId, user, type: SettingType) => {
+export const getSettings = secureActionWithResponse(async (userId, user, type: SettingType) => {
   noStore();
   
   const table = tableMap[type];
@@ -113,10 +113,6 @@ export const getSettings = secureAction(async (userId, user, type: SettingType) 
     return results.map((row: any) => ({
       ...row,
       id: row.id.toString(),
-      // Drizzle handles camelCase mapping if setup, but schema defines snake_case columns
-      // If we used drizzle-orm/postgres-js or similar, it might be automatic.
-      // With 'pg' and Drizzle, it usually respects the schema definition.
-      // However, for safety in this specific "Revert" where we want strict Drizzle usage:
       userId: row.userId, 
       createdAt: row.createdAt ? (typeof row.createdAt === 'string' ? row.createdAt : row.createdAt.toISOString()) : null,
       updatedAt: row.updatedAt ? (typeof row.updatedAt === 'string' ? row.updatedAt : row.updatedAt.toISOString()) : null

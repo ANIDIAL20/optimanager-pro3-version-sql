@@ -81,3 +81,16 @@
 [data-radix-popper-content-wrapper] {
   z-index: 9999 !important;
 }
+
+/* Hide browser spinners for number inputs - STRICT implementation */
+.no-spinner {
+  appearance: textfield !important;
+  -moz-appearance: textfield !important; /* Firefox fallback */
+}
+
+.no-spinner::-webkit-outer-spin-button,
+.no-spinner::-webkit-inner-spin-button {
+  appearance: none !important;
+  -webkit-appearance: none !important; /* Safari/Chrome fallback */
+  margin: 0 !important;
+}

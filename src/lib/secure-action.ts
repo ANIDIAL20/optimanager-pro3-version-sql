@@ -4,9 +4,9 @@
  */
 
 import { auth } from '@/auth';
-import { type AuthUser } from './auth';
+import { type AuthUser } from '@/lib/auth-helpers';
 import { requireAdmin } from './auth-guard';
-import { requireAuth } from './auth';
+import { requireAuth } from '@/lib/auth-helpers';
 
 /**
  * Type definitions for secure actions

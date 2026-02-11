@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, boolean, decimal, integer, json, primaryKey, uuid, index } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, timestamp, boolean, decimal, integer, json, primaryKey, uuid, index, real } from 'drizzle-orm/pg-core';
 import type { AdapterAccount } from "next-auth/adapters";
 import { relations, sql } from 'drizzle-orm';
 
@@ -241,9 +241,9 @@ export const shopProfiles = pgTable('shop_profiles', {
 });
 
 // ========================================
-// 8. PRESCRIPTIONS TABLE
+// 8. LEGACY PRESCRIPTIONS TABLE
 // ========================================
-export const prescriptions = pgTable('prescriptions', {
+export const prescriptionsLegacy = pgTable('prescriptions_legacy', {
   id: serial('id').primaryKey(),
   firebaseId: text('firebase_id').unique(),
   userId: text('user_id').notNull(),
@@ -292,7 +292,7 @@ export const lensOrders = pgTable('lens_orders', {
   
   // References
   clientId: integer('client_id').references(() => clients.id),
-  prescriptionId: integer('prescription_id').references(() => prescriptions.id),
+  prescriptionId: integer('prescription_id').references(() => prescriptionsLegacy.id),
   saleId: integer('sale_id').references(() => sales.id), // Link to the sale when billed
   
   // Order details
@@ -377,6 +377,7 @@ export const lensOrders = pgTable('lens_orders', {
 // ========================================
 
 export const clientsRelations = relations(clients, ({ many }) => ({
+  prescriptionsLegacy: many(prescriptionsLegacy),
   prescriptions: many(prescriptions),
   contactLensPrescriptions: many(contactLensPrescriptions),
   lensOrders: many(lensOrders),
@@ -384,9 +385,9 @@ export const clientsRelations = relations(clients, ({ many }) => ({
   devis: many(devis),
 }));
 
-export const prescriptionsRelations = relations(prescriptions, ({ one, many }) => ({
+export const prescriptionsLegacyRelations = relations(prescriptionsLegacy, ({ one, many }) => ({
   client: one(clients, {
-    fields: [prescriptions.clientId],
+    fields: [prescriptionsLegacy.clientId],
     references: [clients.id],
   }),
   lensOrders: many(lensOrders),
@@ -404,9 +405,9 @@ export const lensOrdersRelations = relations(lensOrders, ({ one }) => ({
     fields: [lensOrders.clientId],
     references: [clients.id],
   }),
-  prescription: one(prescriptions, {
+  prescriptionLegacy: one(prescriptionsLegacy, {
     fields: [lensOrders.prescriptionId],
-    references: [prescriptions.id],
+    references: [prescriptionsLegacy.id],
   }),
 }));
 
@@ -962,3 +963,49 @@ export const expenses = pgTable('expenses', {
   dateIdx: index('expenses_date_idx').on(table.date),
   categoryIdx: index('expenses_category_idx').on(table.category),
 }));
+
+// 📋 Prescriptions (Ordonnances)
+export const prescriptions = pgTable('prescriptions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: text('user_id').notNull(),
+  clientId: integer('client_id').references(() => clients.id, { onDelete: 'cascade' }),
+  
+  // Ordonnance metadata
+  prescriptionDate: timestamp('prescription_date'),
+  doctorName: text('doctor_name'),
+  imageUrl: text('image_url').notNull(),
+  
+  // OD (Œil Droit / Right Eye)
+  odSph: real('od_sph'),        // Sphere: -20.00 to +20.00
+  odCyl: real('od_cyl'),        // Cylinder: -6.00 to +6.00
+  odAxis: integer('od_axis'),   // Axis: 0 to 180
+  odAdd: real('od_add'),        // Addition: 0 to +4.00
+  
+  // OS (Œil Gauche / Left Eye)
+  osSph: real('os_sph'),
+  osCyl: real('os_cyl'),
+  osAxis: integer('os_axis'),
+  osAdd: real('os_add'),
+  
+  // Pupillary Distance
+  pd: real('pd'),               // 50-80 mm typical
+  
+  // Notes & Status
+  notes: text('notes'),
+  status: text('status').default('pending'), // pending | approved | completed
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const prescriptionsRelations = relations(prescriptions, ({ one }) => ({
+  client: one(clients, {
+    fields: [prescriptions.clientId],
+    references: [clients.id],
+  }),
+}));
+
+// Types
+export type Prescription = typeof prescriptions.$inferSelect;
+export type PrescriptionInsert = typeof prescriptions.$inferInsert;
+

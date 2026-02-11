@@ -9,8 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { InvoiceActions } from '@/components/invoices/invoice-actions';
 import { ArrowLeft, User, Phone, Building2, Receipt, RotateCcw, CreditCard } from 'lucide-react';
-import { BackButton } from '@/components/ui/back-button';
-import { PageHeader } from '@/components/page-header';
+import Link from 'next/link';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
@@ -162,17 +161,28 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
     };
 
     return (
-        <div className="flex flex-1 flex-col gap-6">
-            {/* Back Button */}
-            <div className="w-fit">
-                <BackButton />
-            </div>
+        <div className="flex flex-1 flex-col gap-6 p-6">
+            {/* Header - Standardized theme */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="flex items-center gap-4">
+                    <Button variant="ghost" size="icon" asChild className="rounded-full hover:bg-slate-100 h-10 w-10">
+                        <Link href="/dashboard/ventes">
+                            <ArrowLeft className="h-5 w-5 text-slate-500" />
+                        </Link>
+                    </Button>
+                    <div>
+                        <div className="flex items-center gap-3 mb-1">
+                            <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+                                <div className="h-10 w-10 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
+                                    <Receipt className="h-6 w-6" />
+                                </div>
+                                Vente #{sale.saleNumber || sale.id.slice(0, 8)}
+                            </h1>
+                        </div>
+                        <p className="text-slate-500 ml-1">Effectuée le {format(new Date(sale.date || sale.createdAt), "d MMMM yyyy 'à' HH:mm", { locale: fr })}</p>
+                    </div>
+                </div>
 
-            {/* Header */}
-            <PageHeader
-                title={`Vente #${sale.saleNumber || sale.id.slice(0, 8)}`}
-                description={`Effectuée le ${format(new Date(sale.date || sale.createdAt), "d MMMM yyyy 'à' HH:mm", { locale: fr })}`}
-            >
                 <div className="flex gap-2">
                     {client && shopSettings && (
                         <InvoiceActions sale={sale} client={client} shopSettings={shopSettings} />
@@ -198,7 +208,7 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
                         </>
                     )}
                 </div>
-            </PageHeader>
+            </div>
 
             {/* Top Cards: Status & Client */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

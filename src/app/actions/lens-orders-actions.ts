@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from '@/db';
-import { lensOrders, clients, prescriptions, supplierOrders, suppliers, supplierOrderItems } from '@/db/schema';
+import { lensOrders, clients, prescriptionsLegacy as prescriptions, supplierOrders, suppliers, supplierOrderItems } from '@/db/schema';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
 import { eq, and, desc } from 'drizzle-orm';
@@ -110,18 +110,32 @@ export const getLensOrders = secureAction(async (userId, user) => {
       orderBy: [desc(lensOrders.createdAt)],
       with: {
         client: true,
-        prescription: true
+        prescriptionLegacy: true
       }
     });
     
-    await logSuccess(userId, 'READ', 'lens_orders', undefined, { count: results.length });
-    return { success: true, data: results };
+    const mapped = results.map(order => ({
+      ...order,
+      id: order.id,
+      totalPrice: order.totalPrice?.toString() || '0',
+      unitPrice: order.unitPrice?.toString() || '0',
+      sellingPrice: order.sellingPrice?.toString() || '0',
+      orderDate: order.orderDate instanceof Date ? order.orderDate.toISOString() : order.orderDate,
+      receivedDate: order.receivedDate instanceof Date ? order.receivedDate.toISOString() : order.receivedDate,
+      deliveredDate: order.deliveredDate instanceof Date ? order.deliveredDate.toISOString() : order.deliveredDate,
+      createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
+      updatedAt: order.updatedAt instanceof Date ? order.updatedAt.toISOString() : order.updatedAt,
+    }));
+
+    await logSuccess(userId, 'READ', 'lens_orders', 'list', { count: results.length });
+    return { success: true, data: mapped };
 
   } catch (error: any) {
+    console.error('💥 Error fetching all lens orders:', error);
     await logFailure(userId, 'READ', 'lens_orders', error.message);
     return { 
       success: false, 
-      error: 'Erreur lors de la récupération des commandes de verres' 
+      error: `Erreur récupération commandes: ${error.message}` 
     };
   }
 });
@@ -139,18 +153,37 @@ export const getClientLensOrders = secureAction(async (userId, user, clientId: s
       ),
       orderBy: [desc(lensOrders.createdAt)],
       with: {
-        prescription: true
+        prescriptionLegacy: true
       }
     });
     
-    await logSuccess(userId, 'READ', 'lens_orders', undefined, { clientId, count: results.length });
-    return { success: true, data: results };
+    const mapped = results.map(order => ({
+      ...order,
+      id: order.id,
+      totalPrice: order.totalPrice?.toString() || '0',
+      unitPrice: order.unitPrice?.toString() || '0',
+      sellingPrice: order.sellingPrice?.toString() || '0',
+      orderDate: order.orderDate instanceof Date ? order.orderDate.toISOString() : order.orderDate,
+      receivedDate: order.receivedDate instanceof Date ? order.receivedDate.toISOString() : order.receivedDate,
+      deliveredDate: order.deliveredDate instanceof Date ? order.deliveredDate.toISOString() : order.deliveredDate,
+      createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
+      updatedAt: order.updatedAt instanceof Date ? order.updatedAt.toISOString() : order.updatedAt,
+    }));
+    
+    await logSuccess(userId, 'READ', 'lens_orders', `client-${clientId}`, { clientId, count: results.length });
+    return { success: true, data: mapped };
 
   } catch (error: any) {
-    await logFailure(userId, 'READ', 'lens_orders', error.message);
+    console.error('💥 Error fetching client lens orders:', error);
+    console.error('💥 Details:', {
+      message: error.message,
+      stack: error.stack,
+      clientId
+    });
+    await logFailure(userId, 'READ', 'lens_orders', error.message, `client-${clientId}`);
     return { 
       success: false, 
-      error: 'Erreur lors de la récupération des commandes de verres du client' 
+      error: `Erreur lors de la récupération: ${error.message}` 
     };
   }
 });
@@ -168,7 +201,7 @@ export const getLensOrder = secureAction(async (userId, user, orderId: string) =
       ),
       with: {
         client: true,
-        prescription: true
+        prescriptionLegacy: true
       }
     });
     

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient, Client } from '@/app/actions/clients-actions';
 import { ClientForm } from '@/components/clients/client-form';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft } from 'lucide-react';
+import { ArrowLeft, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 
@@ -58,19 +58,26 @@ export default function NewClientPage() {
     };
 
     return (
-        <div className="flex flex-1 flex-col gap-6 p-6">
-            <div className="w-fit">
-                <Button asChild variant="outline" size="sm">
-                    <Link href="/dashboard/clients" className="flex items-center gap-2">
-                        <ChevronLeft className="h-4 w-4" />
-                        Retour
-                    </Link>
-                </Button>
-            </div>
-            
-            <div className="flex flex-col gap-1">
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Nouveau Client</h1>
-                <p className="text-muted-foreground">Remplissez les informations ci-dessous pour créer un nouveau dossier client.</p>
+        <div className="flex flex-1 flex-col gap-8 p-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="flex items-center gap-4">
+                    <Button variant="ghost" size="icon" asChild className="rounded-full hover:bg-slate-100 h-10 w-10">
+                        <Link href="/dashboard/clients">
+                            <ArrowLeft className="h-5 w-5 text-slate-500" />
+                        </Link>
+                    </Button>
+                    <div>
+                        <div className="flex items-center gap-3 mb-1">
+                            <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+                                <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">
+                                    <Users className="h-6 w-6" />
+                                </div>
+                                Nouveau Client
+                            </h1>
+                        </div>
+                        <p className="text-slate-500 ml-1">Enregistrement d'un nouveau patient dans la base de données</p>
+                    </div>
+                </div>
             </div>
 
             <ClientForm

@@ -4,7 +4,7 @@
 import { db } from '@/db';
 import { suppliers } from '@/db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
-import { secureAction } from '@/lib/secure-action';
+import { secureAction, secureActionWithResponse } from '@/lib/secure-action';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { unstable_noStore as noStore } from 'next/cache';
 import { measurePerformance } from '@/lib/performance';
@@ -49,7 +49,7 @@ function parseContactInfo(notes: string | null) {
 /**
  * Get all suppliers for the current user
  */
-export const getSuppliersList = secureAction(async (userId, user) => {
+export const getSuppliersList = secureActionWithResponse(async (userId, user) => {
   return await measurePerformance(`getSuppliersList-${userId}`, async () => {
     noStore();
     
