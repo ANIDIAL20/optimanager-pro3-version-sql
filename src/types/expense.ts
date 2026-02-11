@@ -48,6 +48,11 @@ export interface ExpenseFilters {
     startDate?: Date;
     /** End date for filtering by dueDate or createdAt */
     endDate?: Date;
+    /** Date range for filtering */
+    dateRange?: {
+        from: Date;
+        to: Date;
+    };
     /** Filter by billing period (e.g., "Février 2026") */
     period?: string;
 }
