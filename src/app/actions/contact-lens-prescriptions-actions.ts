@@ -89,7 +89,7 @@ export const getContactLensPrescriptions = secureAction(async (userId, user, cli
       createdAt: p.createdAt?.toISOString() || ''
     }));
 
-    await logSuccess(userId, 'READ', 'contact_lens_prescriptions', undefined, { count: mapped.length });
+    await logSuccess(userId, 'READ', 'contact_lens_prescriptions', 'list', { count: mapped.length });
     return { success: true, data: mapped };
 
   } catch (error: any) {

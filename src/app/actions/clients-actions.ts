@@ -6,7 +6,7 @@
 'use server';
 
 import { db } from '@/db';
-import { clients, prescriptions, sales, lensOrders } from '@/db/schema';
+import { clients, prescriptionsLegacy as prescriptions, sales, lensOrders } from '@/db/schema';
 import { eq, and, or, like, desc } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure, logAudit } from '@/lib/audit-log';
@@ -71,7 +71,7 @@ export const getClients = secureAction(async (userId, user, searchQuery?: string
         const userClientsWithPrescriptions = await db.query.clients.findMany({
             where: eq(clients.userId, userId), // ⚠️ CRITICAL: Filter by userId
             with: {
-                prescriptions: true, // 👈 Auto-fetch prescriptions
+                prescriptionsLegacy: true, // 👈 Auto-fetch prescriptions
             },
             orderBy: desc(clients.createdAt),
         });
@@ -91,7 +91,7 @@ export const getClients = secureAction(async (userId, user, searchQuery?: string
             address: client.address,
             city: client.city,
             dateOfBirth: client.dateOfBirth?.toISOString(),
-            prescriptions: (client.prescriptions || []).map((p: any) => p.prescriptionData as any) || [], // 👈 Prescriptions included!
+            prescriptions: (client.prescriptionsLegacy || []).map((p: any) => p.prescriptionData as any) || [], // 👈 Prescriptions included!
             createdAt: client.createdAt?.toISOString() || new Date().toISOString(),
             updatedAt: client.updatedAt?.toISOString(),
         }));
@@ -140,8 +140,8 @@ export const getClient = secureAction(async (userId, user, clientId: string) => 
                 eq(clients.userId, userId) // ⚠️ CRITICAL: Verify ownership
             ),
             with: {
-                prescriptions: {
-                    orderBy: (prescriptions: any, { desc }: { desc: any }) => [desc(prescriptions.createdAt)],
+                prescriptionsLegacy: {
+                    orderBy: (prescriptionsLegacy: any, { desc }: { desc: any }) => [desc(prescriptionsLegacy.createdAt)],
                 },
             },
         });
@@ -168,7 +168,7 @@ export const getClient = secureAction(async (userId, user, clientId: string) => 
             address: clientWithPrescriptions.address,
             city: clientWithPrescriptions.city,
             dateOfBirth: clientWithPrescriptions.dateOfBirth?.toISOString(),
-            prescriptions: (clientWithPrescriptions.prescriptions || []).map((p: any) => p.prescriptionData as any),
+            prescriptions: (clientWithPrescriptions.prescriptionsLegacy || []).map((p: any) => p.prescriptionData as any),
             createdAt: clientWithPrescriptions.createdAt?.toISOString() || new Date().toISOString(),
             updatedAt: clientWithPrescriptions.updatedAt?.toISOString(),
         };
@@ -180,11 +180,15 @@ export const getClient = secureAction(async (userId, user, clientId: string) => 
 
     } catch (error: any) {
         console.error('💥 Error fetching client:', error);
-        console.error('💥 Stack:', error.stack);
+        console.error('💥 Error details:', {
+            message: error.message,
+            stack: error.stack,
+            clientId
+        });
         await logFailure(userId, 'READ', 'clients', error.message, clientId);
         return {
             success: false,
-            error: 'Erreur lors de la récupération du client'
+            error: `Erreur lors de la récupération du client: ${error.message}`
         };
     }
 });

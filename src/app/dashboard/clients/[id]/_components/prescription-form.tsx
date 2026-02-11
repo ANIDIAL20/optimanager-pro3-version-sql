@@ -31,6 +31,9 @@ import { createPrescription } from '@/app/actions/prescriptions-actions';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 import { BrandLoader } from '@/components/ui/loader-brand';
+import Link from 'next/link';
+import { Sparkles, Glasses, Trash2, Edit, Save, Plus, ChevronDown, Sparkle } from 'lucide-react';
+import { ScannerDialog } from './scanner-dialog';
 
 
 const PrescriptionSchema = z.object({
@@ -153,10 +156,15 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Ajouter une Prescription</CardTitle>
-        <CardDescription>
-          Saisissez les détails de la nouvelle prescription ou des mesures optiques.
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Ajouter une Prescription</CardTitle>
+            <CardDescription>
+              Saisissez les détails de la nouvelle prescription ou des mesures optiques.
+            </CardDescription>
+          </div>
+          <ScannerDialog clientId={clientId} onSuccess={onSuccess || (() => {})} />
+        </div>
       </CardHeader>
       <CardContent>
         <Form {...form}>

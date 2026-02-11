@@ -207,8 +207,8 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                 const client = await tx.query.clients.findFirst({
                     where: and(eq(clients.id, clientIdNum), eq(clients.userId, userId)),
                     with: {
-                        prescriptions: {
-                            orderBy: (prescriptions: any, { desc }: any) => [desc(prescriptions.createdAt)],
+                        prescriptionsLegacy: {
+                            orderBy: (prescriptionsLegacy: any, { desc }: any) => [desc(prescriptionsLegacy.createdAt)],
                             limit: 1
                         }
                     }
@@ -221,8 +221,8 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                         clientAddress: client.address
                     };
 
-                    if (client.prescriptions && client.prescriptions.length > 0) {
-                        const latest = client.prescriptions[0];
+                    if (client.prescriptionsLegacy && client.prescriptionsLegacy.length > 0) {
+                        const latest = client.prescriptionsLegacy[0];
                         if (latest) {
                             clientSnapshot.prescriptionSnapshot = latest.prescriptionData;
                         }

@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { SensitiveData } from '@/components/ui/sensitive-data';
 import { cn } from '@/lib/utils';
-import type { AuthUser } from '@/lib/auth';
+import type { AuthUser } from '@/lib/auth-helpers';
 import {
     TrendingUp,
     ShoppingCart,
@@ -60,7 +60,7 @@ interface DashboardClientProps {
 }
 
 const formatLimit = (limit: number) => {
-    if (limit >= 10000) return "Illimité";
+    if (limit >= 10000) return "IllimitÃ©";
     return limit;
 };
 
@@ -212,7 +212,7 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                                             {item.nom}
                                         </p>
                                         <p className="text-xs text-slate-500 font-mono mt-0.5">
-                                            Réf: {item.reference}
+                                            RÃ©f: {item.reference}
                                         </p>
                                     </div>
                                     <div className="h-8 w-8 rounded-lg bg-red-600 flex items-center justify-center shadow-sm flex-shrink-0">
@@ -229,7 +229,7 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                     )}
                 </SpotlightCard>
 
-                {/* Dernières Ventes (2 cols) */}
+                {/* DerniÃ¨res Ventes (2 cols) */}
                 <SpotlightCard className="lg:col-span-2 p-6" spotlightColor="rgba(99, 102, 241, 0.1)">
                     <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-2">
@@ -237,7 +237,7 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                                 <ShoppingBag className="h-4 w-4 text-indigo-600" />
                             </div>
                             <h3 className="text-lg font-bold text-foreground">
-                                Dernières Ventes
+                                DerniÃ¨res Ventes
                             </h3>
                         </div>
                         <Link
@@ -252,7 +252,7 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                     {!data || data.recentActivity.length === 0 ? (
                         <div className="py-12 text-center">
                             <ShoppingBag className="h-12 w-12 mx-auto text-slate-200 mb-3" />
-                            <p className="text-sm text-slate-400">Aucune vente récente</p>
+                            <p className="text-sm text-slate-400">Aucune vente rÃ©cente</p>
                         </div>
                     ) : (
                         <div className="space-y-3">
@@ -285,10 +285,10 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                                             <SensitiveData value={activity.amount} type="currency" currency="DH" />
                                         </span>
                                         <Badge
-                                            variant={activity.status === 'Payé' ? 'default' : 'destructive'}
+                                            variant={activity.status === 'PayÃ©' ? 'default' : 'destructive'}
                                             className={cn(
                                                 "text-[10px] px-2 py-0.5 shadow-none",
-                                                activity.status === 'Payé'
+                                                activity.status === 'PayÃ©'
                                                     ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200"
                                                     : "bg-red-100 text-red-700 hover:bg-red-200 border-red-200"
                                             )}
@@ -302,14 +302,14 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                     )}
                 </SpotlightCard>
 
-                {/* Accès Rapide / Shortcuts */}
+                {/* AccÃ¨s Rapide / Shortcuts */}
                 <SpotlightCard className="p-6" spotlightColor="rgba(168, 85, 247, 0.15)">
                     <div className="flex items-center gap-2 mb-6">
                         <div className="h-8 w-8 rounded-lg bg-purple-50 flex items-center justify-center">
                             <Bell className="h-4 w-4 text-purple-600" />
                         </div>
                         <h3 className="text-lg font-bold text-foreground">
-                            Accès Rapide
+                            AccÃ¨s Rapide
                         </h3>
                     </div>
 
@@ -373,7 +373,7 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                     </div>
                     <Progress value={(usage.products.count / usage.products.limit) * 100} className="h-2 mb-2" />
                     <p className="text-xs text-slate-400 text-right">
-                        {Math.round((usage.products.count / usage.products.limit) * 100)}% utilisé
+                        {Math.round((usage.products.count / usage.products.limit) * 100)}% utilisÃ©
                     </p>
                  </SpotlightCard>
 
@@ -392,7 +392,7 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                     </div>
                     <Progress value={(usage.clients.count / usage.clients.limit) * 100} className="h-2 mb-2" />
                      <p className="text-xs text-slate-400 text-right">
-                        {Math.round((usage.clients.count / usage.clients.limit) * 100)}% utilisé
+                        {Math.round((usage.clients.count / usage.clients.limit) * 100)}% utilisÃ©
                     </p>
                  </SpotlightCard>
 
@@ -411,7 +411,7 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                     </div>
                     <Progress value={(usage.suppliers.count / usage.suppliers.limit) * 100} className="h-2 mb-2" />
                      <p className="text-xs text-slate-400 text-right">
-                        {Math.round((usage.suppliers.count / usage.suppliers.limit) * 100)}% utilisé
+                        {Math.round((usage.suppliers.count / usage.suppliers.limit) * 100)}% utilisÃ©
                     </p>
                  </SpotlightCard>
             </div>

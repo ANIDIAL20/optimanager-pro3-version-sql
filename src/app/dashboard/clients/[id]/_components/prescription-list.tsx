@@ -24,6 +24,17 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface PrescriptionListProps {
   clientId: string;
@@ -60,7 +71,7 @@ export function PrescriptionList({ clientId }: PrescriptionListProps) {
   }, [loadPrescriptions]);
 
   const handleDelete = async (prescriptionId: string) => {
-    if (!confirm('Supprimer cette ordonnance ?')) return;
+    // Confirmation handled by AlertDialog
     
     setDeletingId(prescriptionId);
     try {
@@ -141,15 +152,35 @@ export function PrescriptionList({ clientId }: PrescriptionListProps) {
                   <TableCell>{p.data?.pd || '-'}</TableCell>
                   <TableCell>{p.data?.doctorName || '-'}</TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(p.id)}
-                      disabled={deletingId === p.id}
-                      className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={deletingId === p.id}
+                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Supprimer l'ordonnance ?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Cette action est irréversible. L'ordonnance sera définitivement supprimée de l'historique du client.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Annuler</AlertDialogCancel>
+                          <AlertDialogAction 
+                            onClick={() => handleDelete(p.id)}
+                            className="bg-red-600 hover:bg-red-700 text-white"
+                          >
+                            Supprimer
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </TableCell>
                 </TableRow>
               ))}

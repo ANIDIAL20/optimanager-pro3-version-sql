@@ -10,7 +10,7 @@ import { db } from '@/db';
 import { users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
-import { requireAdmin } from '@/lib/auth';
+import { requireAdmin } from '@/lib/auth-helpers';
 import { AuthError } from 'next-auth';
 import { redirect } from 'next/navigation';
 
@@ -79,10 +79,10 @@ export interface CreateUserResponse {
  */
 export async function createUserAction(input: CreateUserInput): Promise<CreateUserResponse> {
   try {
-    // 🔒 Security: Verify caller is an admin
+    // ðŸ”’ Security: Verify caller is an admin
     const adminUser = await requireAdmin();
     
-    console.log('👤 Admin creating new user:', input.email);
+    console.log('ðŸ‘¤ Admin creating new user:', input.email);
 
     // Validate input
     if (!input.email || !input.password || !input.name) {
@@ -95,7 +95,7 @@ export async function createUserAction(input: CreateUserInput): Promise<CreateUs
     if (input.password.length < 8) {
       return {
         success: false,
-        error: 'Le mot de passe doit contenir au moins 8 caractères'
+        error: 'Le mot de passe doit contenir au moins 8 caractÃ¨res'
       };
     }
 
@@ -107,7 +107,7 @@ export async function createUserAction(input: CreateUserInput): Promise<CreateUs
     if (existingUser) {
       return {
         success: false,
-        error: 'Un utilisateur avec cet email existe déjà'
+        error: 'Un utilisateur avec cet email existe dÃ©jÃ '
       };
     }
 
@@ -123,20 +123,20 @@ export async function createUserAction(input: CreateUserInput): Promise<CreateUs
       emailVerified: new Date(), // Auto-verify for admin-created users
     }).returning();
 
-    console.log('✅ User created successfully:', newUser.id);
+    console.log('âœ… User created successfully:', newUser.id);
 
     return {
       success: true,
       userId: newUser.id,
-      message: `Utilisateur ${input.email} créé avec succès`
+      message: `Utilisateur ${input.email} crÃ©Ã© avec succÃ¨s`
     };
 
   } catch (error: any) {
-    console.error('❌ Error creating user:', error);
+    console.error('âŒ Error creating user:', error);
 
     return {
       success: false,
-      error: 'Erreur lors de la création de l\'utilisateur'
+      error: 'Erreur lors de la crÃ©ation de l\'utilisateur'
     };
   }
 }
@@ -153,11 +153,11 @@ export async function deleteUser(userId: string): Promise<CreateUserResponse> {
 
     return {
       success: true,
-      message: 'Utilisateur supprimé avec succès'
+      message: 'Utilisateur supprimÃ© avec succÃ¨s'
     };
 
   } catch (error: any) {
-    console.error('❌ Error deleting user:', error);
+    console.error('âŒ Error deleting user:', error);
     
     return {
       success: false,
@@ -183,15 +183,15 @@ export async function updateUserRole(
 
     return {
       success: true,
-      message: `Rôle mis à jour: ${role}`
+      message: `RÃ´le mis Ã  jour: ${role}`
     };
 
   } catch (error: any) {
-    console.error('❌ Error updating user role:', error);
+    console.error('âŒ Error updating user role:', error);
     
     return {
       success: false,
-      error: 'Erreur lors de la mise à jour du rôle'
+      error: 'Erreur lors de la mise Ã  jour du rÃ´le'
     };
   }
 }

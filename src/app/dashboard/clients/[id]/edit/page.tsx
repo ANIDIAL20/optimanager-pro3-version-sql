@@ -5,10 +5,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
-
-import { PageHeader } from '@/components/page-header';
+import Link from 'next/link';
+import { Calendar as CalendarIcon, ArrowLeft, Users } from 'lucide-react';
 import {
     Card,
     CardContent,
@@ -32,7 +31,6 @@ import {
 } from '@/components/ui/form';
 import { updateClient, getClient } from '@/app/actions/clients-actions';
 import { useToast } from '@/hooks/use-toast';
-import { BackButton } from '@/components/ui/back-button';
 import { MutuelleSelector } from '@/components/clients/mutuelle-selector';
 import type { Client } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -178,14 +176,27 @@ export default function EditClientPage() {
     }
 
     return (
-        <div className="flex flex-1 flex-col gap-6">
-            <div className="w-fit">
-                <BackButton />
+        <div className="flex flex-1 flex-col gap-6 p-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="flex items-center gap-4">
+                    <Button variant="ghost" size="icon" asChild className="rounded-full hover:bg-slate-100 h-10 w-10">
+                        <Link href={`/dashboard/clients/${id}`}>
+                            <ArrowLeft className="h-5 w-5 text-slate-500" />
+                        </Link>
+                    </Button>
+                    <div>
+                        <div className="flex items-center gap-3 mb-1">
+                            <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+                                <div className="h-10 w-10 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
+                                    <Users className="h-6 w-6" />
+                                </div>
+                                Modifier le Profil
+                            </h1>
+                        </div>
+                        <p className="text-slate-500 ml-1">Mise à jour des informations pour {client.prenom} {client.nom}</p>
+                    </div>
+                </div>
             </div>
-            <PageHeader
-                title="Modifier le Profil Client"
-                description={`Mise à jour des informations pour ${client.prenom} ${client.nom}.`}
-            />
             <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)}>
                     <Card>

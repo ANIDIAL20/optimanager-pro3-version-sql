@@ -85,23 +85,26 @@ export default function SupplierOrdersPage() {
             </div>
         );
     }
-
     return (
         <div className="min-h-screen bg-slate-50/50 p-8 space-y-8">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
-                        <Truck className="h-8 w-8 text-primary" />
-                        Commandes Fournisseurs
-                    </h1>
-                    <p className="text-slate-500 mt-1">
-                        Suivez vos achats, réceptions et dettes fournisseurs.
-                    </p>
+            {/* Header - Standardized theme */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 shadow-sm border border-amber-100">
+                        <Truck className="h-6 w-6" />
+                    </div>
+                    <div>
+                        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+                            Commandes Fournisseurs
+                        </h1>
+                        <p className="text-slate-500 mt-1">
+                            Suivez vos achats, réceptions et dettes fournisseurs.
+                        </p>
+                    </div>
                 </div>
                 <Link href="/dashboard/supplier-orders/new">
-                    <Button className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20">
-                        <Plus className="h-4 w-4 mr-2" />
+                    <Button className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white shadow-lg shadow-amber-200 gap-2">
+                        <Plus className="h-4 w-4" />
                         Nouvelle Commande
                     </Button>
                 </Link>
