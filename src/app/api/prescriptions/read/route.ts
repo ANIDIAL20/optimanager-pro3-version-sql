@@ -12,6 +12,16 @@ export async function POST(req: NextRequest) {
     if (!session?.user?.id) {
       return NextResponse.json({ success: false, error: 'Non autorisé' }, { status: 401 });
     }
+
+    // ✅ Check داخل handler، ماشي خارجو
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    if (!apiKey) {
+      console.error('⚠️ GEMINI_API_KEY not configured');
+      return NextResponse.json(
+        { error: 'Service not configured' },
+        { status: 503 }
+      );
+    }
     
     const { imageBase64 } = await req.json();
     if (!imageBase64) {
