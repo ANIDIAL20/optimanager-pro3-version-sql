@@ -104,8 +104,6 @@ export function InvoiceScannerDialog() {
     const [colors, setColors] = React.useState<Color[]>([]);
     const [suppliers, setSuppliers] = React.useState<Supplier[]>([]);
     const [isCreatingSetting, setIsCreatingSetting] = React.useState(false);
-    const [savedSuccess, setSavedSuccess] = React.useState(false);
-    const [savedCount, setSavedCount] = React.useState(0);
     const router = useRouter();
 
     // Form
@@ -396,9 +394,10 @@ export function InvoiceScannerDialog() {
 
              if (result.success) {
                  toast({ title: "Succès !", description: `${result.count} produits ajoutés.` });
-                 setSavedCount(result.count || 0);
-                 setSavedSuccess(true);
-                 // form.reset(); // Don't reset yet so they can see what was saved if needed, or clear it
+                 setIsOpen(false);
+                 setPreviewUrl(null);
+                 form.reset();
+                 replace([]);
              } else {
                  throw new Error(result.error);
              }
@@ -464,7 +463,6 @@ export function InvoiceScannerDialog() {
             setIsOpen(open);
             if (!open) {
                 setPreviewUrl(null);
-                setSavedSuccess(false);
                 form.reset();
                 if (fileInputRef.current) fileInputRef.current.value = '';
             }
@@ -506,46 +504,6 @@ export function InvoiceScannerDialog() {
                     </div>
                 </div>
 
-                {savedSuccess ? (
-                    <div className="flex-1 flex flex-col items-center justify-center bg-white p-12 text-center">
-                        <div className="h-24 w-24 rounded-full bg-emerald-50 flex items-center justify-center border-4 border-emerald-100 mb-8 animate-in zoom-in duration-500">
-                            <CheckCircle className="h-12 w-12 text-emerald-500" />
-                        </div>
-                        <h2 className="text-3xl font-extrabold text-slate-900 mb-3 tracking-tight">Enregistrement Réussi !</h2>
-                        <p className="text-slate-500 text-lg mb-10 max-w-md mx-auto">
-                            <strong>{savedCount}</strong> produits ont été ajoutés à votre inventaire avec succès. 
-                            Que souhaitez-vous faire maintenant ?
-                        </p>
-                        <div className="flex flex-col sm:flex-row gap-4 w-full max-w-lg">
-                            <Button 
-                                className="flex-1 h-14 bg-slate-900 hover:bg-slate-800 text-white text-md font-bold rounded-2xl shadow-xl hover:shadow-2xl transition-all gap-3"
-                                onClick={() => {
-                                    setIsOpen(false);
-                                    router.push('/produits'); // Assuming this is the products page
-                                }}
-                            >
-                                <LayoutGrid className="h-5 w-5" />
-                                Voir le stock
-                            </Button>
-                            <Button 
-                                variant="outline"
-                                className="flex-1 h-14 border-2 border-slate-200 text-slate-700 hover:bg-slate-50 text-md font-bold rounded-2xl transition-all gap-3"
-                                onClick={() => {
-                                    setSavedSuccess(false);
-                                    setPreviewUrl(null);
-                                    form.reset();
-                                    replace([]);
-                                    if (fileInputRef.current) fileInputRef.current.value = '';
-                                }}
-                            >
-                                <Sparkles className="h-5 w-5 text-indigo-500" />
-                                Scanner une autre
-                            </Button>
-                        </div>
-                    </div>
-                ) : (
-                    <>
-                    {/* 2. Main Content: Split Layout */}
                 <div className="flex-1 overflow-hidden flex flex-row relative h-[calc(95vh-64px)]">
                     
                     {/* LEFT PANEL: Source Document (Fixed Width) */}
@@ -840,8 +798,6 @@ export function InvoiceScannerDialog() {
                     </TooltipProvider>
                 </div>
             </div>
-            </>
-        )}
         </DialogContent>
     </Dialog>
 );
