@@ -206,7 +206,7 @@ export const createSupplier = secureAction(async (userId, user, data: any) => {
       } as any)
       .returning();
 
-    revalidateTag('suppliers', 'page');
+    revalidateTag('suppliers');
     revalidatePath('/suppliers');
     return created;
   } catch (error: any) {
@@ -266,7 +266,7 @@ export const updateSupplier = secureAction(async (userId, user, id: string, data
       .where(and(eq(suppliers.id, id), eq(suppliers.userId, userId)))
       .returning();
 
-    revalidateTag('suppliers', 'page');
+    revalidateTag('suppliers');
     revalidatePath('/suppliers'); 
     revalidatePath('/dashboard/fournisseurs');
     revalidatePath(`/dashboard/fournisseurs/${id}`);
@@ -291,7 +291,7 @@ export const deleteSupplier = secureAction(async (userId, user, id: string) => {
       )
     );
 
-  revalidateTag('suppliers', 'page');
+  revalidateTag('suppliers');
   revalidatePath('/dashboard/fournisseurs');
   return { success: true };
 });
