@@ -119,12 +119,12 @@ export const getSales = secureAction(async (userId, user) => {
         const mappedSales: Sale[] = results.map(mapSale);
 
         await logSuccess(userId, 'READ', 'sales', 'LIST_ALL', { count: mappedSales.length });
-        return { success: true, data: mappedSales };
+        return { success: true, sales: mappedSales };
 
     } catch (error: any) {
         console.error('💥 ERROR in getSales (Drizzle):', error);
         await logFailure(userId, 'READ', 'sales', error.message);
-        return { success: false, error: `Erreur lors de la récupération des ventes: ${error.message}`, data: [] };
+        return { success: false, error: `Erreur lors de la récupération des ventes: ${error.message}`, sales: [] };
     }
 });
 
@@ -147,7 +147,7 @@ export const getSale = secureAction(async (userId, user, saleId: string) => {
 
         const mappedSale = mapSale(sale);
 
-        return { success: true, data: mappedSale };
+        return { success: true, sale: mappedSale };
 
     } catch (error: any) {
         console.error('💥 Error fetching sale (Drizzle):', error);
@@ -605,7 +605,7 @@ export const getClientSales = secureAction(async (userId, user, clientId: string
 
         const mappedSales = salesData.map(mapSale);
         
-        return { success: true, data: mappedSales };
+        return { success: true, sales: mappedSales };
     } catch (error: any) {
         return { success: false, error: error.message };
     }

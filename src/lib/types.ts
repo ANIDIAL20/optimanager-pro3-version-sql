@@ -52,6 +52,7 @@ export interface Client {
   totalSpent?: number;
   ordersCount?: number;
   totalDebt?: number;
+  creditLimit?: number;
   if?: string;
   ice?: string;
   rc?: string;
