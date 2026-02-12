@@ -52,7 +52,16 @@ export async function authenticate(
  * Sign out current user
  */
 export async function logout() {
-  await signOut({ redirectTo: '/login' });
+  // Get the origin from headers to ensure correct redirect on production
+  const { headers } = await import('next/headers');
+  const headersList = await headers();
+  const host = headersList.get('host');
+  const protocol = headersList.get('x-forwarded-proto') || 'http';
+  const origin = host ? `${protocol}://${host}` : '';
+  
+  const redirectUrl = origin ? `${origin}/login` : '/login';
+  
+  await signOut({ redirectTo: redirectUrl });
 }
 
 // ========================================
