@@ -27,19 +27,7 @@ export default async function EditProductPage(props: { params: Promise<{ id: str
     const product = result.data;
 
     return (
-        <div className="flex flex-1 flex-col gap-6">
-            {/* Back Button */}
-            <div className="w-fit">
-                <BackButton />
-            </div>
-
-            {/* Header */}
-            <div>
-                <h1 className="text-3xl font-bold text-slate-900">Modifier le Produit</h1>
-                <p className="text-slate-600 mt-1">Mettre à jour les informations de {product.nomProduit}</p>
-            </div>
-
-            {/* Product Form */}
+        <div className="flex flex-1 flex-col py-2">
             <ProductForm product={product} />
         </div>
     );

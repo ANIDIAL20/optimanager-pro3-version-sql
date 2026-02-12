@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./app-sidebar";
 import { BrandLoader } from '@/components/ui/loader-brand';
+import { BreadcrumbCustom } from "@/components/ui/breadcrumb-custom";
 
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 
@@ -56,61 +57,107 @@ export default function AppShell({ children, banner }: { children: React.ReactNo
                 />
 
                 <SidebarProvider>
-                    <AppSidebar />
-                    <SidebarInset>
-                        {/* Global Banner */}
-                        {banner?.active && isBannerVisible && (
-                            <div className={`w-full px-4 py-2 flex items-center justify-between text-sm font-medium ${banner.type === 'critical' ? 'bg-red-600 text-white' :
-                                banner.type === 'warning' ? 'bg-orange-500 text-white' :
-                                    'bg-blue-600 text-white'
-                                }`}>
-                                <div className="flex items-center gap-2">
-                                    <span>📢</span>
-                                    <p>{banner.message}</p>
+                    <div className="flex min-h-screen w-full">
+                        <AppSidebar />
+                        <SidebarInset className="flex-1 overflow-hidden">
+                            {/* Global Banner */}
+                            {banner?.active && isBannerVisible && (
+                                <div className={`w-full px-4 py-2 flex items-center justify-between text-sm font-medium ${banner.type === 'critical' ? 'bg-red-600 text-white' :
+                                    banner.type === 'warning' ? 'bg-orange-500 text-white' :
+                                        'bg-blue-600 text-white'
+                                    }`}>
+                                    <div className="flex items-center gap-2">
+                                        <span>📢</span>
+                                        <p>{banner.message}</p>
+                                    </div>
+                                    <button onClick={() => setIsBannerVisible(false)} className="opacity-80 hover:opacity-100">
+                                        ✕
+                                    </button>
                                 </div>
-                                <button onClick={() => setIsBannerVisible(false)} className="opacity-80 hover:opacity-100">
-                                    ✕
-                                </button>
-                            </div>
-                        )}
+                            )}
 
-                        <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200/60 px-4 bg-white/80 backdrop-blur-xl sticky top-0 z-10">
-                            <SidebarTrigger className="-ml-1" />
-                            <div className="h-4 w-px bg-slate-200 mx-2" />
-                            <span className="text-sm font-medium text-slate-700 capitalize">
-                                {(() => {
-                                    // Generate breadcrumb from pathname
-                                    const pathSegments = pathname?.split('/').filter(Boolean) || [];
+                            <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200/60 px-6 bg-white/80 backdrop-blur-xl sticky top-0 z-40">
+                                <SidebarTrigger className="-ml-1" />
+                                <div className="h-4 w-px bg-slate-200 mx-2" />
+                                <BreadcrumbCustom 
+                                    items={(() => {
+                                        const pathSegments = pathname?.split('/').filter(Boolean) || [];
+                                        const BREADCRUMB_LABELS: Record<string, string> = {
+                                            'dashboard': 'Tableau de bord',
+                                            'produits': 'Produits',
+                                            'products': 'Produits',
+                                            'clients': 'Clients',
+                                            'suppliers': 'Fournisseurs',
+                                            'devis': 'Devis',
+                                            'ventes': 'Ventes',
+                                            'sales': 'Ventes',
+                                            'compta': 'Comptabilité',
+                                            'rappels': 'Rappels',
+                                            'parametres': 'Paramètres',
+                                            'admin': 'Administration',
+                                            'new': 'Nouveau',
+                                            'edit': 'Modification',
+                                            'stock': 'Stock',
+                                            'inventory': 'Stock',
+                                        };
 
-                                    // Sanitize segments - replace Firebase IDs with friendly names
-                                    const sanitizedSegments = pathSegments.map((segment, index) => {
-                                        // If segment looks like a Firebase ID (long alphanumeric string > 15 chars)
-                                        if (segment.length > 15 && /^[a-zA-Z0-9]{15,}$/.test(segment)) {
-                                            // Replace with context-specific label
-                                            if (pathSegments[index - 1] === 'clients') {
-                                                return 'Dossier Client';
+                                        // Start with Tableau de bord
+                                        const items = [{ 
+                                            label: 'Tableau de bord', 
+                                            href: '/dashboard',
+                                            active: pathSegments.length === 0 || (pathSegments.length === 1 && pathSegments[0] === 'dashboard')
+                                        }];
+
+                                        // Add subsequent segments
+                                        pathSegments.forEach((segment, index) => {
+                                            // Skip 'dashboard' as it's already added or redundant
+                                            if (segment === 'dashboard' && index === 0) return;
+
+                                            let label = segment;
+                                            const lowerSegment = segment.toLowerCase();
+                                            
+                                            // Context-specific label overrides
+                                            if (BREADCRUMB_LABELS[lowerSegment]) {
+                                                label = BREADCRUMB_LABELS[lowerSegment];
+                                                
+                                                // Specific case: '/produits/new' -> 'Nouveau produit'
+                                                if (segment === 'new' && pathSegments[index - 1] === 'produits') {
+                                                    label = 'Nouveau produit';
+                                                }
+                                            } else if (segment.length > 15 && /^[a-zA-Z0-9]{15,}$/.test(segment)) {
+                                                if (pathSegments[index - 1] === 'clients') label = 'Dossier Client';
+                                                else if (pathSegments[index - 1] === 'products' || pathSegments[index - 1] === 'produits') label = 'Fiche Produit';
+                                                else if (pathSegments[index - 1] === 'commandes' || pathSegments[index - 1] === 'ventes') label = 'Détails Commande';
+                                                else label = 'Détails';
+                                            } else {
+                                                label = segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, ' ');
                                             }
-                                            if (pathSegments[index - 1] === 'products') {
-                                                return 'Fiche Produit';
-                                            }
-                                            if (pathSegments[index - 1] === 'commandes') {
-                                                return 'Détails Commande';
-                                            }
-                                            return 'Détails';
+
+                                            const href = '/' + pathSegments.slice(0, index + 1).join('/');
+                                            items.push({
+                                                label,
+                                                href,
+                                                active: index === pathSegments.length - 1
+                                            });
+                                        });
+
+                                        // Deduplicate: if we have two "Tableau de bord" at start, remove the second one
+                                        if (items.length > 1 && items[0].label === items[1].label) {
+                                            items.splice(1, 1);
                                         }
-                                        // Normal segments - capitalize and replace hyphens
-                                        return segment.replace(/-/g, ' ');
-                                    });
 
-                                    return sanitizedSegments.join(' / ') || 'Tableau de bord';
-                                })()}
-                            </span>
-                        </header>
+                                        return items;
+                                    })()}
+                                />
+                            </header>
 
-                        <main className="flex-1 overflow-auto p-6">
-                            {children}
-                        </main>
-                    </SidebarInset>
+                            <main className="flex-1 overflow-y-auto bg-slate-50/50">
+                                <div className="p-4 md:p-8">
+                                    {children}
+                                </div>
+                            </main>
+                        </SidebarInset>
+                    </div>
                 </SidebarProvider>
             </div>
         );

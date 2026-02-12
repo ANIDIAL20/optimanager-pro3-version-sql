@@ -48,7 +48,7 @@ export const getStockMovements = secureAction(async (userId, user, productId?: s
 
         const results = await query;
 
-        const mapped: StockMovement[] = results.map(m => ({
+        const mapped: StockMovement[] = results.map((m: any) => ({
             id: m.id.toString(),
             productId: m.productId?.toString(),
             productName: m.product?.nom,
@@ -59,7 +59,7 @@ export const getStockMovements = secureAction(async (userId, user, productId?: s
             notes: m.notes || ''
         }));
 
-        await logSuccess(userId, 'READ', 'stock_movements', undefined, { count: mapped.length });
+        await logSuccess(userId, 'READ', 'stock_movements', 'list', { count: mapped.length });
         return { success: true, movements: mapped };
 
     } catch (error: any) {

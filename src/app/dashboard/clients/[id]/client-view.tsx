@@ -31,7 +31,8 @@ import { PurchaseHistoryTable } from './_components/purchase-history-table';
 import { ClientHeader } from '@/components/dashboard/clients/client-header';
 import { ClientOverview } from '@/components/dashboard/clients/tabs/client-overview';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { BackButton } from '@/components/ui/back-button';
+import { InteractionHistory } from './_components/interaction-history';
+import { ArrowLeft, MessageSquare } from 'lucide-react';
 
 export default function ClientDetailView() {
     const params = useParams();
@@ -123,9 +124,17 @@ export default function ClientDetailView() {
     }
 
     return (
-        <div className="space-y-6">
-            <div className="w-fit">
-                <BackButton />
+        <div className="space-y-6 p-6">
+            <div className="flex items-center gap-4">
+                <Button variant="ghost" size="icon" asChild className="rounded-full hover:bg-slate-100 h-10 w-10">
+                    <Link href="/dashboard/clients">
+                        <ArrowLeft className="h-5 w-5 text-slate-500" />
+                    </Link>
+                </Button>
+                <div className="flex flex-col">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Navigation</span>
+                    <span className="text-sm font-medium text-slate-600">Retour au Répertoire</span>
+                </div>
             </div>
 
             {/* Patient Profile Header */}
@@ -150,9 +159,17 @@ export default function ClientDetailView() {
                         <ShoppingCart className="h-4 w-4" />
                         Commandes Verres
                     </TabsTrigger>
-                    <TabsTrigger value="purchase-history" className="gap-2">
+                    <TabsTrigger value="contact-orders" className="gap-2">
+                        <ShoppingCart className="h-4 w-4" />
+                        Commandes Lentilles
+                    </TabsTrigger>
+                    <TabsTrigger value="purchase-history" className="gap-2 text-emerald-600 data-[state=active]:bg-emerald-50">
                         <ShoppingBag className="h-4 w-4" />
                         Historique d'Achats
+                    </TabsTrigger>
+                    <TabsTrigger value="interactions" className="gap-2 text-indigo-600 data-[state=active]:bg-indigo-50">
+                        <MessageSquare className="h-4 w-4" />
+                        Journal de Bord
                     </TabsTrigger>
                 </TabsList>
 
@@ -194,12 +211,23 @@ export default function ClientDetailView() {
 
                 {/* Lens Orders Tab */}
                 <TabsContent value="lens-orders" className="space-y-6">
-                    <LensOrderForm clientId={id} onSuccess={() => setRefreshKey(prev => prev + 1)} />
+                    <LensOrderForm clientId={id} mode="glasses" onSuccess={() => setRefreshKey(prev => prev + 1)} />
                     <Separator />
-                    <LensOrderList key={`lens-orders-${refreshKey}`} clientId={id} clientName={`${client?.prenom || ''} ${client?.nom || ''}`} />
+                    <LensOrderList key={`lens-orders-${refreshKey}`} mode="glasses" clientId={id} clientName={`${client?.prenom || ''} ${client?.nom || ''}`} />
+                </TabsContent>
+
+                {/* Contact Lens Orders Tab */}
+                <TabsContent value="contact-orders" className="space-y-6">
+                    <LensOrderForm clientId={id} mode="contacts" onSuccess={() => setRefreshKey(prev => prev + 1)} />
+                    <Separator />
+                    <LensOrderList key={`contact-orders-${refreshKey}`} mode="contacts" clientId={id} clientName={`${client?.prenom || ''} ${client?.nom || ''}`} />
                 </TabsContent>
 
                 {/* Purchase History Tab */}
+                <TabsContent value="interactions">
+                    <InteractionHistory clientId={id} />
+                </TabsContent>
+
                 <TabsContent value="purchase-history">
                     <PurchaseHistoryTable clientId={id} />
                 </TabsContent>

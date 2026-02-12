@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useForm, useFieldArray, useWatch, Control, UseFormReturn } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Card,
@@ -23,25 +24,50 @@ import { Button } from '@/components/ui/button';
 import { SubmitButton } from '@/components/ui/submit-button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Trash2, Plus, Copy, ArrowDownToLine, ArrowLeft } from 'lucide-react';
-import type { Brand, Material, Category, Color, Product } from '@/lib/types';
+import { Trash2, Plus, Copy, ArrowDownToLine, ArrowLeft, Package, Truck, FileText, AlertCircle, Info, Keyboard, Calendar, Receipt, PlusCircle, ChevronUp, ChevronDown } from 'lucide-react';
+import type { Brand, Material, Category, Color, Product, Supplier } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { Badge } from '@/components/ui/badge';
 import { createBulkProducts, updateProduct } from '@/app/actions/products-actions';
 import { getBrands, getCategories, getMaterials, getColors, createSetting } from '@/app/actions/settings-actions';
 import { getSuppliersList } from '@/app/actions/supplier-actions';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { CreditCard, Wallet } from 'lucide-react';
+import { SpotlightCard } from '@/components/ui/spotlight-card';
+import { BreadcrumbCustom } from "@/components/ui/breadcrumb-custom";
+
+const GRID_LAYOUT = "grid grid-cols-[50px_1fr_200px_300px_80px] items-center gap-4";
+
+const COLUMNS = [
+    { id: 'index', label: '#', align: 'center' },
+    { id: 'identity', label: 'Produit', align: 'left' },
+    { id: 'specs', label: 'Détails', align: 'left' },
+    { id: 'financials', label: 'Offre & Stock', align: 'right' },
+    { id: 'actions', label: '', align: 'center' },
+] as const;
 
 // --- Improved Schema ---
 
 const ProductItemSchema = z.object({
-  reference: z.string().optional(), // Make optional in Zod but validate in UI or backend if needed unique
+  reference: z.string().optional(),
   nomProduit: z.string().min(1, 'Nom requis.'),
   categorieId: z.string().min(1, 'Catégorie requise.'),
-  marqueId: z.string().min(1, 'Marque requise.'),
+  marqueId: z.string().optional(),
   matiereId: z.string().optional(),
   couleurId: z.string().optional(),
-  prixAchat: z.coerce.number().optional(),
+  prixAchat: z.coerce.number().optional().default(0),
   isAchatTTC: z.boolean().default(false).optional(),
   prixVente: z.coerce.number().min(0, 'Prix requis.'),
   quantiteStock: z.coerce.number().min(0, 'Qte requise.'),
@@ -52,19 +78,16 @@ const ProductItemSchema = z.object({
 });
 
 const BulkProductSchema = z.object({
-    // Invoice Header (Optional in Edit Mode)
     fournisseurId: z.string().optional(),
     numFacture: z.string().optional(),
     dateAchat: z.string().optional(),
-    
-    // Items
     items: z.array(ProductItemSchema).min(1, "Il faut au moins un produit.")
 });
 
 type BulkProductFormValues = z.infer<typeof BulkProductSchema>;
 
 interface ProductFormProps {
-  product?: Product; // If provided, we are in EDIT mode
+  product?: Product;
 }
 
 export function ProductForm({ product }: ProductFormProps) {
@@ -73,16 +96,14 @@ export function ProductForm({ product }: ProductFormProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isEditMode] = React.useState(!!product);
   
-  // Settings State
   const [brands, setBrands] = React.useState<Brand[]>([]);
   const [categories, setCategories] = React.useState<Category[]>([]);
   const [materials, setMaterials] = React.useState<Material[]>([]);
   const [colors, setColors] = React.useState<Color[]>([]);
-  const [suppliers, setSuppliers] = React.useState<any[]>([]);
+  const [suppliers, setSuppliers] = React.useState<Supplier[]>([]);
   
   const [isCreatingSetting, setIsCreatingSetting] = React.useState(false);
 
-  // Initialize Form
   const form = useForm<BulkProductFormValues>({
     resolver: zodResolver(BulkProductSchema),
     defaultValues: {
@@ -103,7 +124,61 @@ export function ProductForm({ product }: ProductFormProps) {
     name: "items",
   });
 
-  // Load Settings & Pre-fill for Edit Mode
+  const watchedItems = useWatch({
+    control: form.control,
+    name: "items",
+  });
+
+  const totals = React.useMemo(() => {
+    return watchedItems.reduce((acc, item) => {
+      const gQty = Number(item.quantiteStock) || 0;
+      const gPriceAchat = Number(item.prixAchat) || 0;
+      const gIsTTC = !!item.isAchatTTC;
+      
+      const costHT = gIsTTC ? (gPriceAchat / 1.2) : gPriceAchat;
+      const costTTC = gIsTTC ? gPriceAchat : (gPriceAchat * 1.2);
+      
+      acc.count += 1;
+      acc.units += gQty;
+      acc.totalCostHT += costHT * gQty;
+      acc.totalCostTTC += costTTC * gQty;
+      return acc;
+    }, { count: 0, units: 0, totalCostHT: 0, totalCostTTC: 0 });
+  }, [watchedItems]);
+
+  const selectedSupplier = React.useMemo(() => {
+    const sId = form.watch('fournisseurId');
+    return suppliers.find(s => s.id === sId);
+  }, [form.watch('fournisseurId'), suppliers]);
+
+  // SMART HT/TTC Logic: Update items based on supplier default
+  React.useEffect(() => {
+      if (selectedSupplier?.defaultTaxMode && !isEditMode) {
+          const mode = selectedSupplier.defaultTaxMode === 'TTC';
+          const currentItems = form.getValues().items;
+          const hasMixedModes = currentItems.some(it => it.isAchatTTC !== mode);
+          
+          if (hasMixedModes) {
+              currentItems.forEach((_, idx) => {
+                  form.setValue(`items.${idx}.isAchatTTC`, mode);
+              });
+              toast({ 
+                  title: `Mode ${selectedSupplier.defaultTaxMode} appliqué`, 
+                  description: `Le fournisseur ${selectedSupplier.name} préfère la saisie en ${selectedSupplier.defaultTaxMode}.`,
+                  duration: 3000
+              });
+          }
+      }
+  }, [selectedSupplier?.id, isEditMode, form, toast]);
+
+  const invalidLinesCount = React.useMemo(() => {
+    return watchedItems.filter(it => !it.nomProduit || !it.categorieId).length;
+  }, [watchedItems]);
+
+  const hasMixedTaxes = React.useMemo(() => {
+    return watchedItems.some(it => it.isAchatTTC) && watchedItems.some(it => !it.isAchatTTC);
+  }, [watchedItems]);
+
   React.useEffect(() => {
     async function loadSettings() {
       try {
@@ -115,11 +190,11 @@ export function ProductForm({ product }: ProductFormProps) {
           getSuppliersList()
         ]);
 
-        const b = bResult.map(x => ({ ...x, id: x.id.toString() } as any));
-        const c = cResult.map(x => ({ ...x, id: x.id.toString() } as any));
-        const m = mResult.map(x => ({ ...x, id: x.id.toString() } as any));
-        const col = colResult.map(x => ({ ...x, id: x.id.toString() } as any));
-        const supp = suppResult.map(x => ({ ...x, id: x.id.toString() }));
+        const b = (bResult.success && bResult.data ? bResult.data : []).map((x: any) => ({ ...x, id: x.id.toString() }));
+        const c = (cResult.success && cResult.data ? cResult.data : []).map((x: any) => ({ ...x, id: x.id.toString() }));
+        const m = (mResult.success && mResult.data ? mResult.data : []).map((x: any) => ({ ...x, id: x.id.toString() }));
+        const col = (colResult.success && colResult.data ? colResult.data : []).map((x: any) => ({ ...x, id: x.id.toString() }));
+        const supp = (suppResult.success && suppResult.data ? suppResult.data : []).map((x: any) => ({ ...x, id: x.id.toString() }));
 
         setBrands(b);
         setCategories(c);
@@ -128,11 +203,11 @@ export function ProductForm({ product }: ProductFormProps) {
         setSuppliers(supp);
 
         if (product) {
-            const catId = c.find(cat => cat.name === product.categorie || cat.name === product.category)?.id || product.categorieId || '';
-            const brandId = b.find(br => br.name === product.marque || br.name === product.brand)?.id || product.marqueId || '';
-            const matId = m.find(mx => mx.id === product.matiereId?.toString())?.id || '';
-            const colId = col.find(cx => cx.id === product.couleurId?.toString())?.id || '';
-            const suppId = supp.find(s => s.name === product.fournisseur)?.id || product.supplier || '';
+            const catId = c.find((cat: any) => cat.name === product.categorie || cat.name === (product as any).category)?.id || product.categorieId || '';
+            const brandId = b.find((br: any) => br.name === product.marque)?.id || product.marqueId || '';
+            const matId = m.find((mx: any) => mx.id === product.matiereId?.toString())?.id || '';
+            const colId = col.find((cx: any) => cx.id === product.couleurId?.toString())?.id || '';
+            const suppId = (product as any).fournisseurId || supp.find((s: any) => s.name === (product as any).fournisseur)?.id || '';
 
             form.reset({
                 fournisseurId: suppId,
@@ -140,44 +215,36 @@ export function ProductForm({ product }: ProductFormProps) {
                 dateAchat: new Date().toISOString().split('T')[0],
                 items: [{
                     reference: product.reference || '',
-                    nomProduit: product.nomProduit || product.name || '',
+                    nomProduit: product.nomProduit || (product as any).name || '',
                     categorieId: catId,
                     marqueId: brandId,
                     matiereId: matId,
                     couleurId: colId,
-                    prixAchat: Number(product.prixAchat || product.purchasePrice || 0),
-                    prixVente: Number(product.prixVente || product.salePrice || 0),
-                    quantiteStock: Number(product.quantiteStock || product.stock || 0),
-                    stockMin: Number(product.stockMin || product.minStock || product.seuilAlerte || 5),
+                    prixAchat: Number(product.prixAchat || 0),
+                    prixVente: Number(product.prixVente || 0),
+                    quantiteStock: Number(product.quantiteStock || 0),
+                    stockMin: Number(product.stockMin || 5),
                     description: product.description || '',
                     imageUrl: product.imageUrl || '',
                     isAchatTTC: false
                 }]
             });
         }
-
       } catch (err) {
         console.error("Error loading settings:", err);
-        toast({ title: "Erreur", description: "Impossible de charger les paramètres.", variant: "destructive" });
       }
     }
     loadSettings();
-  }, [product, form, toast]);
+  }, [product, form]);
 
-  // Quick Create Handler
-  const handleQuickCreate = async (
-    type: 'brands' | 'categories' | 'materials' | 'colors',
-    name: string,
-    setList: React.Dispatch<React.SetStateAction<any[]>>,
-    fieldPath: any
-  ) => {
+  const handleQuickCreate = async (type: string, name: string, setList: any, fieldPath: any) => {
     if (!name.trim()) return;
     setIsCreatingSetting(true);
     try {
-      const created = await createSetting(type, { name: name.trim() });
+      const created = await createSetting(type as any, { name: name.trim() });
       if (created) {
         const newItem = { ...created, id: created.id.toString() };
-        setList((prev) => [...prev, newItem]);
+        setList((prev: any) => [...prev, newItem]);
         form.setValue(fieldPath, newItem.id);
         toast({ title: "Ajouté !", description: `${name} a été ajouté.` });
       }
@@ -202,9 +269,7 @@ export function ProductForm({ product }: ProductFormProps) {
                 marque: brands.find(b => b.id === item.marqueId)?.name,
                 fournisseur: suppliers.find(s => s.id === data.fournisseurId)?.name 
             };
-            
             const res = await updateProduct(product.id, payload);
-            
             if (res.success) {
                  toast({ title: 'Produit modifié', description: 'Mise à jour réussie' });
                  router.push(`/produits/${product.id}`); 
@@ -214,22 +279,15 @@ export function ProductForm({ product }: ProductFormProps) {
             }
         } else {
              const filteredItems = data.items.filter(it => it.nomProduit.trim() !== '');
-            
-             if (filteredItems.length === 0) {
-                 toast({ title: 'Attention', description: 'Veuillez remplir au moins le nom du produit.', variant: 'destructive' });
-                 return;
-             }
- 
              const items = filteredItems.map(item => ({
                  ...item,
-                 reference: item.reference || '', // Let backend handle generation if empty? Backend says unique check.
+                 reference: item.reference || '',
                  matiereId: item.matiereId || undefined,
                  couleurId: item.couleurId || undefined,
                  categorie: categories.find(c => c.id === item.categorieId)?.name,
                  marque: brands.find(b => b.id === item.marqueId)?.name,
                  fournisseur: suppliers.find(s => s.id === data.fournisseurId)?.name
              }));
-             
              const res = await createBulkProducts({ 
                  items, 
                  invoiceData: { 
@@ -238,7 +296,6 @@ export function ProductForm({ product }: ProductFormProps) {
                      dateAchat: data.dateAchat ? new Date(data.dateAchat) : undefined 
                  } 
              });
- 
              if (res.success) {
                  toast({ title: 'Succès', description: res.message });
                  router.push('/produits');
@@ -253,211 +310,468 @@ export function ProductForm({ product }: ProductFormProps) {
     }
   };
 
-  const onAddRow = () => {
-    append({
-      reference: '', nomProduit: '', categorieId: '', marqueId: '', 
-      matiereId: '', couleurId: '',
-      prixAchat: 0, prixVente: 0, quantiteStock: 1, stockMin: 5,
-      imageUrl: '', description: '', details: '', isAchatTTC: false
-    });
+  const onAddRow = (count: number = 1) => {
+    const currentItems = form.getValues().items;
+    const lastItem = currentItems[currentItems.length - 1];
+    
+    for (let i = 0; i < count; i++) {
+        append({
+          reference: '', nomProduit: '', 
+          categorieId: lastItem?.categorieId || '', 
+          marqueId: lastItem?.marqueId || '', 
+          matiereId: lastItem?.matiereId || '', 
+          couleurId: lastItem?.couleurId || '',
+          prixAchat: 0, prixVente: 0, quantiteStock: 1, stockMin: 5,
+          imageUrl: '', description: '', details: '', isAchatTTC: lastItem?.isAchatTTC || false
+        });
+    }
+    
+    if (count > 1) {
+        toast({ title: "Lignes ajoutées", description: `${count} nouvelles lignes ont été créées.` });
+    }
   };
 
   const duplicateRow = (index: number) => {
-      // Get current values from the form state to ensure we copy user input
       const currentItems = form.getValues().items;
       const itemToCopy = currentItems[index];
-
       if (!itemToCopy) return;
-
-      const newItem = {
-          ...itemToCopy,
-          reference: '', // Clear unique fields
-          nomProduit: '', // Clear name to force user attention
-          // IDs are preserved
-          categorieId: itemToCopy.categorieId,
-          marqueId: itemToCopy.marqueId,
-          matiereId: itemToCopy.matiereId,
-          couleurId: itemToCopy.couleurId,
-          prixAchat: itemToCopy.prixAchat,
-          prixVente: itemToCopy.prixVente,
-          isAchatTTC: itemToCopy.isAchatTTC,
-          quantiteStock: itemToCopy.quantiteStock 
-      };
-
-      // Insert AFTER the current row
+      const newItem = { ...itemToCopy, reference: '', nomProduit: '' };
       insert(index + 1, newItem);
-      
       toast({ description: "Ligne dupliquée 👇", duration: 1500 });
   };
   
   const applyToAll = (fieldName: any) => {
-      const firstVal = form.getValues(`items.0.${fieldName}`);
+      const firstVal = form.getValues(`items.0.${fieldName}` as any);
       if (!firstVal) return;
-      
       const currentItems = form.getValues().items;
-      currentItems.forEach((item, index) => {
+      currentItems.forEach((_, index) => {
           if (index === 0) return;
-          // Apply to empty lines as requested
-          const currentVal = form.getValues(`items.${index}.${fieldName}`);
-          if (!currentVal) {
-              form.setValue(`items.${index}.${fieldName}`, firstVal);
-          }
+          form.setValue(`items.${index}.${fieldName}` as any, firstVal);
       });
-      toast({ title: "Appliqué", description: "Valeur copiée sur les lignes vides." });
+      toast({ title: "Appliqué", description: `Valeur copiée sur toutes les lignes.` });
   };
 
+  const isGlobalTTC = watchedItems[0]?.isAchatTTC || false;
+  const toggleGlobalTaxMode = (isTTC: boolean) => {
+    watchedItems.forEach((_, idx) => {
+      form.setValue(`items.${idx}.isAchatTTC`, isTTC);
+    });
+    toast({ 
+        title: `Mode Global: ${isTTC ? 'TTC' : 'HT'}`, 
+        description: `Toutes les lignes ont été basculées en ${isTTC ? 'TTC' : 'HT'}.` 
+    });
+  };
+
+
   return (
+    <TooltipProvider>
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 w-full max-w-[1800px] mx-auto">
-        
-        {/* Invoice Header - Only show in Bulk Mode */}
-        {!isEditMode && (
-             <Card className="mb-6">
-                <CardHeader className="pb-4 py-4">
-                    <CardTitle className="text-base font-medium flex justify-between items-center">
-                        Informations Facture (Optionnel)
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-4 gap-4 py-4">
-                    <FormField
-                    control={form.control}
-                    name="fournisseurId"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Fournisseur</FormLabel>
-                        <SearchableSelect
-                            options={suppliers.map(s => ({ label: s.name, value: s.id }))}
-                            value={field.value}
-                            onChange={field.onChange}
-                            placeholder="Sélectionner..."
-                            className="h-9"
-                        />
-                        </FormItem>
-                    )}
-                    />
-                    <FormField
-                    control={form.control}
-                    name="numFacture"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>N° Facture</FormLabel>
-                        <FormControl><Input placeholder="FACT-XX" {...field} className="h-9" /></FormControl>
-                        </FormItem>
-                    )}
-                    />
-                    <FormField
-                    control={form.control}
-                    name="dateAchat"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Date Achat</FormLabel>
-                        <FormControl><Input type="date" {...field} className="h-9" /></FormControl>
-                        </FormItem>
-                    )}
-                    />
-                     <div className="flex items-end pb-1">
-                        <Button type="button" variant="outline" size="sm" onClick={onAddRow} className="w-full">
-                            <Plus className="mr-2 h-4 w-4" /> Ajouter Ligne
-                        </Button>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="w-full max-w-[1600px] mx-auto px-6 pb-12">
+        <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="flex items-center gap-4">
+                <Button variant="ghost" size="icon" asChild className="rounded-full hover:bg-slate-100 h-10 w-10">
+                    <Link href="/produits">
+                        <ArrowLeft className="h-5 w-5 text-slate-500" />
+                    </Link>
+                </Button>
+                <div>
+                    <div className="flex items-center gap-3 mb-1">
+                        <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+                            <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">
+                                <Package className="h-6 w-6" />
+                            </div>
+                            {isEditMode ? "Modifier le Produit" : "Nouvelle Entrée"}
+                        </h1>
+                        {!isEditMode && (
+                            <Badge variant="outline" className="bg-blue-50/50 text-blue-700 border-blue-100 font-bold px-2.5 py-0.5 rounded-full">
+                                Étape 1/2
+                            </Badge>
+                        )}
                     </div>
-                </CardContent>
-            </Card>
-        )}
-
-        {/* Compact Table Grid */}
-        <div className="border rounded-md shadow-sm bg-card max-h-[75vh] overflow-auto relative scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
-            <Table>
-                <TableHeader className="sticky top-0 z-20 bg-card shadow-sm">
-                    <TableRow className="bg-muted/50 hover:bg-muted/50 border-b">
-                        <TableHead className="w-[40px] text-center">#</TableHead>
-                        <TableHead className="w-[180px]">Nom Produit</TableHead>
-                        <TableHead className="w-[120px]">Réf</TableHead>
-                        <TableHead className="min-w-[130px]">
-                            <div className="flex items-center gap-1">
-                                Marque
-                                {!isEditMode && <ArrowDownToLine className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-primary transition-colors" onClick={() => applyToAll('marqueId')} title="Appliquer à tous" />}
-                            </div>
-                        </TableHead>
-                        <TableHead className="min-w-[130px]">
-                            <div className="flex items-center gap-1">
-                                Catégorie
-                                {!isEditMode && <ArrowDownToLine className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-primary transition-colors" onClick={() => applyToAll('categorieId')} title="Appliquer à tous" />}
-                            </div>
-                        </TableHead>
-                        {/* New Columns */}
-                        <TableHead className="min-w-[100px]">
-                            <div className="flex items-center gap-1">
-                                Matière
-                                {!isEditMode && <ArrowDownToLine className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-primary transition-colors" onClick={() => applyToAll('matiereId')} title="Appliquer à tous" />}
-                            </div>
-                        </TableHead>
-                         <TableHead className="min-w-[100px]">
-                            <div className="flex items-center gap-1">
-                                Couleur
-                                {!isEditMode && <ArrowDownToLine className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-primary transition-colors" onClick={() => applyToAll('couleurId')} title="Appliquer à tous" />}
-                            </div>
-                        </TableHead>
-
-                        <TableHead className="w-[100px] text-right">P. Achat</TableHead>
-                        <TableHead className="w-[100px] text-right">P. Vente</TableHead>
-                        <TableHead className="w-[60px] text-center">Marge</TableHead>
-                        <TableHead className="w-[70px] text-center">Qte</TableHead>
-                        <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {fields.map((field, index) => (
-                        <ProductRow 
-                            key={field.id} 
-                            index={index} 
-                            control={form.control} 
-                            remove={remove} 
-                            duplicate={duplicateRow}
-                            brands={brands}
-                            categories={categories}
-                            materials={materials}
-                            colors={colors}
-                            isEditMode={isEditMode}
-                            onAddRow={onAddRow}
-                            handleQuickCreate={handleQuickCreate}
-                            isCreatingSetting={isCreatingSetting}
-                            setBrands={setBrands}
-                            setCategories={setCategories}
-                            setMaterials={setMaterials}
-                            setColors={setColors}
-                        />
-                    ))}
-                </TableBody>
-            </Table>
-            
-            {fields.length === 0 && (
-                 <div className="text-center py-8 text-muted-foreground">
-                    Aucun produit. Cliquez sur "Ajouter une ligne".
-                 </div>
-            )}
+                    <p className="text-slate-500 ml-1">
+                        {isEditMode 
+                            ? `ID Produit: ${product?.id} — Réf: ${product?.reference}` 
+                            : "Configurez les produits et les détails de la facture fournisseur"}
+                    </p>
+                </div>
+            </div>
         </div>
 
-        <div className="flex justify-end gap-4 sticky bottom-4 z-10">
-             {/* Backdrop blur applied to container to separate from content */}
-            <div className="absolute inset-0 bg-background/80 backdrop-blur-sm -z-10 border-t" />
-            
-            <Button type="button" variant="ghost" onClick={() => router.back()}>
-                Annuler
-            </Button>
-            <SubmitButton 
-                isLoading={isSubmitting} 
-                label={isEditMode ? "Enregistrer les modifications" : `Enregistrer ${fields.length} produit(s)`}
-                loadingLabel="Enregistrement..."
-                className="w-48 shadow-lg"
-            />
+        <div className="space-y-6">
+            {!isEditMode ? (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                    <div className="lg:col-span-12 xl:col-span-8">
+                        <div className="bg-card rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full">
+                            <InvoiceInfoPanel 
+                                form={form} 
+                                suppliers={suppliers} 
+                                onAddRow={onAddRow} 
+                                isGlobalTTC={isGlobalTTC}
+                                toggleGlobalTaxMode={toggleGlobalTaxMode}
+                            />
+                        </div>
+                    </div>
+                    <div className="lg:col-span-12 xl:col-span-4">
+                        <div className="h-full flex flex-col gap-4">
+                            {/* Financial Summary Cards */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <SpotlightCard className="p-4" spotlightColor="rgba(59, 130, 246, 0.1)">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">Total HT</span>
+                                        <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                                            <CreditCard className="h-4 w-4 text-blue-600" />
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-2xl font-bold text-slate-900 tracking-tight">
+                                            {totals.totalCostHT.toLocaleString('fr-FR', { minimumFractionDigits: 2 })}
+                                        </span>
+                                        <span className="text-xs font-medium text-slate-500">DH Hors Taxe</span>
+                                    </div>
+                                </SpotlightCard>
+
+                                <SpotlightCard className="p-4" spotlightColor="rgba(16, 185, 129, 0.1)">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-xs font-semibold uppercase text-emerald-700 tracking-wider">Total TTC</span>
+                                        <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+                                            <Wallet className="h-4 w-4 text-emerald-600" />
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-2xl font-bold text-emerald-600 tracking-tight">
+                                            {totals.totalCostTTC.toLocaleString('fr-FR', { minimumFractionDigits: 2 })}
+                                        </span>
+                                        <span className="text-xs font-medium text-emerald-600/80">DH TTC</span>
+                                    </div>
+                                </SpotlightCard>
+                            </div>
+
+                            {/* Stats & Actions */}
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col justify-between flex-1">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-6">
+                                        <div className="flex flex-col">
+                                            <span className="text-xs font-medium text-slate-500 uppercase">Articles</span>
+                                            <span className="text-2xl font-bold text-slate-900">{totals.units}</span>
+                                        </div>
+                                        <div className="h-8 w-px bg-slate-100" />
+                                        <div className="flex flex-col">
+                                            <span className="text-xs font-medium text-slate-500 uppercase">Lignes</span>
+                                            <span className="text-2xl font-bold text-slate-900">{totals.count}</span>
+                                        </div>
+                                    </div>
+                                    {invalidLinesCount > 0 && (
+                                        <div className="px-2 py-1 rounded-md bg-red-50 border border-red-100 flex items-center gap-1.5">
+                                            <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                                            <span className="text-[10px] font-bold text-red-600">{invalidLinesCount} err.</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex bg-white gap-3 mt-6">
+                                    <SubmitButton 
+                                        isLoading={isSubmitting} 
+                                        disabled={invalidLinesCount > 0}
+                                        className="flex-1 shadow-md hover:shadow-lg transition-all h-10 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700" 
+                                    >
+                                        <span className="flex items-center gap-2 justify-center font-semibold">
+                                            <Truck className="h-4 w-4" />
+                                            {`Valider (${totals.count})`}
+                                        </span>
+                                    </SubmitButton>
+                                    <Button type="button" variant="ghost" className="h-10 px-4 text-slate-500 hover:text-slate-800 font-medium" onClick={() => router.back()}>
+                                        Abandonner
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <div className="space-y-6">
+                    <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200">
+                       <div className="flex items-center gap-4">
+                            <div className="bg-blue-50 p-2 rounded-lg"><Package className="h-5 w-5 text-blue-600" /></div>
+                            <div>
+                                <p className="text-[10px] font-black uppercase text-slate-400 leading-none mb-1">Produit en cours d'édition</p>
+                                <p className="text-sm font-black text-slate-800">{product?.nomProduit}</p>
+                            </div>
+                       </div>
+                       <div className="flex items-center gap-3">
+                            <Button type="button" variant="ghost" className="h-10 px-6 text-slate-400 font-bold text-[11px] uppercase tracking-widest rounded-xl hover:bg-slate-50 transition-all" onClick={() => router.back()}>
+                                Annuler
+                            </Button>
+                            <SubmitButton 
+                                isLoading={isSubmitting} 
+                                disabled={invalidLinesCount > 0}
+                                className="h-10 px-8 shadow-md hover:shadow-lg transition-all font-black uppercase tracking-widest text-[11px] rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700" 
+                            >
+                                Enregistrer les modifications
+                            </SubmitButton>
+                       </div>
+                    </div>
+
+                    {/* Invoice Info Panel (Collapsed by default in Edit Mode) */}
+                    <div className="bg-card rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <InvoiceInfoPanel 
+                            form={form} 
+                            suppliers={suppliers} 
+                            onAddRow={onAddRow} 
+                            isGlobalTTC={isGlobalTTC}
+                            toggleGlobalTaxMode={toggleGlobalTaxMode}
+                            defaultOpen={false}
+                        />
+                    </div>
+                </div>
+            )}
+
+            <div className="flex items-center justify-between px-6 py-3 bg-blue-50/50 border border-blue-100 rounded-lg">
+                <div className="flex items-center gap-2 text-sm font-medium text-blue-700">
+                    <Info className="h-4 w-4 fill-blue-200" />
+                    <span>Saisie assistée : {selectedSupplier ? `${selectedSupplier.name} (${selectedSupplier.defaultTaxMode || 'HT'})` : "Sélectionnez un fournisseur."}</span>
+                </div>
+                {hasMixedTaxes && (
+                    <div className="flex items-center gap-2 text-sm font-semibold text-amber-600 animate-pulse">
+                        <AlertCircle className="h-4 w-4" />
+                        <span>Attention : Mélange HT/TTC</span>
+                    </div>
+                )}
+            </div>
+
+            <div className="w-full border rounded-xl shadow-sm bg-card overflow-x-auto relative border-slate-200">
+                <Table className="min-w-[1100px] border-separate border-spacing-0">
+                    <TableHeader className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md border-b-2 border-slate-200">
+                        <TableRow className={cn("hover:bg-transparent border-none", GRID_LAYOUT)}>
+                            {COLUMNS.map((col) => (
+                                <TableHead 
+                                    key={col.id} 
+                                    className="py-4 font-semibold text-xs text-slate-500 border-b border-slate-200"
+                                    style={{ textAlign: col.align as any }}
+                                >
+                                    <div className={cn(
+                                        "flex items-center gap-2 mb-2",
+                                        col.align === 'right' ? 'justify-end' : col.align === 'center' ? 'justify-center' : 'justify-start'
+                                    )}>
+                                        {col.label}
+                                        {!isEditMode && col.id === 'identity' && (
+                                            <div className="flex gap-1">
+                                                <ArrowDownToLine 
+                                                    className="h-3.5 w-3.5 cursor-pointer text-slate-300 hover:text-primary transition-colors" 
+                                                    onClick={() => { applyToAll('marqueId'); applyToAll('categorieId'); }}
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                </TableHead>
+                            ))}
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody className="divide-y divide-slate-100 table-row-group">
+                        {fields.map((field, index) => (
+                            <ProductRow 
+                                key={field.id} 
+                                index={index} 
+                                control={form.control} 
+                                remove={remove} 
+                                duplicate={duplicateRow}
+                                brands={brands}
+                                categories={categories}
+                                materials={materials}
+                                colors={colors}
+                                isEditMode={isEditMode}
+                                onAddRow={onAddRow}
+                                handleQuickCreate={handleQuickCreate}
+                                isCreatingSetting={isCreatingSetting}
+                                setBrands={setBrands}
+                                setCategories={setCategories}
+                                setMaterials={setMaterials}
+                                setColors={setColors}
+                                isLast={index === fields.length - 1}
+                            />
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
+
+            <div className="mt-4 flex justify-center">
+                <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => onAddRow()}
+                    className="group relative flex items-center gap-2 px-8 py-6 bg-white hover:bg-slate-50 border-dashed border-2 border-slate-200 hover:border-primary/50 transition-all duration-300 rounded-2xl shadow-sm hover:shadow-md group"
+                >
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl opacity-0 group-hover:opacity-5 transition duration-300"></div>
+                    <div className="bg-slate-100 group-hover:bg-primary/10 p-2 rounded-xl transition-colors">
+                        <Plus className="h-5 w-5 text-slate-500 group-hover:text-primary" />
+                    </div>
+                    <div className="text-left">
+                        <span className="block text-sm font-semibold text-slate-700 group-hover:text-primary transition-colors">Ajouter une ligne</span>
+                        <span className="block text-xs text-slate-400">Nouveau produit ou ligne vide</span>
+                    </div>
+                </Button>
+            </div>
         </div>
 
       </form>
     </Form>
+    </TooltipProvider>
   );
 }
 
-// Extracted Row Component for Performance & Hooks
+function InvoiceInfoPanel({ 
+  form, suppliers, onAddRow, isGlobalTTC, toggleGlobalTaxMode, defaultOpen 
+}: { 
+  form: any, suppliers: Supplier[], onAddRow: (count?: number) => void, isGlobalTTC: boolean, toggleGlobalTaxMode: (isTTC: boolean) => void, defaultOpen?: boolean
+}) {
+  const [isOpen, setIsOpen] = React.useState(defaultOpen ?? true);
+  const [linesToAdd, setLinesToAdd] = React.useState(1);
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="w-full space-y-0 overflow-hidden bg-white">
+      <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-100">
+        <div className="flex items-center gap-3">
+            <div className="bg-primary/10 p-2 rounded-lg"><Package className="h-5 w-5 text-primary" /></div>
+            <div>
+                <h3 className="text-sm font-bold text-slate-800">Entrée Stock</h3>
+                <p className="text-xs text-slate-500">Information Facture</p>
+            </div>
+        </div>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-background/80 transition-transform duration-300">
+            {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
+        </CollapsibleTrigger>
+      </div>
+      <CollapsibleContent>
+          <div className="p-6 bg-slate-50/50 grid grid-cols-1 md:grid-cols-12 gap-6">
+            
+            {/* ROW 1: Supplier, Invoice, Date */}
+            <div className="md:col-span-6">
+                <FormField control={form.control} name="fournisseurId" render={({ field }) => (
+                    <FormItem className="space-y-2">
+                    <FormLabel className="flex items-center gap-2 text-slate-600">
+                        <Truck className="h-4 w-4" /> 
+                        Fournisseur
+                    </FormLabel>
+                    <SearchableSelect 
+                        options={suppliers.map(s => ({ label: s.name, value: s.id }))} 
+                        value={field.value} 
+                        onChange={field.onChange} 
+                        placeholder="Rechercher un fournisseur..." 
+                        className="h-10 bg-white border-slate-200 shadow-sm transition-all focus:ring-2 focus:ring-primary/20" 
+                    />
+                    </FormItem>
+                )} />
+            </div>
+            <div className="md:col-span-3">
+                <FormField control={form.control} name="numFacture" render={({ field }) => (
+                    <FormItem className="space-y-2">
+                    <FormLabel className="flex items-center gap-2 text-slate-600">
+                        <FileText className="h-4 w-4" /> 
+                        N° Facture
+                    </FormLabel>
+                    <FormControl>
+                        <div className="relative">
+                            <Input 
+                                placeholder="FACT-..." 
+                                {...field} 
+                                className="h-10 pl-3 bg-white border-slate-200 font-mono text-xs shadow-sm focus:ring-2 focus:ring-primary/20" 
+                            />
+                        </div>
+                    </FormControl>
+                    </FormItem>
+                )} />
+            </div>
+            <div className="md:col-span-3">
+                <FormField control={form.control} name="dateAchat" render={({ field }) => (
+                    <FormItem className="space-y-2">
+                    <FormLabel className="flex items-center gap-2 text-slate-600">
+                        <Calendar className="h-4 w-4" /> 
+                        Date
+                    </FormLabel>
+                    <FormControl>
+                        <Input 
+                            type="date" 
+                            {...field} 
+                            className="h-10 bg-white border-slate-200 shadow-sm focus:ring-2 focus:ring-primary/20" 
+                        />
+                    </FormControl>
+                    </FormItem>
+                )} />
+            </div>
+
+            {/* ROW 2: Tax Mode, Spacer, Quantity & Add */}
+            <div className="md:col-span-4">
+                <div className="space-y-2">
+                    <span className="flex items-center gap-2 text-sm text-slate-600 font-medium">
+                        <Receipt className="h-4 w-4" />
+                        Format Global
+                    </span>
+                    <div className="flex p-1 bg-slate-200/50 rounded-lg border border-slate-200/60">
+                        <button 
+                            type="button"
+                            onClick={() => toggleGlobalTaxMode(false)}
+                            className={cn(
+                                "flex-1 py-2 rounded-md text-xs font-bold transition-all duration-200",
+                                !isGlobalTTC 
+                                    ? "bg-white text-slate-900 shadow-sm ring-1 ring-black/5" 
+                                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                            )}
+                        >
+                            HORS TAXE (HT)
+                        </button>
+                        <button 
+                            type="button"
+                            onClick={() => toggleGlobalTaxMode(true)}
+                            className={cn(
+                                "flex-1 py-1.5 rounded-md text-xs font-bold transition-all duration-200",
+                                isGlobalTTC 
+                                    ? "bg-white text-indigo-600 shadow-sm ring-1 ring-black/5" 
+                                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                            )}
+                        >
+                            TTC
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div className="md:col-span-4 hidden md:block"></div>
+
+            <div className="md:col-span-4">
+                <div className="space-y-2">
+                    <span className="flex items-center gap-2 text-sm text-slate-600 font-medium">
+                        <PlusCircle className="h-4 w-4" />
+                        Ajout Rapide
+                    </span>
+                    <div className="flex gap-2">
+                        <div className="w-20">
+                            <Input 
+                                type="number" 
+                                min={1} 
+                                max={50} 
+                                value={linesToAdd} 
+                                onChange={(e) => setLinesToAdd(parseInt(e.target.value) || 1)}
+                                className="h-10 text-center font-black bg-white border-slate-200 shadow-sm focus:ring-2 focus:ring-primary/20"
+                            />
+                        </div>
+                        <Button 
+                            type="button" 
+                            variant="default" 
+                            className="flex-1 h-10 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs shadow-sm hover:shadow-md transition-all gap-2" 
+                            onClick={() => onAddRow(linesToAdd)}
+                        >
+                            <Plus className="h-4 w-4" /> 
+                            Ajouter Ligne(s)
+                        </Button>
+                    </div>
+                </div>
+            </div>
+          </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 interface ProductRowProps {
     index: number;
     control: Control<BulkProductFormValues>;
@@ -475,209 +789,158 @@ interface ProductRowProps {
     setCategories: any;
     setMaterials: any;
     setColors: any;
+    isLast: boolean;
 }
 
 function ProductRow({ 
-    index, 
-    control, 
-    remove, 
-    duplicate, 
-    brands, 
-    categories, 
-    materials,
-    colors,
-    isEditMode,
-    onAddRow,
-    handleQuickCreate,
-    isCreatingSetting,
-    setBrands,
-    setCategories,
-    setMaterials,
-    setColors
+    index, control, remove, duplicate, brands, categories, materials, colors, isEditMode, onAddRow, handleQuickCreate, isCreatingSetting, setBrands, setCategories, setMaterials, setColors, isLast
 }: ProductRowProps) {
     const prixAchat = useWatch({ control, name: `items.${index}.prixAchat` });
     const prixVente = useWatch({ control, name: `items.${index}.prixVente` });
     const isAchatTTC = useWatch({ control, name: `items.${index}.isAchatTTC` });
-    
-    // Auto-Margin Calculation
+    const nomProduit = useWatch({ control, name: `items.${index}.nomProduit` });
+    const categorieId = useWatch({ control, name: `items.${index}.categorieId` });
+
     const valPrixAchat = Number(prixAchat) || 0;
     const valPrixVente = Number(prixVente) || 0;
-    
     const cost = isAchatTTC ? (valPrixAchat / 1.2) : valPrixAchat;
     const margin = valPrixVente - cost;
     const marginPercent = valPrixVente > 0 ? (margin / valPrixVente) * 100 : 0;
-    
-    // Warning logic: Margin < 20% and Price Vente > 0
     const isLowMargin = marginPercent < 20 && valPrixVente > 0;
+    
+    const isIncomplete = !nomProduit || !categorieId;
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            onAddRow();
-        }
+    const handleKeyDown = (e: React.KeyboardEvent) => { 
+        if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); onAddRow(); }
+        else if (e.key === 'd' && e.ctrlKey) { e.preventDefault(); duplicate(index); }
     };
 
     return (
-        <TableRow className="hover:bg-muted/10 group">
-            <TableCell className="text-center text-xs text-muted-foreground w-[40px]">
-                {index + 1}
+        <TableRow className={cn(
+            GRID_LAYOUT,
+            "group border-b border-slate-100 transition-colors",
+            index % 2 === 0 ? "bg-white" : "bg-slate-50/30",
+            isIncomplete && "bg-red-50/10 hover:bg-red-50/20",
+            !isIncomplete && "hover:bg-blue-50/20"
+        )}>
+            {/* Index */}
+            <TableCell className="text-center text-xs font-medium text-slate-400 py-4 h-full border-r border-slate-50">
+                {String(index + 1).padStart(2, '0')}
             </TableCell>
-            <TableCell className="w-[180px]">
-                <FormField
-                    control={control}
-                    name={`items.${index}.nomProduit`}
-                    render={({ field }) => (
-                        <FormControl>
-                            <Input placeholder="Nom produit" {...field} className="h-8 text-sm" />
-                        </FormControl>
-                    )}
-                />
+            
+            {/* Identity & Technical - Merged Column 1 */}
+            <TableCell className="py-3 px-4 h-full border-r border-slate-50">
+                <div className="flex flex-col gap-2.5">
+                    {/* Nom & Reference Row */}
+                    <div className="flex items-center gap-2">
+                        <FormField control={control} name={`items.${index}.nomProduit`} render={({ field }) => (
+                            <FormControl><Input placeholder="Désignation du produit (Modèle, Série...)" {...field} onKeyDown={handleKeyDown} className={cn("h-10 text-sm font-medium border-slate-200 bg-white focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all shadow-sm placeholder:text-slate-400 w-full", !nomProduit && "border-red-200 bg-red-50/30 placeholder:text-red-300")} /></FormControl>
+                        )} />
+                        <FormField control={control} name={`items.${index}.reference`} render={({ field }) => (
+                            <FormControl><Input placeholder="RÉF" {...field} onKeyDown={handleKeyDown} className="h-10 w-[120px] text-xs font-mono border-slate-200 bg-white focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all shadow-sm uppercase placeholder:text-slate-400 shrink-0" /></FormControl>
+                        )} />
+                    </div>
+
+                    {/* Marque & Category Row */}
+                    <div className="flex items-center gap-2">
+                        <FormField control={control} name={`items.${index}.marqueId`} render={({ field }) => (
+                            <div className="flex-1">
+                                <SearchableSelect options={brands.map(b => ({ label: b.name, value: b.id }))} value={field.value} onChange={field.onChange} placeholder="Marque..." className="h-10 text-xs font-medium border-slate-200 bg-white shadow-sm w-full" onCreateNew={(name) => handleQuickCreate('brands', name, setBrands, `items.${index}.marqueId`)} isCreating={isCreatingSetting} />
+                            </div>
+                        )} />
+                        <FormField control={control} name={`items.${index}.categorieId`} render={({ field }) => (
+                           <div className="flex-1">
+                                <SearchableSelect options={categories.map(c => ({ label: c.name, value: c.id }))} value={field.value} onChange={field.onChange} placeholder="Catégorie..." className={cn("h-10 text-xs font-medium border-slate-200 bg-white shadow-sm w-full", !categorieId && "border-red-200 text-red-500")} onCreateNew={(name) => handleQuickCreate('categories', name, setCategories, `items.${index}.categorieId`)} isCreating={isCreatingSetting} />
+                           </div>
+                        )} />
+                    </div>
+                </div>
             </TableCell>
-            <TableCell className="w-[120px]">
-                <FormField
-                    control={control}
-                    name={`items.${index}.reference`}
-                    render={({ field }) => (
-                        <FormControl>
-                            <Input placeholder="Réf (Auto)" {...field} className="h-8 text-xs font-mono" />
-                        </FormControl>
-                    )}
-                />
+
+             {/* Technical - Column 2 */}
+            <TableCell className="py-3 px-4 h-full border-r border-slate-50">
+                 <div className="flex flex-col gap-2.5 h-full">
+                     <FormField control={control} name={`items.${index}.matiereId`} render={({ field }) => (
+                        <SearchableSelect options={materials.map(m => ({ label: m.name, value: m.id }))} value={field.value} onChange={field.onChange} placeholder="Matière (Acétate...)" className="h-10 text-xs border-slate-200 bg-slate-50/50 hover:bg-white shadow-none focus:bg-white transition-all w-full" onCreateNew={(name) => handleQuickCreate('materials', name, setMaterials, `items.${index}.matiereId`)} isCreating={isCreatingSetting} />
+                    )} />
+                    <FormField control={control} name={`items.${index}.couleurId`} render={({ field }) => (
+                        <SearchableSelect options={colors.map(c => ({ label: c.name, value: c.id }))} value={field.value} onChange={field.onChange} placeholder="Couleur (Noir...)" className="h-10 text-xs border-slate-200 bg-slate-50/50 hover:bg-white shadow-none focus:bg-white transition-all w-full" onCreateNew={(name) => handleQuickCreate('colors', name, setColors, `items.${index}.couleurId`)} isCreating={isCreatingSetting} />
+                    )} />
+                </div>
             </TableCell>
-            <TableCell className="min-w-[130px]">
-                 <FormField
-                    control={control}
-                    name={`items.${index}.marqueId`}
-                    render={({ field }) => (
-                        <SearchableSelect
-                            options={brands.map((b: any) => ({ label: b.name, value: b.id }))}
-                            value={field.value}
-                            onChange={field.onChange}
-                            placeholder="Marque"
-                            className="h-8 text-sm"
-                            onCreateNew={(name) => handleQuickCreate('brands', name, setBrands, `items.${index}.marqueId`)}
-                            isCreating={isCreatingSetting}
-                        />
-                    )}
-                />
+
+            {/* Financials - Column 3 */}
+            <TableCell className="py-3 px-4 h-full border-r border-slate-50">
+                <div className="flex flex-col gap-3">
+                    <div className="grid grid-cols-2 gap-2">
+                        <FormField control={control} name={`items.${index}.prixAchat`} render={({ field }) => (
+                            <div className="relative group/price flex flex-col">
+                                <div className="relative flex items-center">
+                                    <span className="absolute left-2 top-[3px] text-[10px] font-bold text-slate-400 uppercase tracking-wider z-10 pointer-events-none">Achat</span>
+                                    <Input type="number" step="0.01" {...field} onKeyDown={handleKeyDown} className="no-spinner h-11 pt-4 text-right pr-9 pl-2 font-mono text-sm font-bold border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-primary/10 w-full" />
+                                    <FormField control={control} name={`items.${index}.isAchatTTC`} render={({ field }) => (
+                                        <div 
+                                            onClick={() => field.onChange(!field.value)} 
+                                            className={cn(
+                                                "absolute right-1 top-[6px] h-8 w-6 rounded flex items-center justify-center cursor-pointer transition-all border text-[10px] font-bold z-20",
+                                                field.value ? "bg-green-50 border-green-200 text-green-600" : "bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100"
+                                            )}
+                                        >
+                                            {field.value ? "T" : "H"}
+                                        </div>
+                                    )} />
+                                </div>
+                                <div className="mt-1 flex justify-end px-1">
+                                    <span className="text-[10px] font-medium text-slate-400 tabular-nums">
+                                        Eq. {isAchatTTC ? (valPrixAchat / 1.2).toFixed(2) : (valPrixAchat * 1.2).toFixed(2)} {isAchatTTC ? 'HT' : 'TTC'}
+                                    </span>
+                                </div>
+                            </div>
+                        )} />
+                         <FormField control={control} name={`items.${index}.prixVente`} render={({ field }) => (
+                            <div className="relative">
+                                <span className="absolute left-2 top-[3px] text-[10px] font-bold text-slate-400 uppercase tracking-wider pointer-events-none">Vente TTC</span>
+                                <Input type="number" step="0.01" {...field} onKeyDown={handleKeyDown} className={cn("no-spinner h-11 pt-4 text-right pr-2 pl-2 font-mono font-bold text-sm border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-emerald-500/20", isLowMargin ? "text-red-500" : "text-emerald-600")} />
+                            </div>
+                        )} />
+                    </div>
+                    
+                    <div className="grid grid-cols-[1fr_1fr_60px] items-center gap-1 p-1 bg-slate-50 rounded-lg border border-slate-100">
+                        <div className="flex items-center gap-1.5 pl-1.5">
+                            <span className="text-[10px] font-bold uppercase text-slate-400 shrink-0">Stock</span>
+                            <FormField control={control} name={`items.${index}.quantiteStock`} render={({ field }) => (
+                                <Input type="number" {...field} onKeyDown={handleKeyDown} className="no-spinner h-8 w-full text-center font-mono text-xs font-bold border-transparent bg-white shadow-sm p-0 rounded focus:ring-0" />
+                            )} />
+                        </div>
+                        <div className="flex items-center gap-1.5 border-l border-slate-200 pl-1.5">
+                            <span className="text-[10px] font-bold uppercase text-slate-400 shrink-0">Min</span>
+                            <FormField control={control} name={`items.${index}.stockMin`} render={({ field }) => (
+                                <Input type="number" {...field} onKeyDown={handleKeyDown} className="no-spinner h-8 w-full text-center font-mono text-xs font-bold border-transparent bg-white shadow-sm p-0 rounded focus:ring-0" />
+                            )} />
+                        </div>
+                        <div className="flex justify-center border-l border-slate-200">
+                            <span className={cn("text-xs font-bold tabular-nums", valPrixVente === 0 ? "text-slate-200" : isLowMargin ? "text-red-500" : "text-emerald-600")}>
+                                {isFinite(marginPercent) ? `${marginPercent.toFixed(0)}%` : '-'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
             </TableCell>
-            <TableCell className="min-w-[130px]">
-                <FormField
-                    control={control}
-                    name={`items.${index}.categorieId`}
-                    render={({ field }) => (
-                        <SearchableSelect
-                            options={categories.map((c: any) => ({ label: c.name, value: c.id }))}
-                            value={field.value}
-                            onChange={field.onChange}
-                            placeholder="Catégorie"
-                            className="h-8 text-sm"
-                            onCreateNew={(name) => handleQuickCreate('categories', name, setCategories, `items.${index}.categorieId`)}
-                            isCreating={isCreatingSetting}
-                        />
-                    )}
-                />
-            </TableCell>
-            <TableCell className="min-w-[100px]">
-                <FormField
-                    control={control}
-                    name={`items.${index}.matiereId`}
-                    render={({ field }) => (
-                        <SearchableSelect
-                            options={materials.map((m: any) => ({ label: m.name, value: m.id }))}
-                            value={field.value}
-                            onChange={field.onChange}
-                            placeholder="Matière"
-                            className="h-8 text-sm"
-                            onCreateNew={(name) => handleQuickCreate('materials', name, setMaterials, `items.${index}.matiereId`)}
-                            isCreating={isCreatingSetting}
-                        />
-                    )}
-                />
-            </TableCell>
-            <TableCell className="min-w-[100px]">
-                <FormField
-                    control={control}
-                    name={`items.${index}.couleurId`}
-                    render={({ field }) => (
-                        <SearchableSelect
-                            options={colors.map((c: any) => ({ label: c.name, value: c.id }))}
-                            value={field.value}
-                            onChange={field.onChange}
-                            placeholder="Couleur"
-                            className="h-8 text-sm"
-                            onCreateNew={(name) => handleQuickCreate('colors', name, setColors, `items.${index}.couleurId`)}
-                            isCreating={isCreatingSetting}
-                        />
-                    )}
-                />
-            </TableCell>
-            <TableCell className="w-[100px]">
-                <FormField
-                    control={control}
-                    name={`items.${index}.prixAchat`}
-                    render={({ field }) => (
-                        <FormControl>
-                           <Input type="number" step="0.01" {...field} className="h-8 text-right pr-2" />
-                        </FormControl>
-                    )}
-                />
-            </TableCell>
-            <TableCell className="w-[100px]">
-                <FormField
-                    control={control}
-                    name={`items.${index}.prixVente`}
-                    render={({ field }) => (
-                        <FormControl>
-                            <Input 
-                                type="number" 
-                                step="0.01" 
-                                {...field} 
-                                className={cn(
-                                    "h-8 text-right pr-2 font-medium transition-colors duration-300",
-                                    isLowMargin ? "border-red-500 bg-red-50 text-red-900 focus-visible:ring-red-500" : "text-green-700"
-                                )} 
-                            />
-                        </FormControl>
-                    )}
-                />
-            </TableCell>
-            <TableCell className="w-[60px] text-center">
-                 <span className={cn(
-                     "text-xs font-bold block", 
-                     isLowMargin ? "text-red-500" : "text-green-600"
-                 )}>
-                    {isFinite(marginPercent) ? `${marginPercent.toFixed(0)}%` : '-'}
-                 </span>
-            </TableCell>
-            <TableCell className="w-[70px]">
-                <FormField
-                    control={control}
-                    name={`items.${index}.quantiteStock`}
-                    render={({ field }) => (
-                        <FormControl>
-                            <Input 
-                                type="number" 
-                                {...field} 
-                                className="h-8 text-center" 
-                                onKeyDown={handleKeyDown}
-                            />
-                        </FormControl>
-                    )}
-                />
-            </TableCell>
-            <TableCell className="w-[50px] text-right p-0">
-                <div className="flex items-center justify-end gap-1 px-2">
-                    {!isEditMode && (
+
+            {/* Actions */}
+            <TableCell className="text-center py-4 h-full">
+                <div className="flex flex-col items-center justify-center gap-1 h-full">
+                    {!isEditMode ? (
                         <>
-                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-blue-500 hover:text-blue-700 hover:bg-blue-50" onClick={() => duplicate(index)} title="Dupliquer">
-                                <Copy className="h-3 w-3" />
-                            </Button>
-                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-600 hover:bg-red-50" onClick={() => remove(index)} title="Supprimer">
-                                <Trash2 className="h-3 w-3" />
-                            </Button>
+                         <Tooltip><TooltipTrigger asChild>
+                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-blue-600 hover:bg-blue-50 transition-all rounded-full" onClick={() => duplicate(index)}><Copy className="h-3.5 w-3.5" /></Button>
+                         </TooltipTrigger><TooltipContent className="text-[10px]">Copier</TooltipContent></Tooltip>
+                         
+                         <Tooltip><TooltipTrigger asChild>
+                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-red-600 hover:bg-red-50 transition-all rounded-full" onClick={() => remove(index)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                         </TooltipTrigger><TooltipContent className="text-[10px]">Supprimer</TooltipContent></Tooltip>
                         </>
-                    )}
+                    ) : ( <div className="text-[8px] font-black text-slate-300 uppercase -rotate-90">Edit</div> )}
                 </div>
             </TableCell>
         </TableRow>

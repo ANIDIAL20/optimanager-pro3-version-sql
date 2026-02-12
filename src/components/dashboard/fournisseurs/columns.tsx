@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import Link from "next/link";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { SensitiveData } from "@/components/ui/sensitive-data";
+import { cn } from "@/lib/utils";
 import type { Supplier as SupplierType } from "@/lib/types";
 
 // Extend the Supplier type for table display
@@ -114,6 +116,22 @@ export const columns: ColumnDef<Supplier>[] = [
         },
     },
     {
+        accessorKey: "currentBalance",
+        header: "Solde",
+        cell: ({ row }) => {
+            const balance = row.original.currentBalance || 0;
+            const isDebt = balance > 0;
+            return (
+                <div className={cn(
+                    "font-bold",
+                    isDebt ? "text-red-600" : "text-slate-600"
+                )}>
+                    <SensitiveData value={balance} type="currency" />
+                </div>
+            );
+        },
+    },
+    {
         id: "actions",
         header: "Actions",
         cell: ({ row }) => {
@@ -139,6 +157,10 @@ export const columns: ColumnDef<Supplier>[] = [
                             <Link href={`/suppliers/${supplier.id}/edit`}>
                                 Modifier
                             </Link>
+                        </DropdownMenuItem>
+                        
+                        <DropdownMenuItem onClick={() => { /* This would open the payment dialog */ }}>
+                            Ajouter paiement
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem className="text-red-600">

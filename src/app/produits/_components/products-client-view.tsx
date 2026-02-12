@@ -54,32 +54,25 @@ export function ProductsClientView({ initialProducts, initialCategories, usageSt
 
   // Handle Search
   React.useEffect(() => {
-    // Skip first run if empty to avoid double fetch, but if search term exists, fetch.
+    // If search is empty, revert to initial products from server
     if (searchTerm === '') {
-         // If search cleared, revert to initial (or re-fetch if needed? Props are usually fresh enough unless we navigated)
-         // Actually, if we search then clear, we want ALL products. 
-         // initialProducts passed from server might be ALL.
          setProducts(initialProducts);
+         setIsLoading(false);
          return;
     }
 
     let isMounted = true;
     const timer = setTimeout(async () => {
+      // Prevent overlapping calls
+      if (isLoading) return; 
+
       setIsLoading(true);
       try {
         const result = await getProducts(searchTerm);
         
         if (isMounted) {
             if (result.success && result.data) {
-                // The action now returns mapped data matching Product interface
                 setProducts(result.data as ProductWithRelations[]);
-            } else {
-                console.error("Search failed:", result.error);
-                toast({
-                    title: "Erreur",
-                    description: "Impossible de rechercher les produits",
-                    variant: "destructive"
-                });
             }
         }
       } catch (err) {
@@ -87,13 +80,13 @@ export function ProductsClientView({ initialProducts, initialCategories, usageSt
       } finally {
         if (isMounted) setIsLoading(false);
       }
-    }, 300);
+    }, 400); // Slightly longer debounce for stability
 
     return () => {
         isMounted = false;
         clearTimeout(timer);
     };
-  }, [searchTerm, initialProducts]); // depend on initialProducts so if we clear search we reset
+  }, [searchTerm]); // Removed initialProducts from here to break potential loops
 
   // Filter products by Category Tab (Client-side filtering of current set)
   const filteredProducts = React.useMemo(() => {
@@ -111,18 +104,23 @@ export function ProductsClientView({ initialProducts, initialCategories, usageSt
   }, [optimisticProducts]);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Stock & Produits</h1>
-          <p className="text-slate-600 mt-1">Gérez votre inventaire et vos produits</p>
+    <div className="space-y-6 p-6">
+      {/* Header - Standardized theme */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-center gap-4">
+          <div className="h-12 w-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 shadow-sm border border-blue-100">
+            <Package className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Stock & Produits</h1>
+            <p className="text-slate-500 mt-1">Gérez votre inventaire et vos produits en temps réel.</p>
+          </div>
         </div>
         <div className="flex gap-2">
           <InvoiceScannerDialog /> 
-          <Button asChild className="bg-gradient-to-r from-blue-600 to-teal-500 hover:from-blue-700 hover:to-teal-600 shadow-md">
+          <Button asChild className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-200 gap-2">
             <Link href="/produits/new">
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus className="h-4 w-4" />
               Nouveau Produit
             </Link>
           </Button>

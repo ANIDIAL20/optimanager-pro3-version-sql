@@ -48,10 +48,16 @@ export function ClientForm({
     React.useEffect(() => {
         const fetchSettings = async () => {
              try {
-                 const insurances = await getInsurances();
-                 setMutuellesList(insurances);
+                 const result = await getInsurances();
+                 if (result.success && Array.isArray(result.data)) {
+                    setMutuellesList(result.data);
+                 } else {
+                    console.error("Failed to fetch insurances: Invalid response", result);
+                    setMutuellesList([]);
+                 }
              } catch (error) {
                  console.error("Failed to fetch insurances:", error);
+                 setMutuellesList([]);
              }
         };
         fetchSettings();
@@ -155,7 +161,7 @@ export function ClientForm({
                         <SearchableSelect
                             options={[
                                 { label: 'Aucune', value: 'AUCUNE' },
-                                ...mutuellesList.map((m) => ({
+                                ...(Array.isArray(mutuellesList) ? mutuellesList : []).map((m) => ({
                                     label: m.name,
                                     value: m.name,
                                 }))

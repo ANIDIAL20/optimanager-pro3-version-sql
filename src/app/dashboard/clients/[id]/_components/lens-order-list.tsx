@@ -24,6 +24,16 @@ import { AlertCircle, MoreHorizontal, Eye, Trash2, Edit, Share2, Mail, Printer, 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { format } from 'date-fns';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -35,6 +45,7 @@ import { ReceiveOrderDialog } from './receive-order-dialog';
 interface LensOrderListProps {
   clientId: string;
   clientName?: string;
+  mode?: 'glasses' | 'contacts';
 }
 
 type LensOrderStatus = 'pending' | 'ordered' | 'received' | 'delivered';
@@ -79,7 +90,7 @@ const getStatusBadge = (status: string) => {
   return <Badge variant={config.variant} className={config.className}>{config.label}</Badge>;
 };
 
-export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
+export function LensOrderList({ clientId, clientName, mode = 'glasses' }: LensOrderListProps) {
   const { toast } = useToast();
   const [orders, setOrders] = React.useState<LensOrder[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -90,6 +101,7 @@ export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
   const [isReceiveDialogOpen, setIsReceiveDialogOpen] = React.useState(false); // NEW
   const [isViewDetailsOpen, setIsViewDetailsOpen] = React.useState(false);
   const [isShareDialogOpen, setIsShareDialogOpen] = React.useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
   const [selectedOrder, setSelectedOrder] = React.useState<LensOrder | null>(null);
   const [newStatus, setNewStatus] = React.useState<LensOrderStatus>('pending');
   const [isUpdating, setIsUpdating] = React.useState(false);
@@ -120,7 +132,15 @@ export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
       const result = await getClientLensOrders(clientId);
 
       if (result.success && result.data) {
-        setOrders(result.data as LensOrder[]);
+        const allOrders = result.data as LensOrder[];
+        
+        // Filter based on mode
+        const filtered = allOrders.filter(o => {
+            if (mode === 'contacts') return o.orderType === 'contact';
+            return o.orderType !== 'contact';
+        });
+
+        setOrders(filtered);
       } else {
         setError(result.error || 'Erreur de chargement');
       }
@@ -129,7 +149,7 @@ export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [clientId]);
+  }, [clientId, mode]);
 
   React.useEffect(() => {
     loadOrders();
@@ -162,8 +182,9 @@ export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
 
   // Generate order text for sharing
   const generateOrderText = (order: LensOrder) => {
+    const title = mode === 'contacts' ? '📋 COMMANDE DE LENTILLES' : '📋 COMMANDE DE VERRES';
     const lines = [
-      '📋 COMMANDE DE VERRES',
+      title,
       '━━━━━━━━━━━━━━━━━━━━',
       '',
       `📅 Date: ${order.orderDate ? format(new Date(order.orderDate), 'dd/MM/yyyy') : '-'}`,
@@ -647,17 +668,18 @@ import { BrandLoader } from '@/components/ui/loader-brand';
     }
   };
 
-  // Delete order
-  const handleDelete = async (orderId: number) => {
-    if (!confirm('Supprimer cette commande ?')) return;
-
-    setDeletingId(orderId);
+  // Confirm delete
+  const confirmDelete = async () => {
+    if (!selectedOrder) return;
+    
+    setDeletingId(selectedOrder.id);
     try {
-      const result = await deleteLensOrder(orderId.toString());
+      const result = await deleteLensOrder(selectedOrder.id.toString());
 
       if (result.success) {
         toast({ title: 'Succès', description: 'Commande supprimée' });
         loadOrders();
+        setIsDeleteDialogOpen(false);
       } else {
         toast({ title: 'Erreur', description: result.error, variant: 'destructive' });
       }
@@ -672,9 +694,13 @@ import { BrandLoader } from '@/components/ui/loader-brand';
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Historique des Commandes de Verres</CardTitle>
+          <CardTitle>
+              {mode === 'contacts' ? 'Historique des Commandes de Lentilles' : 'Historique des Commandes de Verres'}
+          </CardTitle>
           <CardDescription>
-            Liste de toutes les commandes de verres pour ce client.
+            {mode === 'contacts' 
+                ? 'Liste de toutes les commandes de lentilles pour ce client.' 
+                : 'Liste de toutes les commandes de verres pour ce client.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -696,7 +722,9 @@ import { BrandLoader } from '@/components/ui/loader-brand';
           )}
           {!isLoading && !error && orders && orders.length === 0 && (
             <div className="text-center text-muted-foreground py-6">
-              Aucune commande de verres trouvée pour ce client.
+              {mode === 'contacts' 
+                ? 'Aucune commande de lentilles trouvée pour ce client.'
+                : 'Aucune commande de verres trouvée pour ce client.'}
             </div>
           )}
           {!isLoading && orders && orders.length > 0 && (
@@ -704,7 +732,7 @@ import { BrandLoader } from '@/components/ui/loader-brand';
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
-                  <TableHead>Type Verre</TableHead>
+                  <TableHead>{mode === 'contacts' ? 'Modèle Lentille' : 'Type Verre'}</TableHead>
                   <TableHead>Fournisseur</TableHead>
                   <TableHead>Statut</TableHead>
                   <TableHead className="text-right">Prix Total</TableHead>
@@ -751,7 +779,10 @@ import { BrandLoader } from '@/components/ui/loader-brand';
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
-                            onClick={() => handleDelete(order.id)}
+                            onClick={() => {
+                              setSelectedOrder(order);
+                              setIsDeleteDialogOpen(true);
+                            }}
                             disabled={deletingId === order.id}
                             className="text-red-600 focus:text-red-600"
                           >
@@ -825,10 +856,35 @@ import { BrandLoader } from '@/components/ui/loader-brand';
         onOpenChange={setIsReceiveDialogOpen}
         order={selectedOrder}
         onSuccess={() => {
-            loadOrders();
-            // Automatically switch to view details or close
+          setIsReceiveDialogOpen(false);
+          loadOrders();
         }}
       />
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer la commande ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Cette action est irréversible. La commande sera définitivement supprimée.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingId !== null}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                confirmDelete();
+              }}
+              disabled={deletingId !== null}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {deletingId !== null ? <BrandLoader size="sm" className="mr-2" /> : null}
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* View Details Dialog */}
       <Dialog modal={false} open={isViewDetailsOpen} onOpenChange={setIsViewDetailsOpen}>
