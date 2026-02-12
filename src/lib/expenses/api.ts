@@ -255,7 +255,7 @@ export const deleteExpense = secureAction(async (userId, user, id: string) => {
         if (expense.attachments && expense.attachments.length > 0) {
             try {
                 // Extract keys from UploadThing URLs if possible
-                const fileKeys = expense.attachments.map(url => {
+                const fileKeys = expense.attachments.map((url: string) => {
                     const parts = url.split('/');
                     return parts[parts.length - 1];
                 });
@@ -321,10 +321,10 @@ export const getExpenseStats = secureAction(async (userId, user, month: number, 
                 between(expensesTable.createdAt, startDate, endDate)
             ));
 
-        // 4. Group by Type (for charts/distribution)
+        // 4. Group by Type (for distribution by Amount)
         const typeStats = await db.select({
             type: expensesTable.type,
-            count: sql<number>`COUNT(*)`
+            amount: sql<number>`SUM(${expensesTable.amount})`
         })
             .from(expensesTable)
             .where(and(
@@ -333,10 +333,10 @@ export const getExpenseStats = secureAction(async (userId, user, month: number, 
             ))
             .groupBy(expensesTable.type);
 
-        // 5. Group by Status
+        // 5. Group by Status (for distribution by Amount)
         const statusStats = await db.select({
             status: expensesTable.status,
-            count: sql<number>`COUNT(*)`
+            amount: sql<number>`SUM(${expensesTable.amount})`
         })
             .from(expensesTable)
             .where(and(
@@ -346,21 +346,21 @@ export const getExpenseStats = secureAction(async (userId, user, month: number, 
             .groupBy(expensesTable.status);
 
         // Transform results
-        const countByType = typeStats.reduce((acc, curr) => {
-            acc[curr.type] = Number(curr.count);
+        const totalsByType = typeStats.reduce((acc: any, curr: any) => {
+            acc[curr.type] = Number(curr.amount || 0);
             return acc;
         }, {} as Record<ExpenseType, number>);
 
-        const countByStatus = statusStats.reduce((acc, curr) => {
-            acc[curr.status] = Number(curr.count);
+        const totalsByStatus = statusStats.reduce((acc: any, curr: any) => {
+            acc[curr.status] = Number(curr.amount || 0);
             return acc;
         }, {} as Record<ExpenseStatus, number>);
 
         const stats: ExpenseStats = {
             totalAmount: Number(totalStats[0]?.totalAmount || 0),
-            totalCount: Number(totalStats[0]?.count || 0),
-            countByType,
-            countByStatus,
+            count: Number(totalStats[0]?.count || 0),
+            totalsByType,
+            totalsByStatus,
             pendingAmount: Number(pendingStats[0]?.amount || 0),
             overdueAmount: Number(overdueStats[0]?.amount || 0),
         };
