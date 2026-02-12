@@ -577,9 +577,9 @@ export const users = pgTable("users", {
   lockoutUntil: timestamp("lockout_until"), // Time until unlock
 
   // 🛡️ QUOTAS & LIMITS
-  maxProducts: integer("max_products").default(50).notNull(),
-  maxClients: integer("max_clients").default(20).notNull(),
-  maxSuppliers: integer("max_suppliers").default(10).notNull(),
+  maxProducts: integer("max_products").default(500).notNull(),
+  maxClients: integer("max_clients").default(200).notNull(),
+  maxSuppliers: integer("max_suppliers").default(100).notNull(),
 
   // 💰 SUBSCRIPTION DATES
   lastPaymentDate: timestamp("last_payment_date"),
