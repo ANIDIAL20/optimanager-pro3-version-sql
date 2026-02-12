@@ -126,7 +126,7 @@ async function ExpenseStatsWrapper() {
                     <div className="flex items-center justify-between space-x-4">
                         <div>
                             <p className="text-sm font-medium text-slate-500">Transactions</p>
-                            <h3 className="text-2xl font-bold">{stats.totalCount}</h3>
+                            <h3 className="text-2xl font-bold">{stats.count}</h3>
                         </div>
                         <div className="p-2 bg-emerald-50 rounded-lg">
                             <TrendingUp className="h-6 w-6 text-emerald-600" />
@@ -170,7 +170,7 @@ async function ExpenseListWrapper({ filters }: { filters: ExpenseFiltersType }) 
                     </tr>
                 </thead>
                 <tbody>
-                    {expenses.map((expense) => (
+                    {expenses.map((expense: any) => (
                         <tr key={expense.id} className="border-b transition-colors hover:bg-muted/50">
                             <td className="p-4 align-middle font-medium">{expense.title}</td>
                             <td className="p-4 align-middle capitalize">{expense.category}</td>
