@@ -6,7 +6,7 @@
 'use server';
 
 import { db } from '@/db';
-import { clients, prescriptions, sales, lensOrders } from '@/db/schema';
+import { clients, prescriptionsLegacy as prescriptions, sales, lensOrders, clientInteractions } from '@/db/schema';
 import { eq, and, or, like, desc } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure, logAudit } from '@/lib/audit-log';
@@ -71,7 +71,7 @@ export const getClients = secureAction(async (userId, user, searchQuery?: string
         const userClientsWithPrescriptions = await db.query.clients.findMany({
             where: eq(clients.userId, userId), // ⚠️ CRITICAL: Filter by userId
             with: {
-                prescriptions: true, // 👈 Auto-fetch prescriptions
+                prescriptionsLegacy: true, // 👈 Auto-fetch prescriptions
             },
             orderBy: desc(clients.createdAt),
         });
@@ -91,7 +91,7 @@ export const getClients = secureAction(async (userId, user, searchQuery?: string
             address: client.address,
             city: client.city,
             dateOfBirth: client.dateOfBirth?.toISOString(),
-            prescriptions: (client.prescriptions || []).map((p: any) => p.prescriptionData as any) || [], // 👈 Prescriptions included!
+            prescriptions: (client.prescriptionsLegacy || []).map((p: any) => p.prescriptionData as any) || [], // 👈 Prescriptions included!
             createdAt: client.createdAt?.toISOString() || new Date().toISOString(),
             updatedAt: client.updatedAt?.toISOString(),
         }));
@@ -140,8 +140,8 @@ export const getClient = secureAction(async (userId, user, clientId: string) => 
                 eq(clients.userId, userId) // ⚠️ CRITICAL: Verify ownership
             ),
             with: {
-                prescriptions: {
-                    orderBy: (prescriptions: any, { desc }: { desc: any }) => [desc(prescriptions.createdAt)],
+                prescriptionsLegacy: {
+                    orderBy: (prescriptionsLegacy: any, { desc }: { desc: any }) => [desc(prescriptionsLegacy.createdAt)],
                 },
             },
         });
@@ -168,7 +168,7 @@ export const getClient = secureAction(async (userId, user, clientId: string) => 
             address: clientWithPrescriptions.address,
             city: clientWithPrescriptions.city,
             dateOfBirth: clientWithPrescriptions.dateOfBirth?.toISOString(),
-            prescriptions: (clientWithPrescriptions.prescriptions || []).map((p: any) => p.prescriptionData as any),
+            prescriptions: (clientWithPrescriptions.prescriptionsLegacy || []).map((p: any) => p.prescriptionData as any),
             createdAt: clientWithPrescriptions.createdAt?.toISOString() || new Date().toISOString(),
             updatedAt: clientWithPrescriptions.updatedAt?.toISOString(),
         };
@@ -180,11 +180,15 @@ export const getClient = secureAction(async (userId, user, clientId: string) => 
 
     } catch (error: any) {
         console.error('💥 Error fetching client:', error);
-        console.error('💥 Stack:', error.stack);
+        console.error('💥 Error details:', {
+            message: error.message,
+            stack: error.stack,
+            clientId
+        });
         await logFailure(userId, 'READ', 'clients', error.message, clientId);
         return {
             success: false,
-            error: 'Erreur lors de la récupération du client'
+            error: `Erreur lors de la récupération du client: ${error.message}`
         };
     }
 });
@@ -321,6 +325,48 @@ export const updateClient = secureAction(async (userId, user, clientId: string, 
             success: false,
             error: 'Erreur lors de la mise à jour du client'
         };
+    }
+});
+
+/**
+ * Add a new interaction/note
+ */
+export const addClientInteraction = secureAction(async (userId, user, clientId: string, data: { type: string; content: string }) => {
+    try {
+        const clientIdNum = parseInt(clientId);
+        
+        const result = await db.insert(clientInteractions).values({
+            userId,
+            clientId: clientIdNum,
+            type: data.type,
+            content: data.content,
+            createdAt: new Date()
+        }).returning();
+
+        revalidatePath(`/dashboard/clients/${clientId}`);
+        return { success: true, data: result[0] };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * Get client interactions
+ */
+export const getClientInteractions = secureAction(async (userId, user, clientId: string) => {
+    try {
+        const clientIdNum = parseInt(clientId);
+        const results = await db.query.clientInteractions.findMany({
+            where: and(
+                eq(clientInteractions.clientId, clientIdNum),
+                eq(clientInteractions.userId, userId)
+            ),
+            orderBy: [desc(clientInteractions.createdAt)]
+        });
+
+        return { success: true, data: results };
+    } catch (error: any) {
+        return { success: false, error: error.message };
     }
 });
 
@@ -516,6 +562,16 @@ export const getClientSnapshot = secureAction(async (userId, user, clientId: str
         // Get last prescription
         const lastPrescription = recentPrescriptions.length > 0 ? recentPrescriptions[0] : null;
 
+        // Get recent interactions
+        const recentInteractions = await db.query.clientInteractions.findMany({
+            where: and(
+                eq(clientInteractions.userId, userId),
+                eq(clientInteractions.clientId, clientIdNum)
+            ),
+            orderBy: [desc(clientInteractions.createdAt)],
+            limit: 10
+        });
+
         console.log(`✅ Snapshot fetched with ${recentSales.length} sales, ${recentPrescriptions.length} prescriptions`);
         await logSuccess(userId, 'READ', 'clients', clientId || 'unknown', { snapshot: true });
 
@@ -528,7 +584,8 @@ export const getClientSnapshot = secureAction(async (userId, user, clientId: str
                 lastPrescription,
                 recentSales,
                 recentPrescriptions,
-                pendingOrders
+                pendingOrders,
+                recentInteractions
             }
         };
     } catch (error: any) {

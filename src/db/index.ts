@@ -1,9 +1,13 @@
-import { neon } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-http';
+import { neon, neonConfig, Pool } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/neon-serverless';
+import ws from 'ws';
 import * as schemaFile from './schema';
 import * as schemaDir from './schema/index';
 
 const schema = { ...schemaFile, ...schemaDir };
+
+// ✅ Essential for Transactions support in Node.js environment
+neonConfig.webSocketConstructor = ws;
 
 if (!process.env.DATABASE_URL) {
   throw new Error("❌ DATABASE_URL mafih walou! T2akked anna .env.local fih lien d Neon.");
@@ -11,26 +15,23 @@ if (!process.env.DATABASE_URL) {
 
 // Singleton cache implementation for Next.js hot-reloading
 declare global {
-  var __db: any;
+  var __db_v2: any;
 }
 
 function createDbConnection() {
-  const sql = neon(process.env.DATABASE_URL!, {
-    fullResults: false,
-  });
+  // Use Pool instead of simple neon() for better transaction/session support
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-  return drizzle(sql, {
+  return drizzle(pool, {
     schema,
-    logger: process.env.NODE_ENV === 'development' && false, // Keep false to reduce noise unless debugging
+    logger: process.env.NODE_ENV === 'development' && false,
   });
 }
 
 // ✅ Use global cache in development, fresh instance in production
-const globalForDb = globalThis as unknown as { __db: any };
+const globalForDb = globalThis as unknown as { __db_v2: any };
 
 export const db =
   process.env.NODE_ENV === 'production'
     ? createDbConnection()
-    : (globalForDb.__db = globalForDb.__db ?? createDbConnection());
-
-// Neon HTTP adapter doesn't require manual connection closing for serverless
+    : (globalForDb.__db_v2 = globalForDb.__db_v2 ?? createDbConnection());

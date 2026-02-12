@@ -5,7 +5,7 @@
 
 import { db } from '../db';
 import { auditLogs, users } from '../db/schema';
-import { sql, and, gte, lte, count, avg, max } from 'drizzle-orm';
+import { sql, and, gte, lte, count, avg, max, eq } from 'drizzle-orm';
 
 export interface DailyMetrics {
     date: Date;
@@ -73,4 +73,25 @@ export async function getMetricsForLastWeek(): Promise<DailyMetrics[]> {
         metrics.push(await getDailyMetrics(date));
     }
     return metrics;
+}
+/**
+ * Count AI scans performed today
+ */
+export async function getDailyAiScanCount(): Promise<number> {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    const result = await db.select({ value: count() })
+        .from(auditLogs)
+        .where(and(
+            eq(auditLogs.entityType, 'AI_SCAN'),
+            sql`${auditLogs.metadata}->>'errorMessage' IS NULL`,
+            gte(auditLogs.createdAt, startOfDay),
+            lte(auditLogs.createdAt, endOfDay)
+        ));
+
+    return Number(result[0]?.value) || 0;
 }

@@ -1,10 +1,10 @@
 'use server';
 
 import { db } from '@/db';
-import { lensOrders, clients, prescriptions, supplierOrders, suppliers, supplierOrderItems } from '@/db/schema';
+import { lensOrders, clients, prescriptionsLegacy as prescriptions, supplierOrders, suppliers, supplierOrderItems, reminders } from '@/db/schema';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, lt, gt } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { LensOrderSchema } from '@/lib/validations/optical';
 
@@ -110,18 +110,32 @@ export const getLensOrders = secureAction(async (userId, user) => {
       orderBy: [desc(lensOrders.createdAt)],
       with: {
         client: true,
-        prescription: true
+        prescriptionLegacy: true
       }
     });
     
-    await logSuccess(userId, 'READ', 'lens_orders', undefined, { count: results.length });
-    return { success: true, data: results };
+    const mapped = results.map(order => ({
+      ...order,
+      id: order.id,
+      totalPrice: order.totalPrice?.toString() || '0',
+      unitPrice: order.unitPrice?.toString() || '0',
+      sellingPrice: order.sellingPrice?.toString() || '0',
+      orderDate: order.orderDate instanceof Date ? order.orderDate.toISOString() : order.orderDate,
+      receivedDate: order.receivedDate instanceof Date ? order.receivedDate.toISOString() : order.receivedDate,
+      deliveredDate: order.deliveredDate instanceof Date ? order.deliveredDate.toISOString() : order.deliveredDate,
+      createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
+      updatedAt: order.updatedAt instanceof Date ? order.updatedAt.toISOString() : order.updatedAt,
+    }));
+
+    await logSuccess(userId, 'READ', 'lens_orders', 'list', { count: results.length });
+    return { success: true, data: mapped };
 
   } catch (error: any) {
+    console.error('💥 Error fetching all lens orders:', error);
     await logFailure(userId, 'READ', 'lens_orders', error.message);
     return { 
       success: false, 
-      error: 'Erreur lors de la récupération des commandes de verres' 
+      error: `Erreur récupération commandes: ${error.message}` 
     };
   }
 });
@@ -139,18 +153,37 @@ export const getClientLensOrders = secureAction(async (userId, user, clientId: s
       ),
       orderBy: [desc(lensOrders.createdAt)],
       with: {
-        prescription: true
+        prescriptionLegacy: true
       }
     });
     
-    await logSuccess(userId, 'READ', 'lens_orders', undefined, { clientId, count: results.length });
-    return { success: true, data: results };
+    const mapped = results.map(order => ({
+      ...order,
+      id: order.id,
+      totalPrice: order.totalPrice?.toString() || '0',
+      unitPrice: order.unitPrice?.toString() || '0',
+      sellingPrice: order.sellingPrice?.toString() || '0',
+      orderDate: order.orderDate instanceof Date ? order.orderDate.toISOString() : order.orderDate,
+      receivedDate: order.receivedDate instanceof Date ? order.receivedDate.toISOString() : order.receivedDate,
+      deliveredDate: order.deliveredDate instanceof Date ? order.deliveredDate.toISOString() : order.deliveredDate,
+      createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
+      updatedAt: order.updatedAt instanceof Date ? order.updatedAt.toISOString() : order.updatedAt,
+    }));
+    
+    await logSuccess(userId, 'READ', 'lens_orders', `client-${clientId}`, { clientId, count: results.length });
+    return { success: true, data: mapped };
 
   } catch (error: any) {
-    await logFailure(userId, 'READ', 'lens_orders', error.message);
+    console.error('💥 Error fetching client lens orders:', error);
+    console.error('💥 Details:', {
+      message: error.message,
+      stack: error.stack,
+      clientId
+    });
+    await logFailure(userId, 'READ', 'lens_orders', error.message, `client-${clientId}`);
     return { 
       success: false, 
-      error: 'Erreur lors de la récupération des commandes de verres du client' 
+      error: `Erreur lors de la récupération: ${error.message}` 
     };
   }
 });
@@ -168,7 +201,7 @@ export const getLensOrder = secureAction(async (userId, user, orderId: string) =
       ),
       with: {
         client: true,
-        prescription: true
+        prescriptionLegacy: true
       }
     });
     
@@ -471,6 +504,16 @@ export const receiveLensOrder = secureAction(async (userId, user, orderId: strin
             where: and(eq(suppliers.name, existingOrder.supplierName), eq(suppliers.userId, userId))
         });
 
+        // Calculate Due Date based on supplier terms
+        let dueDate: Date | null = null;
+        if (supplier?.paymentTerms) {
+            const days = typeof supplier.paymentTerms === 'number' ? supplier.paymentTerms : parseInt(supplier.paymentTerms as string);
+            if (!isNaN(days)) {
+                dueDate = new Date();
+                dueDate.setDate(dueDate.getDate() + days);
+            }
+        }
+
         // Consolidate into Supplier Order
         await db.insert(supplierOrders).values({
             userId,
@@ -484,6 +527,7 @@ export const receiveLensOrder = secureAction(async (userId, user, orderId: strin
             statut: 'received', 
             
             dateCommande: new Date(),
+            dueDate: dueDate,
             notes: `Auto-created from Lens Order #${orderIdNum}`
         });
     }
@@ -594,47 +638,54 @@ export const deleteLensOrder = secureAction(async (userId, user, orderId: string
  * Update lens order status (simplified dedicated function)
  * ✅ SECURED - Auto-injects userId via secureAction
  */
-export const updateLensOrderStatus = secureAction(
-  async (userId: string, user: any, orderId: number, status: string) => {
+/**
+ * Requirement 3: Generate Reminders for Supplier Payments
+ */
+export const checkSupplierReminders = secureAction(async (userId, user) => {
     try {
-      // Verify ownership
-      const existing = await db.select().from(lensOrders)
-        .where(and(eq(lensOrders.id, orderId), eq(lensOrders.userId, userId)))
-        .limit(1);
+        // Find unpaid supplier orders where due date is approaching (within 3 days) or past
+        const threeDaysFromNow = new Date();
+        threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
 
-      if (existing.length === 0) {
-        return { success: false, error: 'Commande introuvable' };
-      }
+        const ordersToWarn = await db.query.supplierOrders.findMany({
+            where: and(
+                eq(supplierOrders.userId, userId),
+                gt(supplierOrders.resteAPayer, '0'),
+                lt(supplierOrders.dueDate, threeDaysFromNow)
+            )
+        });
 
-      // Update only status and updatedAt
-      const [updated] = await db.update(lensOrders)
-        .set({
-          status,
-          updatedAt: new Date()
-        })
-        .where(eq(lensOrders.id, orderId))
-        .returning();
+        const createdCount = 0;
+        for (const order of ordersToWarn) {
+            // Check if reminder already exists for this order
+            const existing = await db.query.reminders.findFirst({
+                where: and(
+                    eq(reminders.userId, userId),
+                    eq(reminders.relatedId, order.id),
+                    eq(reminders.relatedType, 'supplier_orders'),
+                    eq(reminders.status, 'pending')
+                )
+            });
 
-      await logSuccess(userId, 'UPDATE', 'lens_orders', orderId.toString(), { status });
+            if (!existing) {
+                const isOverdue = order.dueDate && order.dueDate < new Date();
+                await db.insert(reminders).values({
+                    userId,
+                    type: 'payment',
+                    priority: isOverdue ? 'urgent' : 'important',
+                    title: `Paiement Fournisseur: ${order.fournisseur}`,
+                    message: `Reste à payer: ${order.resteAPayer} DH. Échéance: ${order.dueDate?.toLocaleDateString('fr-FR')}`,
+                    status: 'pending',
+                    dueDate: order.dueDate,
+                    relatedId: order.id,
+                    relatedType: 'supplier_orders'
+                });
+            }
+        }
 
-      // Revalidate relevant paths
-      revalidatePath(`/dashboard/clients/${updated.clientId}`);
-      revalidatePath('/dashboard/clients');
-      revalidatePath('/dashboard/lens-orders');
-
-      return {
-        success: true,
-        message: 'Statut mis à jour',
-        data: updated
-      };
-
+        return { success: true, count: ordersToWarn.length };
     } catch (error: any) {
-      console.error('❌ Error updating lens order status:', error);
-      await logFailure(userId, 'UPDATE', 'lens_orders', error.message, orderId.toString());
-      return {
-        success: false,
-        error: 'Erreur lors de la mise à jour du statut'
-      };
+        console.error("💥 Error checking supplier reminders:", error);
+        return { success: false, error: error.message };
     }
-  }
-);
+});

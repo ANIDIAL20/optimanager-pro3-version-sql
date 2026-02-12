@@ -73,51 +73,56 @@ export interface CreateSaleInput {
 // SALES ACTIONS
 // ========================================
 
+// Helper to map DB sales to Sale type
+const mapSale = (s: any): Sale => ({
+    id: s.id.toString(),
+    clientId: s.clientId?.toString(),
+    clientName: s.clientName || s.client?.fullName,
+    clientPhone: s.clientPhone || s.client?.phone,
+    clientMutuelle: s.clientMutuelle || s.client?.mutuelle,
+    clientAddress: s.clientAddress || s.client?.address,
+    saleNumber: s.saleNumber,
+    prescriptionSnapshot: s.prescriptionSnapshot,
+    items: (s.items as SaleItem[]) || [],
+    totalHT: Number(s.totalHT),
+    totalTVA: Number(s.totalTVA),
+    totalTTC: Number(s.totalTTC),
+    totalNet: Number(s.totalNet || s.totalTTC),
+    totalPaye: Number(s.totalPaye),
+    resteAPayer: Number(s.resteAPayer),
+    status: s.status || 'impaye',
+    paymentMethod: s.paymentMethod,
+    paymentHistory: (s.paymentHistory as any[]) || [],
+    notes: s.notes,
+    createdAt: s.createdAt ? (typeof s.createdAt === 'string' ? s.createdAt : s.createdAt.toISOString()) : new Date().toISOString(),
+    date: s.date ? (typeof s.date === 'string' ? s.date : s.date.toISOString()) : undefined,
+    lastPaymentDate: s.lastPaymentDate ? (typeof s.lastPaymentDate === 'string' ? s.lastPaymentDate : s.lastPaymentDate.toISOString()) : undefined
+});
+
 /**
  * Get all sales
  */
 export const getSales = secureAction(async (userId, user) => {
     try {
-        console.log('📊 Fetching sales for userId:', userId);
+        console.log('📊 Fetching sales for userId (Drizzle):', userId);
         
-        const salesData = await db.select().from(sales)
-            .where(eq(sales.userId, userId))
-            .orderBy(desc(sales.createdAt));
+        const results = await db.query.sales.findMany({
+            where: eq(sales.userId, userId),
+            orderBy: [desc(sales.createdAt)],
+            with: {
+                client: true
+            }
+        });
 
-        console.log(`✅ Found ${salesData.length} sales`);
+        console.log(`✅ Found ${results.length} sales (Drizzle)`);
 
-        const mappedSales: Sale[] = salesData.map((s: any) => ({
-            id: s.id.toString(),
-            clientId: s.clientId?.toString(),
-            clientName: s.clientName || undefined,
-            clientPhone: s.clientPhone || undefined,
-            clientMutuelle: s.clientMutuelle || undefined,
-            clientAddress: s.clientAddress || undefined,
-            saleNumber: s.saleNumber || undefined,
-            prescriptionSnapshot: s.prescriptionSnapshot,
-            items: (s.items as SaleItem[]) || [],
-            totalHT: Number(s.totalHT),
-            totalTVA: Number(s.totalTVA),
-            totalTTC: Number(s.totalTTC),
-            totalNet: Number(s.totalNet || s.totalTTC),
-            totalPaye: Number(s.totalPaye),
-            resteAPayer: Number(s.resteAPayer),
-            status: s.status || 'impaye',
-            paymentMethod: s.paymentMethod || undefined,
-            paymentHistory: (s.paymentHistory as any[]) || [],
-            notes: s.notes || undefined,
-            createdAt: s.createdAt?.toISOString() || new Date().toISOString(),
-            date: s.date?.toISOString(),
-            lastPaymentDate: s.lastPaymentDate?.toISOString()
-        }));
+        const mappedSales: Sale[] = results.map(mapSale);
 
         await logSuccess(userId, 'READ', 'sales', 'LIST_ALL', { count: mappedSales.length });
         return { success: true, sales: mappedSales };
 
     } catch (error: any) {
-        console.error('💥 ERROR in getSales:', error);
-        console.error('💥 Error message:', error.message);
-        console.error('💥 Error stack:', error.stack);
+        console.error('💥 ERROR in getSales (Drizzle):', error);
         await logFailure(userId, 'READ', 'sales', error.message);
         return { success: false, error: `Erreur lors de la récupération des ventes: ${error.message}`, sales: [] };
     }
@@ -129,40 +134,23 @@ export const getSales = secureAction(async (userId, user) => {
 export const getSale = secureAction(async (userId, user, saleId: string) => {
     try {
         const id = parseInt(saleId);
+        if (isNaN(id)) return { success: false, error: 'ID vente invalide' };
+
         const sale = await db.query.sales.findFirst({
-            where: and(eq(sales.id, id), eq(sales.userId, userId))
+            where: and(eq(sales.id, id), eq(sales.userId, userId)),
+            with: {
+                client: true
+            }
         });
 
         if (!sale) return { success: false, error: 'Vente introuvable' };
 
-        const mappedSale: Sale = {
-            id: sale.id.toString(),
-            clientId: sale.clientId?.toString(),
-            clientName: sale.clientName || undefined,
-            clientPhone: sale.clientPhone || undefined,
-            clientMutuelle: sale.clientMutuelle || undefined,
-            clientAddress: sale.clientAddress || undefined,
-            saleNumber: sale.saleNumber || undefined,
-            prescriptionSnapshot: sale.prescriptionSnapshot,
-            items: (sale.items as SaleItem[]) || [],
-            totalHT: Number(sale.totalHT),
-            totalTVA: Number(sale.totalTVA),
-            totalTTC: Number(sale.totalTTC),
-            totalNet: Number(sale.totalNet || sale.totalTTC),
-            totalPaye: Number(sale.totalPaye),
-            resteAPayer: Number(sale.resteAPayer),
-            status: sale.status || 'impaye',
-            paymentMethod: sale.paymentMethod || undefined,
-            paymentHistory: (sale.paymentHistory as any[]) || [],
-            notes: sale.notes || undefined,
-            createdAt: sale.createdAt?.toISOString() || new Date().toISOString(),
-            date: sale.date?.toISOString(),
-            lastPaymentDate: sale.lastPaymentDate?.toISOString()
-        };
+        const mappedSale = mapSale(sale);
 
         return { success: true, sale: mappedSale };
 
     } catch (error: any) {
+        console.error('💥 Error fetching sale (Drizzle):', error);
         return { success: false, error: error.message };
     }
 });
@@ -199,8 +187,8 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                 const client = await tx.query.clients.findFirst({
                     where: and(eq(clients.id, clientIdNum), eq(clients.userId, userId)),
                     with: {
-                        prescriptions: {
-                            orderBy: (prescriptions: any, { desc }: any) => [desc(prescriptions.createdAt)],
+                        prescriptionsLegacy: {
+                            orderBy: (prescriptionsLegacy: any, { desc }: any) => [desc(prescriptionsLegacy.createdAt)],
                             limit: 1
                         }
                     }
@@ -213,8 +201,8 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                         clientAddress: client.address
                     };
 
-                    if (client.prescriptions && client.prescriptions.length > 0) {
-                        const latest = client.prescriptions[0];
+                    if (client.prescriptionsLegacy && client.prescriptionsLegacy.length > 0) {
+                        const latest = client.prescriptionsLegacy[0];
                         if (latest) {
                             clientSnapshot.prescriptionSnapshot = latest.prescriptionData;
                         }
@@ -609,17 +597,13 @@ export const getClientSales = secureAction(async (userId, user, clientId: string
         const id = parseInt(clientId);
         const salesData = await db.query.sales.findMany({
             where: and(eq(sales.clientId, id), eq(sales.userId, userId)),
-            orderBy: [desc(sales.createdAt)]
+            orderBy: [desc(sales.createdAt)],
+            with: {
+                client: true
+            }
         });
 
-        const mappedSales = salesData.map((s: any) => ({
-            id: s.id.toString(),
-            // ... map same fields as getSales
-            items: (s.items as SaleItem[]) || [],
-            totalTTC: Number(s.totalTTC),
-            date: s.date?.toISOString(),
-            status: s.status
-        }));
+        const mappedSales = salesData.map(mapSale);
         
         return { success: true, sales: mappedSales };
     } catch (error: any) {

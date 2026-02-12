@@ -95,14 +95,19 @@ export function DevisClientPage({ initialDevis, initialError }: DevisClientPageP
         <div className="space-y-6">
 
             {/* --- Header Section --- */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-slate-900">
-                        Mes Devis
-                    </h1>
-                    <p className="text-slate-600 mt-1">
-                        Gérez vos devis et propositions commerciales.
-                    </p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 bg-sky-50 rounded-xl flex items-center justify-center text-sky-600 shadow-sm border border-sky-100">
+                        <FileText className="h-6 w-6" />
+                    </div>
+                    <div>
+                        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+                            Devis
+                        </h1>
+                        <p className="text-slate-500 mt-1">
+                            Gérez vos devis et propositions commerciales.
+                        </p>
+                    </div>
                 </div>
 
                 {/* View Switcher & Actions */}

@@ -2,8 +2,9 @@ import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import { getSupplier } from '@/app/actions/supplier-actions';
 import { SupplierForm } from '../../_components/supplier-form';
-import { PageHeader } from '@/components/page-header';
-import { BackButton } from '@/components/ui/back-button';
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Truck } from "lucide-react";
+import Link from "next/link";
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default async function EditSupplierPage(props: { params: Promise<{ id: string }> }) {
@@ -15,13 +16,6 @@ export default async function EditSupplierPage(props: { params: Promise<{ id: st
   }
 
   // Map DB fields to Form fields if necessary
-  // The form expects 'nomCommercial', DB has 'name'.
-  // DB has 'paymentTerms', form uses 'delaiPaiement' in schema but might accept 'paymentTerms' if we map it?
-  // Actually SupplierForm:
-  // defaultValues: supplier ? { ...supplier }
-  // And it manages fields like 'delaiPaiement'.
-  // If we pass 'paymentTerms' in supplier object, form won't pick it up for 'delaiPaiement' unless we map it.
-  
   const supplier = {
     ...supplierRaw,
     nomCommercial: supplierRaw.name,
@@ -32,21 +26,31 @@ export default async function EditSupplierPage(props: { params: Promise<{ id: st
     delaiPaiement: supplierRaw.paymentTerms,
     modePaiement: supplierRaw.paymentMethod,
     banque: supplierRaw.bank,
-    // typeProduits is stored as string "a, b" in DB category?
-    // In actions/supplier-actions.ts createSupplier: category: data.typeProduits.join(', ')
-    // So we need to split it back.
     typeProduits: supplierRaw.category ? supplierRaw.category.split(', ') : [],
   };
 
   return (
-    <div className="flex flex-1 flex-col gap-4">
-      <div className="w-fit">
-        <BackButton />
+    <div className="flex flex-1 flex-col gap-8 p-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+              <Button variant="ghost" size="icon" asChild className="rounded-full hover:bg-slate-100 h-10 w-10">
+                  <Link href={`/suppliers/${params.id}`}>
+                      <ArrowLeft className="h-5 w-5 text-slate-500" />
+                  </Link>
+              </Button>
+              <div>
+                  <div className="flex items-center gap-3 mb-1">
+                      <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+                          <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">
+                              <Truck className="h-6 w-6" />
+                          </div>
+                          Modifier le Fournisseur
+                      </h1>
+                  </div>
+                  <p className="text-slate-500 ml-1">Modifiez les informations de {supplier.nomCommercial}</p>
+              </div>
+          </div>
       </div>
-      <PageHeader
-        title="Modifier le Fournisseur"
-        description={`Modifiez les informations de ${supplier.nomCommercial}`}
-      />
       <Suspense fallback={<EditSkeleton />}>
         <SupplierForm supplier={supplier} />
       </Suspense>

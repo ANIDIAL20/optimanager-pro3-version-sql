@@ -35,10 +35,15 @@ export function MutuelleSelector({ value, onSelect }: MutuelleSelectorProps) {
         const fetchMutuelles = async () => {
             setIsLoading(true);
             try {
-                const data = await getInsurances();
-                setMutuelles(data);
+                const result = await getInsurances();
+                if (result.success && Array.isArray(result.data)) {
+                    setMutuelles(result.data);
+                } else {
+                    setMutuelles([]);
+                }
             } catch (error) {
                 console.error("Failed to fetch insurances", error);
+                setMutuelles([]);
             } finally {
                 setIsLoading(false);
             }
@@ -53,10 +58,10 @@ export function MutuelleSelector({ value, onSelect }: MutuelleSelectorProps) {
 
     // Filter items based on current input
     const filteredMutuelles = React.useMemo(() => {
-        if (!mutuelles) return [];
-        if (!inputValue) return mutuelles;
+        const list = Array.isArray(mutuelles) ? mutuelles : [];
+        if (!inputValue) return list;
         const lower = inputValue.toLowerCase();
-        return mutuelles.filter(m => m.name.toLowerCase().includes(lower));
+        return list.filter(m => m.name.toLowerCase().includes(lower));
     }, [mutuelles, inputValue]);
 
     const handleSelect = (selectedValue: string) => {

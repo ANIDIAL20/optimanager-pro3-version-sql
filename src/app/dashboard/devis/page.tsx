@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth-helpers';
 import { getDevis } from '@/app/actions/devis-actions';
 import { DevisClientPage } from './devis-client';
 import type { Devis } from '@/app/actions/devis-actions';
@@ -16,11 +16,11 @@ export default async function DevisPage() {
     
     // Strict security: require authenticated user
     if (!user) {
-        console.warn('⚠️ Unauthorized access attempt to /dashboard/devis');
+        console.warn('âš ï¸ Unauthorized access attempt to /dashboard/devis');
         redirect('/login');
     }
 
-    console.log('✅ Authenticated user accessing devis:', user.uid);
+    console.log('âœ… Authenticated user accessing devis:', user.uid);
 
     // ============================================
     // 2. DATA FETCHING WITH ERROR HANDLING
@@ -39,7 +39,7 @@ export default async function DevisPage() {
         }
 
     } catch (err: any) {
-        console.error('❌ Error loading devis data:', err);
+        console.error('âŒ Error loading devis data:', err);
         error = err.message || 'Impossible de charger les devis.';
     }
 

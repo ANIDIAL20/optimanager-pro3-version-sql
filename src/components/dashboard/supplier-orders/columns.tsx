@@ -132,9 +132,7 @@ export const columns: ColumnDef<SupplierOrderUI>[] = [
         id: "reste",
         header: "Reste",
         cell: ({ row }) => {
-            const total = safeNum(row.original.totalAmount);
-            const paid = safeNum(row.original.amountPaid);
-            const reste = total - paid;
+            const reste = safeNum(row.original.resteAPayer);
             const isPaid = reste <= 0.01;
 
             return (
@@ -186,12 +184,14 @@ export const columns: ColumnDef<SupplierOrderUI>[] = [
 import { useToast } from "@/hooks/use-toast";
 import { confirmOrderReception, deleteSupplierOrder } from "@/app/actions/supplier-orders-actions";
 import { useRouter } from "next/navigation";
+import { SupplierPaymentDialog } from "./supplier-payment-dialog";
 
 // Define component inside or export
 function OrderActions({ order }: { order: SupplierOrderUI }) {
     const { toast } = useToast();
     const router = useRouter();
     const [isProcessing, setIsProcessing] = React.useState(false);
+    const [paymentOpen, setPaymentOpen] = React.useState(false);
 
     const handleConfirmReception = async () => {
         if (!order.id) return;
@@ -236,37 +236,51 @@ function OrderActions({ order }: { order: SupplierOrderUI }) {
     };
 
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0">
-                    <span className="sr-only">Ouvrir menu</span>
-                    <MoreHorizontal className="h-4 w-4" />
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => { }}>
-                    <Eye className="mr-2 h-4 w-4" /> Voir Détails
-                </DropdownMenuItem>
-
-                {order.status !== 'received' && order.status !== 'REÇU' && (
-                    <DropdownMenuItem onClick={handleConfirmReception} disabled={isProcessing}>
-                        <Check className="mr-2 h-4 w-4 text-green-600" /> Marquer Reçue
+        <>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="h-8 w-8 p-0">
+                        <span className="sr-only">Ouvrir menu</span>
+                        <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => { }}>
+                        <Eye className="mr-2 h-4 w-4" /> Voir Détails
                     </DropdownMenuItem>
-                )}
 
-                {/* TODO: Add Payment Modal Trigger */}
-                <DropdownMenuItem onClick={() => { }}>
-                    <Receipt className="mr-2 h-4 w-4" /> Ajouter Paiement
-                </DropdownMenuItem>
+                    {order.status !== 'received' && order.status !== 'REÇU' && (
+                        <DropdownMenuItem onClick={handleConfirmReception} disabled={isProcessing}>
+                            <Check className="mr-2 h-4 w-4 text-green-600" /> Marquer Reçue
+                        </DropdownMenuItem>
+                    )}
 
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleDelete} className="text-red-600">
-                    <Trash2 className="mr-2 h-4 w-4" /> Supprimer
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
+                    {order.resteAPayer > 0 && (
+                        <DropdownMenuItem onClick={() => setPaymentOpen(true)}>
+                            <Receipt className="mr-2 h-4 w-4" /> Ajouter Paiement
+                        </DropdownMenuItem>
+                    )}
+
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleDelete} className="text-red-600">
+                        <Trash2 className="mr-2 h-4 w-4" /> Supprimer
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+
+            {paymentOpen && (
+                <SupplierPaymentDialog
+                    open={paymentOpen}
+                    onOpenChange={setPaymentOpen}
+                    supplierId={order.supplierId || ''}
+                    supplierName={order.supplierName}
+                    orderId={order.id}
+                    maxAmount={order.resteAPayer}
+                />
+            )}
+        </>
     );
 }
 

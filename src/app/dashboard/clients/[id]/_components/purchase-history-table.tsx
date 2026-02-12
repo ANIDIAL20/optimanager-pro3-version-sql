@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Eye, ShoppingBag, MoreHorizontal, Package, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { SensitiveData } from '@/components/ui/sensitive-data';
-import { getSales } from '@/app/actions/sales-actions';
+import { getClientSales } from '@/app/actions/sales-actions';
 import { Sale } from '@/lib/types';
 import {
     DropdownMenu,
@@ -53,18 +53,10 @@ export function PurchaseHistoryTable({ clientId }: PurchaseHistoryTableProps) {
         const loadSales = async () => {
             setIsLoading(true);
             try {
-                const result = await getSales();
-                if (result.success && result.data) {
-                    // Filter by clientId and sort by date (newest first)
-                    const clientSales = result.data
-                        .filter(s => s.clientId?.toString() === clientId)
-                        .sort((a, b) => {
-                            const dateA = new Date(a.createdAt || a.date || 0).getTime();
-                            const dateB = new Date(b.createdAt || b.date || 0).getTime();
-                            return dateB - dateA;
-                        });
-                    setSales(clientSales as ExtendedSale[]);
-                    console.log(`✅ Found ${clientSales.length} sales for client ${clientId}`);
+                const result = await getClientSales(clientId);
+                if (result.success && result.sales) {
+                    setSales(result.sales as ExtendedSale[]);
+                    console.log(`✅ Found ${result.sales.length} sales for client ${clientId}`);
                 } else {
                     setSales([]);
                 }
@@ -144,8 +136,8 @@ export function PurchaseHistoryTable({ clientId }: PurchaseHistoryTableProps) {
                 });
                 // Reload sales after delivery
                 const updatedResult = await getSales();
-                if (updatedResult.success && updatedResult.data) {
-                    const clientSales = updatedResult.data
+                if (updatedResult.success && updatedResult.sales) {
+                    const clientSales = updatedResult.sales
                         .filter(s => s.clientId?.toString() === clientId)
                         .sort((a, b) => {
                             const dateA = new Date(a.createdAt || a.date || 0).getTime();

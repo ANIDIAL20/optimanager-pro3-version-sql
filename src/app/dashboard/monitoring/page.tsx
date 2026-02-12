@@ -3,7 +3,7 @@
  * Visualizes system health, performance, and trends.
  */
 
-import { requireUser, requireAdmin } from '@/lib/auth';
+import { requireUser, requireAdmin } from '@/lib/auth-helpers';
 import { db } from '@/db';
 import { auditLogs } from '@/db/schema';
 import { sql, and, gte, desc } from 'drizzle-orm';
@@ -65,10 +65,10 @@ export default async function MonitoringPage() {
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-4xl font-extrabold tracking-tight text-primary">Tableau de Bord Monitoring</h1>
-                    <p className="text-muted-foreground mt-2 italic">Performance et santé du système en temps réel</p>
+                    <p className="text-muted-foreground mt-2 italic">Performance et santÃ© du systÃ¨me en temps rÃ©el</p>
                 </div>
                 <Badge variant={healthy(errorRate) ? "secondary" : "destructive"} className="px-4 py-1 text-sm">
-                    {healthy(errorRate) ? "SANTÉ: OPTIMALE" : "ALERTE: DÉGRADÉ"}
+                    {healthy(errorRate) ? "SANTÃ‰: OPTIMALE" : "ALERTE: DÃ‰GRADÃ‰"}
                 </Badge>
             </div>
 
@@ -80,7 +80,7 @@ export default async function MonitoringPage() {
                     icon={<Activity className="w-5 h-5 text-blue-500" />}
                 />
                 <StatCard 
-                    title="Transactions Échouées" 
+                    title="Transactions Ã‰chouÃ©es" 
                     value={stats.failures.toString()} 
                     icon={<AlertTriangle className="w-5 h-5 text-red-500" />}
                     color={Number(stats.failures) > 0 ? "text-red-500" : ""}
@@ -92,13 +92,13 @@ export default async function MonitoringPage() {
                     color={errorRate > 5 ? "text-red-600 font-bold" : ""}
                 />
                 <StatCard 
-                    title="Réponse Moyenne" 
+                    title="RÃ©ponse Moyenne" 
                     value={`${Math.round(stats.avgDuration || 0)}ms`} 
                     icon={<Clock className="w-5 h-5 text-green-500" />}
                 />
             </div>
 
-            {/* 🆕 Weekly Charts */}
+            {/* ðŸ†• Weekly Charts */}
             <MonitoringCharts data={lastWeekMetrics} />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -107,7 +107,7 @@ export default async function MonitoringPage() {
                     <CardHeader className="bg-slate-50/50">
                         <CardTitle className="flex items-center gap-2">
                             <Clock className="w-5 h-5 text-orange-500" />
-                            Requêtes Lentes (Threshold 500ms)
+                            RequÃªtes Lentes (Threshold 500ms)
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-6">
@@ -115,8 +115,8 @@ export default async function MonitoringPage() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Action</TableHead>
-                                    <TableHead>Entité</TableHead>
-                                    <TableHead className="text-right">Durée</TableHead>
+                                    <TableHead>EntitÃ©</TableHead>
+                                    <TableHead className="text-right">DurÃ©e</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -131,7 +131,7 @@ export default async function MonitoringPage() {
                                 )) : (
                                     <TableRow>
                                         <TableCell colSpan={3} className="text-center py-8 text-muted-foreground italic">
-                                            Aucune requête lente détectée aujourd'hui
+                                            Aucune requÃªte lente dÃ©tectÃ©e aujourd'hui
                                         </TableCell>
                                     </TableRow>
                                 )}
@@ -145,7 +145,7 @@ export default async function MonitoringPage() {
                     <CardHeader className="bg-red-50/30">
                         <CardTitle className="flex items-center gap-2">
                             <AlertTriangle className="w-5 h-5 text-red-500" />
-                            Échecs Récents
+                            Ã‰checs RÃ©cents
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-6">
@@ -164,7 +164,7 @@ export default async function MonitoringPage() {
                                 </div>
                             )) : (
                                 <div className="text-center py-8 text-muted-foreground italic">
-                                    Aucun échec aujourd'hui. Félicitations !
+                                    Aucun Ã©chec aujourd'hui. FÃ©licitations !
                                 </div>
                             )}
                         </div>

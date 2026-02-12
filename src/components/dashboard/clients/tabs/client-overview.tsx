@@ -1,6 +1,7 @@
 'use client';
 
 import { getPrescriptions } from '@/app/actions/prescriptions-actions';
+import { updateClient, addClientInteraction } from '@/app/actions/clients-actions';
 
 import * as React from 'react';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
@@ -93,13 +94,36 @@ export function ClientOverview({ client, clientId }: ClientOverviewProps) {
     // Let's check `client` type definition if unsure? 
     // For now I'll use `client.totalDebt` as "Reste à payer" seems to be the context.
 
-    // Notes saving disabled - needs migration to Server Actions
+    // Enable notes saving
     const handleSaveNotes = async () => {
-        toast({ 
-            title: "Fonctionnalité Temporairement Désactivée", 
-            description: "La modification des notes sera bientôt disponible.",
-            variant: "destructive" 
-        });
+        setIsSavingNotes(true);
+        try {
+            const result = await updateClient(clientId, { notes: notesContent } as any);
+            if (result.success) {
+                // Also add to interaction history
+                await addClientInteraction(clientId, { type: 'note', content: notesContent });
+                
+                toast({ 
+                    title: "Succès", 
+                    description: "Notes enregistrées dans l'historique.",
+                });
+                setIsEditingNotes(false);
+            } else {
+                toast({ 
+                    title: "Erreur", 
+                    description: result.error,
+                    variant: "destructive" 
+                });
+            }
+        } catch (error) {
+            toast({ 
+                title: "Erreur", 
+                description: "Problème de connexion",
+                variant: "destructive" 
+            });
+        } finally {
+            setIsSavingNotes(false);
+        }
     };
 
     return (
@@ -152,36 +176,60 @@ export function ClientOverview({ client, clientId }: ClientOverviewProps) {
             {/* Block 2: Financial Health */}
             <SpotlightCard
                 className="p-6"
-                spotlightColor={displayBalance > 0 ? "rgba(239, 68, 68, 0.15)" : "rgba(16, 185, 129, 0.15)"}
+                spotlightColor={displayBalance > 0 ? (displayBalance > 5000 ? "rgba(239, 68, 68, 0.2)" : "rgba(245, 158, 11, 0.15)") : "rgba(16, 185, 129, 0.15)"}
             >
-                <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                        <DollarSign className="h-5 w-5 text-emerald-600" />
-                        Santé Financière
-                    </h3>
-                    <div className="space-y-3">
-                        <div>
-                            <p className="text-xs text-slate-500 uppercase tracking-wide">Total Dépensé</p>
-                            <p className="text-2xl font-bold text-slate-900">
-                                <SensitiveData value={totalSpent} type="currency" />
-                            </p>
-                        </div>
-                        <div>
-                            <p className="text-xs text-slate-500 uppercase tracking-wide">Reste à Payer</p>
-                            <div className="flex items-center gap-2">
-                                <p className={`text-2xl font-bold ${displayBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                    <SensitiveData
-                                        value={displayBalance}
-                                        type="currency"
-                                        className={displayBalance > 0 ? 'text-red-600' : 'text-green-600'}
-                                    />
-                                </p>
-                                {displayBalance > 0 && (
-                                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
-                                        Impayé
-                                    </Badge>
-                                )}
+                <div className="space-y-5">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                            <DollarSign className="h-5 w-5 text-emerald-600" />
+                            Santé Financière
+                        </h3>
+                        {displayBalance <= 0 ? (
+                            <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Parfait</Badge>
+                        ) : displayBalance < 2000 ? (
+                            <Badge className="bg-blue-100 text-blue-700 border-blue-200">Sain</Badge>
+                        ) : displayBalance < 5000 ? (
+                            <Badge className="bg-amber-100 text-amber-700 border-amber-200">À surveiller</Badge>
+                        ) : (
+                            <Badge className="bg-red-100 text-red-700 border-red-200 animate-pulse">Critique</Badge>
+                        )}
+                    </div>
+
+                    <div className="space-y-4">
+                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                            <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Récapitulatif</p>
+                            <div className="mt-2 space-y-2">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-600">Total Dépensé</span>
+                                    <span className="font-semibold text-slate-900"><SensitiveData value={totalSpent} type="currency" /></span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-600">Reste à Payer</span>
+                                    <span className={`font-bold ${displayBalance > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                        <SensitiveData value={displayBalance} type="currency" />
+                                    </span>
+                                </div>
                             </div>
+                        </div>
+
+                        <div className={`text-xs p-3 rounded-lg border ${
+                            displayBalance <= 0 ? 'bg-emerald-50 border-emerald-100 text-emerald-800' :
+                            displayBalance < 2000 ? 'bg-blue-50 border-blue-100 text-blue-800' :
+                            displayBalance < 5000 ? 'bg-amber-50 border-amber-100 text-amber-800' :
+                            'bg-red-50 border-red-100 text-red-800'
+                        }`}>
+                            <p className="font-semibold mb-1">Status : {
+                                displayBalance <= 0 ? 'Client exemplaire' :
+                                displayBalance < 2000 ? 'Solde modéré' :
+                                displayBalance < 5000 ? 'Client à risque' :
+                                'Alerte impayés !'
+                            }</p>
+                            <p className="opacity-80">{
+                                displayBalance <= 0 ? 'Aucune dette en cours. Historique de paiement sain.' :
+                                displayBalance < 2000 ? 'Le client a un petit solde restant. Pas d\'inquiétude.' :
+                                displayBalance < 5000 ? 'Le solde devient important. Suivi recommandé.' :
+                                'Le client a dépassé ou approche la limite de crédit autorisée.'
+                            }</p>
                         </div>
                     </div>
                 </div>

@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, boolean, decimal, integer, json, primaryKey, uuid, index } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, timestamp, boolean, decimal, integer, json, primaryKey, uuid, index, real, uniqueIndex } from 'drizzle-orm/pg-core';
 import type { AdapterAccount } from "next-auth/adapters";
 import { relations, sql } from 'drizzle-orm';
 
@@ -40,7 +40,7 @@ export const clients = pgTable('clients', {
   lastVisit: timestamp('last_visit'), // Legacy field preserved for safety
   
   createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
   userIdIdx: index('clients_user_id_idx').on(table.userId),
   fullNameIdx: index('clients_full_name_idx').on(table.fullName),
@@ -48,6 +48,28 @@ export const clients = pgTable('clients', {
   // ✅ GIN index for full-text search (Requires raw SQL usually, or custom in Drizzle)
   // We'll add standard index for now, GIN often needs a database migration script
   idx_clients_fullname_search: index('idx_clients_fullname_search').on(table.fullName),
+}));
+
+// ✅ NEW: Client Interactions (Timeline/Chat History)
+export const clientInteractions = pgTable('client_interactions', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  clientId: integer('client_id').references(() => clients.id, { onDelete: 'cascade' }),
+  
+  type: text('type').notNull().default('note'), // 'note', 'call', 'visit', 'whatsapp'
+  content: text('content').notNull(),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  userIdIdx: index('interactions_user_id_idx').on(table.userId),
+  clientIdIdx: index('interactions_client_id_idx').on(table.clientId),
+}));
+
+export const clientInteractionsRelations = relations(clientInteractions, ({ one }) => ({
+  client: one(clients, {
+    fields: [clientInteractions.clientId],
+    references: [clients.id],
+  }),
 }));
 
 // ========================================
@@ -77,6 +99,8 @@ export const products = pgTable('products', {
   
   // Stock
   quantiteStock: integer('quantite_stock').default(0),
+  reservedQuantity: integer('reserved_quantity').default(0), // 🆕 Reserved but not yet sold
+  availableQuantity: integer('available_quantity').default(0), // 🆕 Net available (Stock - Reserved)
   seuilAlerte: integer('seuil_alerte').default(5),
   
   // Metadata
@@ -86,12 +110,40 @@ export const products = pgTable('products', {
   version: integer('version').default(0).notNull(), // 🆕 Optimistic Locking
   createdAt: timestamp('created_at', { mode: 'string' }).defaultNow(),
   updatedAt: timestamp('updated_at', { mode: 'string' }),
+  deletedAt: timestamp('deleted_at'), // 🆕 Soft Delete
 }, (table) => ({
   userIdIdx: index('products_user_id_idx').on(table.userId),
   referenceIdx: index('products_reference_idx').on(table.reference),
   nomIdx: index('products_nom_idx').on(table.nom),
   idx_products_user_marque: index('idx_products_user_marque').on(table.userId, table.marque), // ✅ Composite
   searchIdx: index('products_search_idx').on(table.marque, table.fournisseur),
+  // unique_user_reference: uniqueIndex('idx_unique_user_reference').on(table.userId, table.reference),
+  idx_products_not_deleted: index('idx_products_not_deleted').on(table.userId, table.deletedAt), // ✅ Performance for soft delete
+}));
+
+// ========================================
+// 2b. INVOICE IMPORTS (Idempotency & Tracking)
+// ========================================
+export const invoiceImports = pgTable('invoice_imports', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  supplierId: text('supplier_id'), 
+  invoiceNumber: text('invoice_number').notNull(),
+  invoiceDate: timestamp('invoice_date'),
+  
+  status: text('status').default('completed'), // 'completed', 'reverted'
+  totalItems: integer('total_items'),
+  
+  revertedAt: timestamp('reverted_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  userInvoiceIdx: index('idx_user_invoice').on(table.userId, table.invoiceNumber),
+  uniqueImport: uniqueIndex('idx_unique_import').on(
+    table.userId, 
+    table.supplierId, 
+    table.invoiceNumber, 
+    table.invoiceDate
+  ),
 }));
 
 // ========================================
@@ -170,8 +222,42 @@ export const devis = pgTable('devis', {
 });
 
 // ========================================
+// 4b. RESERVATIONS TABLE
 // ========================================
-// 11. REMOVED LEGACY TABLE
+export const reservations = pgTable('reservations', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  
+  // Client info
+  clientId: integer('client_id').references(() => clients.id),
+  clientName: text('client_name').notNull(),
+  
+  // Items 
+  items: json('items').$type<any[]>().notNull(), // ReservationItem[]
+  
+  // Financial
+  totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull(),
+  depositAmount: decimal('deposit_amount', { precision: 10, scale: 2 }).default('0'),
+  remainingAmount: decimal('remaining_amount', { precision: 10, scale: 2 }),
+  
+  // Status & Metadata
+  status: text('status').default('PENDING'), // PENDING, CONFIRMED, COMPLETED, CANCELLED, EXPIRED
+  notes: text('notes'),
+  
+  // Link to Sale (when converted)
+  saleId: integer('sale_id').references(() => sales.id),
+  
+  // Expiry
+  expiryDate: timestamp('expiry_date'),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+}, (table) => ({
+  userIdIdx: index('reservations_user_id_idx').on(table.userId),
+  clientIdIdx: index('reservations_client_id_idx').on(table.clientId),
+  statusIdx: index('reservations_status_idx').on(table.status),
+}));
+
 // ========================================
 
 // ========================================
@@ -241,9 +327,9 @@ export const shopProfiles = pgTable('shop_profiles', {
 });
 
 // ========================================
-// 8. PRESCRIPTIONS TABLE
+// 8. LEGACY PRESCRIPTIONS TABLE
 // ========================================
-export const prescriptions = pgTable('prescriptions', {
+export const prescriptionsLegacy = pgTable('prescriptions_legacy', {
   id: serial('id').primaryKey(),
   firebaseId: text('firebase_id').unique(),
   userId: text('user_id').notNull(),
@@ -292,7 +378,7 @@ export const lensOrders = pgTable('lens_orders', {
   
   // References
   clientId: integer('client_id').references(() => clients.id),
-  prescriptionId: integer('prescription_id').references(() => prescriptions.id),
+  prescriptionId: integer('prescription_id').references(() => prescriptionsLegacy.id),
   saleId: integer('sale_id').references(() => sales.id), // Link to the sale when billed
   
   // Order details
@@ -377,16 +463,18 @@ export const lensOrders = pgTable('lens_orders', {
 // ========================================
 
 export const clientsRelations = relations(clients, ({ many }) => ({
+  prescriptionsLegacy: many(prescriptionsLegacy),
   prescriptions: many(prescriptions),
   contactLensPrescriptions: many(contactLensPrescriptions),
   lensOrders: many(lensOrders),
   sales: many(sales),
   devis: many(devis),
+  reservations: many(reservations),
 }));
 
-export const prescriptionsRelations = relations(prescriptions, ({ one, many }) => ({
+export const prescriptionsLegacyRelations = relations(prescriptionsLegacy, ({ one, many }) => ({
   client: one(clients, {
-    fields: [prescriptions.clientId],
+    fields: [prescriptionsLegacy.clientId],
     references: [clients.id],
   }),
   lensOrders: many(lensOrders),
@@ -404,9 +492,9 @@ export const lensOrdersRelations = relations(lensOrders, ({ one }) => ({
     fields: [lensOrders.clientId],
     references: [clients.id],
   }),
-  prescription: one(prescriptions, {
+  prescriptionLegacy: one(prescriptionsLegacy, {
     fields: [lensOrders.prescriptionId],
-    references: [prescriptions.id],
+    references: [prescriptionsLegacy.id],
   }),
 }));
 
@@ -424,6 +512,17 @@ export const devisRelations = relations(devis, ({ one }) => ({
   }),
   sale: one(sales, {
     fields: [devis.saleId],
+    references: [sales.id],
+  }),
+}));
+
+export const reservationsRelations = relations(reservations, ({ one }) => ({
+  client: one(clients, {
+    fields: [reservations.clientId],
+    references: [clients.id],
+  }),
+  sale: one(sales, {
+    fields: [reservations.saleId],
     references: [sales.id],
   }),
 }));
@@ -680,6 +779,7 @@ export const suppliers = pgTable('suppliers', {
   rating: text('rating'),
   isActive: boolean('is_active').default(true),
   status: text('status').default('Actif'),
+  defaultTaxMode: text('default_tax_mode').default('HT'), // 'HT' or 'TTC'
   
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
@@ -961,3 +1061,49 @@ export const expenses = pgTable('expenses', {
   dateIdx: index('expenses_date_idx').on(table.date),
   categoryIdx: index('expenses_category_idx').on(table.category),
 }));
+
+// 📋 Prescriptions (Ordonnances)
+export const prescriptions = pgTable('prescriptions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: text('user_id').notNull(),
+  clientId: integer('client_id').references(() => clients.id, { onDelete: 'cascade' }),
+  
+  // Ordonnance metadata
+  prescriptionDate: timestamp('prescription_date'),
+  doctorName: text('doctor_name'),
+  imageUrl: text('image_url'),
+  
+  // OD (Œil Droit / Right Eye)
+  odSph: real('od_sph'),        // Sphere: -20.00 to +20.00
+  odCyl: real('od_cyl'),        // Cylinder: -6.00 to +6.00
+  odAxis: integer('od_axis'),   // Axis: 0 to 180
+  odAdd: real('od_add'),        // Addition: 0 to +4.00
+  
+  // OS (Œil Gauche / Left Eye)
+  osSph: real('os_sph'),
+  osCyl: real('os_cyl'),
+  osAxis: integer('os_axis'),
+  osAdd: real('os_add'),
+  
+  // Pupillary Distance
+  pd: real('pd'),               // 50-80 mm typical
+  
+  // Notes & Status
+  notes: text('notes'),
+  status: text('status').default('pending'), // pending | approved | completed
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const prescriptionsRelations = relations(prescriptions, ({ one }) => ({
+  client: one(clients, {
+    fields: [prescriptions.clientId],
+    references: [clients.id],
+  }),
+}));
+
+// Types
+export type Prescription = typeof prescriptions.$inferSelect;
+export type PrescriptionInsert = typeof prescriptions.$inferInsert;
+
