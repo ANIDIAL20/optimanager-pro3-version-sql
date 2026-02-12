@@ -50,6 +50,28 @@ export const clients = pgTable('clients', {
   idx_clients_fullname_search: index('idx_clients_fullname_search').on(table.fullName),
 }));
 
+// ✅ NEW: Client Interactions (Timeline/Chat History)
+export const clientInteractions = pgTable('client_interactions', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  clientId: integer('client_id').references(() => clients.id, { onDelete: 'cascade' }),
+  
+  type: text('type').notNull().default('note'), // 'note', 'call', 'visit', 'whatsapp'
+  content: text('content').notNull(),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  userIdIdx: index('interactions_user_id_idx').on(table.userId),
+  clientIdIdx: index('interactions_client_id_idx').on(table.clientId),
+}));
+
+export const clientInteractionsRelations = relations(clientInteractions, ({ one }) => ({
+  client: one(clients, {
+    fields: [clientInteractions.clientId],
+    references: [clients.id],
+  }),
+}));
+
 // ========================================
 // 2. PRODUCTS TABLE
 // ========================================
@@ -77,6 +99,8 @@ export const products = pgTable('products', {
   
   // Stock
   quantiteStock: integer('quantite_stock').default(0),
+  reservedQuantity: integer('reserved_quantity').default(0), // 🆕 Reserved but not yet sold
+  availableQuantity: integer('available_quantity').default(0), // 🆕 Net available (Stock - Reserved)
   seuilAlerte: integer('seuil_alerte').default(5),
   
   // Metadata
@@ -93,7 +117,7 @@ export const products = pgTable('products', {
   nomIdx: index('products_nom_idx').on(table.nom),
   idx_products_user_marque: index('idx_products_user_marque').on(table.userId, table.marque), // ✅ Composite
   searchIdx: index('products_search_idx').on(table.marque, table.fournisseur),
-  unique_user_reference: uniqueIndex('idx_unique_user_reference').on(table.userId, table.reference),
+  // unique_user_reference: uniqueIndex('idx_unique_user_reference').on(table.userId, table.reference),
   idx_products_not_deleted: index('idx_products_not_deleted').on(table.userId, table.deletedAt), // ✅ Performance for soft delete
 }));
 
@@ -198,8 +222,42 @@ export const devis = pgTable('devis', {
 });
 
 // ========================================
+// 4b. RESERVATIONS TABLE
 // ========================================
-// 11. REMOVED LEGACY TABLE
+export const reservations = pgTable('reservations', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  
+  // Client info
+  clientId: integer('client_id').references(() => clients.id),
+  clientName: text('client_name').notNull(),
+  
+  // Items 
+  items: json('items').$type<any[]>().notNull(), // ReservationItem[]
+  
+  // Financial
+  totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull(),
+  depositAmount: decimal('deposit_amount', { precision: 10, scale: 2 }).default('0'),
+  remainingAmount: decimal('remaining_amount', { precision: 10, scale: 2 }),
+  
+  // Status & Metadata
+  status: text('status').default('PENDING'), // PENDING, CONFIRMED, COMPLETED, CANCELLED, EXPIRED
+  notes: text('notes'),
+  
+  // Link to Sale (when converted)
+  saleId: integer('sale_id').references(() => sales.id),
+  
+  // Expiry
+  expiryDate: timestamp('expiry_date'),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+}, (table) => ({
+  userIdIdx: index('reservations_user_id_idx').on(table.userId),
+  clientIdIdx: index('reservations_client_id_idx').on(table.clientId),
+  statusIdx: index('reservations_status_idx').on(table.status),
+}));
+
 // ========================================
 
 // ========================================
@@ -411,6 +469,7 @@ export const clientsRelations = relations(clients, ({ many }) => ({
   lensOrders: many(lensOrders),
   sales: many(sales),
   devis: many(devis),
+  reservations: many(reservations),
 }));
 
 export const prescriptionsLegacyRelations = relations(prescriptionsLegacy, ({ one, many }) => ({
@@ -453,6 +512,17 @@ export const devisRelations = relations(devis, ({ one }) => ({
   }),
   sale: one(sales, {
     fields: [devis.saleId],
+    references: [sales.id],
+  }),
+}));
+
+export const reservationsRelations = relations(reservations, ({ one }) => ({
+  client: one(clients, {
+    fields: [reservations.clientId],
+    references: [clients.id],
+  }),
+  sale: one(sales, {
+    fields: [reservations.saleId],
     references: [sales.id],
   }),
 }));

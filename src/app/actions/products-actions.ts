@@ -52,7 +52,10 @@ export const getProducts = secureAction(async (userId, user, searchQuery?: strin
         console.log(`📦 Fetching products for user: ${userId} (Drizzle)`);
 
         try {
-            const filters = [eq(products.userId, userId)];
+            const filters = [
+                eq(products.userId, userId),
+                sql`${products.deletedAt} IS NULL`
+            ];
 
             if (searchQuery) {
                 const search = `%${searchQuery}%`;
@@ -397,7 +400,11 @@ export const deleteProduct = secureAction(async (userId, user, productId: string
 
         console.log(`🗑️ Deleting product ${id} for user ${userId} (Drizzle)`);
         
-        const result = await db.delete(products)
+        const result = await db.update(products)
+            .set({ 
+                deletedAt: new Date(),
+                version: sql`${products.version} + 1` 
+            })
             .where(and(eq(products.id, id), eq(products.userId, userId)))
             .returning({ id: products.id });
 
@@ -429,6 +436,7 @@ export const getLowStockProducts = secureAction(async (userId, user, threshold?:
             .from(products)
             .where(and(
                 eq(products.userId, userId),
+                sql`${products.deletedAt} IS NULL`,
                 // stock <= alert_threshold OR default 5 using SQL COALESCE
                 lte(products.quantiteStock, sql`COALESCE(${products.seuilAlerte}, ${threshold || 5})`)
             ))

@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { getSuppliersList } from '@/app/actions/supplier-actions';
+import { getGlobalSupplierBalances } from '@/app/actions/supplier-orders-actions';
 
 import { columns as supplierColumns } from '@/components/dashboard/fournisseurs/columns';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
@@ -10,7 +11,8 @@ import {
   Plus,
   Truck,
   Eye,
-  Glasses
+  Glasses,
+  AlertTriangle
 } from 'lucide-react';
 import Link from 'next/link';
 import { Separator } from '@/components/ui/separator';
@@ -21,13 +23,20 @@ export const dynamic = 'force-dynamic';
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = React.useState<any[]>([]);
+  const [globalStats, setGlobalStats] = React.useState({ total_purchases: 0, total_debt: 0 });
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
     const fetchSuppliers = async () => {
       try {
-        const data = await getSuppliersList();
-        setSuppliers(data);
+        const [suppliersData, globalData] = await Promise.all([
+            getSuppliersList(),
+            getGlobalSupplierBalances()
+        ]);
+        setSuppliers(suppliersData);
+        if (globalData.success) {
+            setGlobalStats(globalData.data);
+        }
       } catch (error) {
         console.error("Failed to fetch suppliers:", error);
       } finally {
@@ -96,23 +105,27 @@ export default function SuppliersPage() {
         <SpotlightCard className="p-6 bg-white border-slate-200/60 shadow-sm" spotlightColor="rgba(34, 197, 94, 0.15)">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-green-100 rounded-lg">
-              <Eye className="h-6 w-6 text-green-600" />
+              <Truck className="h-6 w-6 text-green-600" />
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-600">Fournisseurs Verres</p>
-              <h3 className="text-2xl font-bold text-slate-800">{stats.verres}</h3>
+              <p className="text-sm font-medium text-slate-600">Total Achats (TTC)</p>
+              <h3 className="text-2xl font-bold text-slate-800">
+                <SensitiveData value={globalStats.total_purchases} type="currency" />
+              </h3>
             </div>
           </div>
         </SpotlightCard>
 
-        <SpotlightCard className="p-6 bg-white border-slate-200/60 shadow-sm" spotlightColor="rgba(168, 85, 247, 0.15)">
+        <SpotlightCard className="p-6 bg-white border-slate-200/60 shadow-sm" spotlightColor="rgba(239, 68, 68, 0.15)">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-purple-100 rounded-lg">
-              <Glasses className="h-6 w-6 text-purple-600" />
+            <div className="p-3 bg-red-100 rounded-lg">
+              <AlertTriangle className="h-6 w-6 text-red-600" />
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-600">Fournisseurs Montures</p>
-              <h3 className="text-2xl font-bold text-slate-800">{stats.montures}</h3>
+              <p className="text-sm font-medium text-slate-600">Total Dettes</p>
+              <h3 className="text-2xl font-bold text-red-600">
+                 <SensitiveData value={globalStats.total_debt} type="currency" />
+              </h3>
             </div>
           </div>
         </SpotlightCard>

@@ -1,6 +1,7 @@
 'use client';
 
 import { getPrescriptions } from '@/app/actions/prescriptions-actions';
+import { updateClient, addClientInteraction } from '@/app/actions/clients-actions';
 
 import * as React from 'react';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
@@ -93,13 +94,36 @@ export function ClientOverview({ client, clientId }: ClientOverviewProps) {
     // Let's check `client` type definition if unsure? 
     // For now I'll use `client.totalDebt` as "Reste à payer" seems to be the context.
 
-    // Notes saving disabled - needs migration to Server Actions
+    // Enable notes saving
     const handleSaveNotes = async () => {
-        toast({ 
-            title: "Fonctionnalité Temporairement Désactivée", 
-            description: "La modification des notes sera bientôt disponible.",
-            variant: "destructive" 
-        });
+        setIsSavingNotes(true);
+        try {
+            const result = await updateClient(clientId, { notes: notesContent } as any);
+            if (result.success) {
+                // Also add to interaction history
+                await addClientInteraction(clientId, { type: 'note', content: notesContent });
+                
+                toast({ 
+                    title: "Succès", 
+                    description: "Notes enregistrées dans l'historique.",
+                });
+                setIsEditingNotes(false);
+            } else {
+                toast({ 
+                    title: "Erreur", 
+                    description: result.error,
+                    variant: "destructive" 
+                });
+            }
+        } catch (error) {
+            toast({ 
+                title: "Erreur", 
+                description: "Problème de connexion",
+                variant: "destructive" 
+            });
+        } finally {
+            setIsSavingNotes(false);
+        }
     };
 
     return (

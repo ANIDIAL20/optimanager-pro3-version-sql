@@ -138,8 +138,8 @@ export const createSetting = secureAction(async (userId, user, type: SettingType
         name: validated.name,
         // @ts-ignore - 'category' only exists on brands, but safe if undefined/null
         category: validated.category || null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        createdAt: new Date(),
+        updatedAt: new Date()
     }).returning();
 
     console.log(`[createSetting] Created ${type} (Drizzle):`, created);
@@ -164,7 +164,7 @@ export const updateSetting = secureAction(async (userId, user, type: SettingType
             name: validated.name,
             // @ts-ignore
             category: validated.category || null,
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date()
         })
         .where(and(eq(table.id, id), eq(table.userId, userId)))
         .returning();

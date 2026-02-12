@@ -37,6 +37,11 @@
     --sidebar-accent-foreground: 217 91% 60%;
     --sidebar-border: 214.3 31.8% 91.4%;
     --sidebar-ring: 217 91% 60%;
+    --chart-1: 217 91% 60%;
+    --chart-2: 142 71% 45%;
+    --chart-3: 262 83% 58%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
   }
 }
 
@@ -47,6 +52,18 @@
 
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* cross-browser support for hiding number spinners */
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
   }
 }
 
@@ -80,17 +97,4 @@
 /* Fix for Radix UI Popover z-index - ensures dropdowns appear above dialogs/sheets */
 [data-radix-popper-content-wrapper] {
   z-index: 9999 !important;
-}
-
-/* Hide browser spinners for number inputs - STRICT implementation */
-.no-spinner {
-  appearance: textfield !important;
-  -moz-appearance: textfield !important; /* Firefox fallback */
-}
-
-.no-spinner::-webkit-outer-spin-button,
-.no-spinner::-webkit-inner-spin-button {
-  appearance: none !important;
-  -webkit-appearance: none !important; /* Safari/Chrome fallback */
-  margin: 0 !important;
 }

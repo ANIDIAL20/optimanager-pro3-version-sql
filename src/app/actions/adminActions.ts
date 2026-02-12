@@ -312,11 +312,16 @@ export async function getClientUsageStats(uid: string) {
             
             return res[0] || null;
         } catch (e: any) {
-            // Handle specific column missing errors silently as we have valid defaults
-            const isColumnError = e.message?.includes('column') || e.message?.includes('does not exist');
+            // Robust detection for schema-related errors
+            const msg = e.message?.toLowerCase() || '';
+            const isColumnError = 
+                msg.includes('column') || 
+                msg.includes('does not exist') || 
+                msg.includes('failed query') ||
+                msg.includes('relation');
             
             if (isColumnError) {
-                console.warn(`ℹ️ [DB NOTICE] User limits columns missing in DB, using defaults.`);
+                console.warn(`ℹ️ [DB NOTICE] User limits or users table not perfectly synced, using defaults. Error: ${e.message}`);
             } else {
                 console.error(`❌ [DB ERROR] User limits fetch failed:`, e.message);
             }

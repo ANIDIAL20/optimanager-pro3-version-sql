@@ -7,8 +7,8 @@
 
 
 import { db } from '@/db';
-import { supplierOrders, suppliers, supplierPayments, supplierOrderPayments, products, stockMovements, supplierOrderItems } from '@/db/schema';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { supplierOrders, suppliers, supplierPayments, supplierOrderPayments, products, stockMovements, supplierOrderItems, reminders } from '@/db/schema';
+import { eq, and, desc, sql, sum } from 'drizzle-orm';
 import { getSuppliersList as getSuppliers } from '@/app/actions/supplier-actions';
 import type { Supplier } from '@/lib/types';
 import { secureAction } from '@/lib/secure-action';
@@ -18,12 +18,15 @@ import { revalidatePath } from 'next/cache';
 // Types
 export type SupplierOrder = {
     id: number;
+    userId: string;
+    supplierId: string | null;
     orderReference?: string | null;
     orderNumber?: string | null;
     supplierName: string;
     supplierPhone?: string | null;
     totalAmount: number;
     amountPaid: number;
+    resteAPayer: number;
     status: string | null;
     deliveryStatus: string | null;
     createdAt: Date | null;
@@ -55,12 +58,15 @@ export const getSupplierOrders = secureAction(async (userId, user, supplierId?: 
         // Map to UI friendly format
         const formattedOrders: SupplierOrder[] = results.map((order: any) => ({
             id: order.id,
+            userId: order.user_id,
+            supplierId: order.supplier_id,
             orderReference: order.order_reference,
             orderNumber: order.order_number,
             supplierName: order.fournisseur,
             supplierPhone: order.supplier_phone,
             totalAmount: Number(order.montant_total),
             amountPaid: Number(order.montant_paye),
+            resteAPayer: Number(order.reste_a_payer),
             status: order.statut,
             deliveryStatus: order.delivery_status,
             createdAt: order.created_at,
@@ -92,8 +98,7 @@ export const createSupplierOrder = secureAction(async (userId, user, data: any) 
         if (!supplier && !data.supplierName) {
              return { success: false, error: 'Fournisseur manquant' };
         }
-
-        return await db.transaction(async (tx) => {
+        return await db.transaction(async (tx: any) => {
             // 2. Generate Order Number
             const countResult = await tx.execute(sql`SELECT count(*) as count FROM supplier_orders WHERE "user_id" = ${userId}`);
             const count = Number(countResult[0].count);
@@ -138,6 +143,13 @@ export const createSupplierOrder = secureAction(async (userId, user, data: any) 
                 ) RETURNING id
             `);
             const orderId = insertResult[0].id;
+
+            const newOrder = { 
+                id: orderId, 
+                orderNumber, 
+                fournisseur: supplier ? supplier.name : data.supplierName,
+                montantTotal: Number(data.totalAmount)
+            };
 
             // 5. Insert Items into Relation Table
             if (data.items && Array.isArray(data.items)) {
@@ -184,16 +196,16 @@ export const createSupplierOrder = secureAction(async (userId, user, data: any) 
                // Leave out for now to avoid double logic with payments until fully tested.
             }
 
-            await logSuccess(userId, 'CREATE', 'supplier_orders', orderId.toString(), { supplier: supplier ? supplier.name : data.supplierName, total: data.totalAmount }, null, newOrder);
+            await logSuccess(userId, 'CREATE', 'supplier_orders', orderId.toString(), { supplier: supplier ? supplier.name : data.supplierName, total: data.totalAmount }, null);
             revalidatePath('/dashboard/supplier-orders');
             return { success: true, id: orderId.toString(), message: 'Commande créée avec succès' };
         });
 
-        } catch (error: any) {
-            await logFailure(userId, 'CREATE_SUPPLIER_ORDER', 'supplier_orders', error.message);
-            console.error("Error creating supplier order:", error);
-            return { success: false, error: 'Erreur création commande' };
-        }
+    } catch (error: any) {
+        await logFailure(userId, 'CREATE_SUPPLIER_ORDER', 'supplier_orders', error.message);
+        console.error("Error creating supplier order:", error);
+        return { success: false, error: 'Erreur création commande' };
+    }
 });
 
 /**
@@ -207,7 +219,7 @@ async function updateOrderReceptionCore(userId: string, user: any, orderId: numb
     try {
         const id = Number(orderId);
         
-        await db.transaction(async (tx) => {
+        await db.transaction(async (tx: any) => {
              // 1. Get Order
              const orderResult = await tx.execute(sql`SELECT * FROM supplier_orders WHERE "id" = ${id} AND "user_id" = ${userId} FOR UPDATE`);
              const order = orderResult[0];
@@ -309,6 +321,123 @@ export const deleteSupplierOrder = secureAction(async (userId, user, orderId: nu
             
         revalidatePath('/dashboard/supplier-orders');
         return { success: true, message: 'Commande supprimée' };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * 2. Supplier Payment management (Requirement 2)
+ */
+export const createSupplierPayment = secureAction(async (userId, user, data: { supplierId: string, amount: number, method: string, reference?: string, orderIds?: number[], date?: string }) => {
+    try {
+        console.log("💰 Processing Supplier Payment:", data);
+
+        return await db.transaction(async (tx: any) => {
+            // 1. Create Payment Record
+            const paymentNumber = `PAY-${Date.now().toString().slice(-6)}`;
+            
+            const insertPayment = await tx.execute(sql`
+                INSERT INTO supplier_payments (
+                    "user_id", "supplier_id", "supplier_name", "payment_number", 
+                    "amount", "method", "reference", "date", "status", "created_by"
+                )
+                SELECT 
+                    ${userId}, "id", "name", ${paymentNumber}, 
+                    ${data.amount.toString()}, ${data.method}, ${data.reference || null}, 
+                    ${data.date ? new Date(data.date).toISOString() : new Date().toISOString()}, 
+                    'COMPLETED', ${user?.email || 'System'}
+                FROM suppliers WHERE "id" = ${data.supplierId}
+                RETURNING id, supplier_name
+            `);
+
+            const paymentId = insertPayment[0].id;
+            const supplierName = insertPayment[0].supplier_name;
+
+            // 2. Allocate to Orders if provided
+            if (data.orderIds && data.orderIds.length > 0) {
+                let remainingToAllocate = data.amount;
+
+                for (const orderId of data.orderIds) {
+                    if (remainingToAllocate <= 0) break;
+
+                    const orderResult = await tx.execute(sql`SELECT * FROM supplier_orders WHERE "id" = ${orderId} FOR UPDATE`);
+                    const order = orderResult[0];
+                    if (!order) continue;
+
+                    const debt = Number(order.reste_a_payer);
+                    const allocation = Math.min(debt, remainingToAllocate);
+
+                    if (allocation > 0) {
+                        await tx.execute(sql`
+                            INSERT INTO supplier_order_payments ("user_id", "payment_id", "order_id", "amount")
+                            VALUES (${userId}, ${paymentId}, ${orderId}, ${allocation.toString()})
+                        `);
+
+                        await tx.execute(sql`
+                            UPDATE supplier_orders 
+                            SET "montant_paye" = "montant_paye" + ${allocation.toString()},
+                                "reste_a_payer" = "reste_a_payer" - ${allocation.toString()}
+                            WHERE "id" = ${orderId}
+                        `);
+                        
+                        remainingToAllocate -= allocation;
+                    }
+                }
+            }
+
+            // 3. Update Global Supplier Balance
+            await tx.execute(sql`
+                UPDATE suppliers 
+                SET "current_balance" = "current_balance" - ${data.amount.toString()}
+                WHERE "id" = ${data.supplierId}
+            `);
+
+            await logSuccess(userId, 'CREATE', 'supplier_payments', paymentId, { amount: data.amount, supplier: supplierName });
+            
+            revalidatePath('/dashboard/suppliers');
+            return { success: true, message: 'Paiement enregistré avec succès' };
+        });
+    } catch (error: any) {
+        console.error("💥 Error creating supplier payment:", error);
+        return { success: false, error: 'Erreur lors du paiement' };
+    }
+});
+
+/**
+ * 4. Supplier Dashboard Stats (Requirement 4)
+ */
+export const getSupplierStats = secureAction(async (userId, user, supplierId: string) => {
+    try {
+        const stats = await db.execute(sql`
+            SELECT 
+                COALESCE(SUM(montant_total), 0) as total_ordered,
+                COALESCE(SUM(montant_paye), 0) as total_paid,
+                COALESCE(SUM(reste_a_payer), 0) as total_debt,
+                COUNT(*) as orders_count
+            FROM supplier_orders
+            WHERE "user_id" = ${userId} AND "supplier_id" = ${supplierId}
+        `);
+
+        return { success: true, stats: stats[0] };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * Get Global Supplier Balances
+ */
+export const getGlobalSupplierBalances = secureAction(async (userId) => {
+    try {
+        const results = await db.execute(sql`
+            SELECT 
+                COALESCE(SUM(montant_total), 0) as total_purchases,
+                COALESCE(SUM(reste_a_payer), 0) as total_debt
+            FROM supplier_orders
+            WHERE "user_id" = ${userId}
+        `);
+        return { success: true, data: results[0] };
     } catch (error: any) {
         return { success: false, error: error.message };
     }

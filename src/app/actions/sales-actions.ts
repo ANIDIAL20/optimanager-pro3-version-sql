@@ -73,6 +73,32 @@ export interface CreateSaleInput {
 // SALES ACTIONS
 // ========================================
 
+// Helper to map DB sales to Sale type
+const mapSale = (s: any): Sale => ({
+    id: s.id.toString(),
+    clientId: s.clientId?.toString(),
+    clientName: s.clientName || s.client?.fullName,
+    clientPhone: s.clientPhone || s.client?.phone,
+    clientMutuelle: s.clientMutuelle || s.client?.mutuelle,
+    clientAddress: s.clientAddress || s.client?.address,
+    saleNumber: s.saleNumber,
+    prescriptionSnapshot: s.prescriptionSnapshot,
+    items: (s.items as SaleItem[]) || [],
+    totalHT: Number(s.totalHT),
+    totalTVA: Number(s.totalTVA),
+    totalTTC: Number(s.totalTTC),
+    totalNet: Number(s.totalNet || s.totalTTC),
+    totalPaye: Number(s.totalPaye),
+    resteAPayer: Number(s.resteAPayer),
+    status: s.status || 'impaye',
+    paymentMethod: s.paymentMethod,
+    paymentHistory: (s.paymentHistory as any[]) || [],
+    notes: s.notes,
+    createdAt: s.createdAt ? (typeof s.createdAt === 'string' ? s.createdAt : s.createdAt.toISOString()) : new Date().toISOString(),
+    date: s.date ? (typeof s.date === 'string' ? s.date : s.date.toISOString()) : undefined,
+    lastPaymentDate: s.lastPaymentDate ? (typeof s.lastPaymentDate === 'string' ? s.lastPaymentDate : s.lastPaymentDate.toISOString()) : undefined
+});
+
 /**
  * Get all sales
  */
@@ -90,38 +116,15 @@ export const getSales = secureAction(async (userId, user) => {
 
         console.log(`✅ Found ${results.length} sales (Drizzle)`);
 
-        const mappedSales: Sale[] = results.map((s: any) => ({
-            id: s.id.toString(),
-            clientId: s.clientId?.toString(),
-            clientName: s.clientName || s.client?.fullName,
-            clientPhone: s.clientPhone || s.client?.phone,
-            clientMutuelle: s.clientMutuelle || s.client?.mutuelle,
-            clientAddress: s.clientAddress || s.client?.address,
-            saleNumber: s.saleNumber,
-            prescriptionSnapshot: s.prescriptionSnapshot,
-            items: (s.items as SaleItem[]) || [],
-            totalHT: Number(s.totalHT),
-            totalTVA: Number(s.totalTVA),
-            totalTTC: Number(s.totalTTC),
-            totalNet: Number(s.totalNet || s.totalTTC),
-            totalPaye: Number(s.totalPaye),
-            resteAPayer: Number(s.resteAPayer),
-            status: s.status || 'impaye',
-            paymentMethod: s.paymentMethod,
-            paymentHistory: (s.paymentHistory as any[]) || [],
-            notes: s.notes,
-            createdAt: s.createdAt ? (typeof s.createdAt === 'string' ? s.createdAt : s.createdAt.toISOString()) : new Date().toISOString(),
-            date: s.date ? (typeof s.date === 'string' ? s.date : s.date.toISOString()) : undefined,
-            lastPaymentDate: s.lastPaymentDate ? (typeof s.lastPaymentDate === 'string' ? s.lastPaymentDate : s.lastPaymentDate.toISOString()) : undefined
-        }));
+        const mappedSales: Sale[] = results.map(mapSale);
 
         await logSuccess(userId, 'READ', 'sales', 'LIST_ALL', { count: mappedSales.length });
-        return { success: true, sales: mappedSales };
+        return { success: true, data: mappedSales };
 
     } catch (error: any) {
         console.error('💥 ERROR in getSales (Drizzle):', error);
         await logFailure(userId, 'READ', 'sales', error.message);
-        return { success: false, error: `Erreur lors de la récupération des ventes: ${error.message}`, sales: [] };
+        return { success: false, error: `Erreur lors de la récupération des ventes: ${error.message}`, data: [] };
     }
 });
 
@@ -142,32 +145,9 @@ export const getSale = secureAction(async (userId, user, saleId: string) => {
 
         if (!sale) return { success: false, error: 'Vente introuvable' };
 
-        const mappedSale: Sale = {
-            id: sale.id.toString(),
-            clientId: sale.clientId?.toString(),
-            clientName: sale.clientName || sale.client?.fullName,
-            clientPhone: sale.clientPhone || sale.client?.phone,
-            clientMutuelle: sale.clientMutuelle || sale.client?.mutuelle,
-            clientAddress: sale.clientAddress || sale.client?.address,
-            saleNumber: sale.saleNumber,
-            prescriptionSnapshot: sale.prescriptionSnapshot,
-            items: (sale.items as SaleItem[]) || [],
-            totalHT: Number(sale.totalHT),
-            totalTVA: Number(sale.totalTVA),
-            totalTTC: Number(sale.totalTTC),
-            totalNet: Number(sale.totalNet || sale.totalTTC),
-            totalPaye: Number(sale.totalPaye),
-            resteAPayer: Number(sale.resteAPayer),
-            status: sale.status || 'impaye',
-            paymentMethod: sale.paymentMethod,
-            paymentHistory: (sale.paymentHistory as any[]) || [],
-            notes: sale.notes,
-            createdAt: sale.createdAt ? (typeof sale.createdAt === 'string' ? sale.createdAt : sale.createdAt.toISOString()) : new Date().toISOString(),
-            date: sale.date ? (typeof sale.date === 'string' ? sale.date : sale.date.toISOString()) : undefined,
-            lastPaymentDate: sale.lastPaymentDate ? (typeof sale.lastPaymentDate === 'string' ? sale.lastPaymentDate : sale.lastPaymentDate.toISOString()) : undefined
-        };
+        const mappedSale = mapSale(sale);
 
-        return { success: true, sale: mappedSale };
+        return { success: true, data: mappedSale };
 
     } catch (error: any) {
         console.error('💥 Error fetching sale (Drizzle):', error);
@@ -617,19 +597,15 @@ export const getClientSales = secureAction(async (userId, user, clientId: string
         const id = parseInt(clientId);
         const salesData = await db.query.sales.findMany({
             where: and(eq(sales.clientId, id), eq(sales.userId, userId)),
-            orderBy: [desc(sales.createdAt)]
+            orderBy: [desc(sales.createdAt)],
+            with: {
+                client: true
+            }
         });
 
-        const mappedSales = salesData.map((s: any) => ({
-            id: s.id.toString(),
-            // ... map same fields as getSales
-            items: (s.items as SaleItem[]) || [],
-            totalTTC: Number(s.totalTTC),
-            date: s.date?.toISOString(),
-            status: s.status
-        }));
+        const mappedSales = salesData.map(mapSale);
         
-        return { success: true, sales: mappedSales };
+        return { success: true, data: mappedSales };
     } catch (error: any) {
         return { success: false, error: error.message };
     }

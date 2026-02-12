@@ -106,8 +106,12 @@ export function ManageSettings({
   const loadItems = React.useCallback(async () => {
     try {
       setIsLoading(true);
-      const data = await getSettings(type);
-      setItems(data as SettingItem[]);
+      const result = await getSettings(type);
+      if (result.success && result.data) {
+        setItems(result.data as SettingItem[]);
+      } else {
+        setItems([]);
+      }
       setSelectedIds([]); // Clear selection on reload
     } catch (error: any) {
       toast({

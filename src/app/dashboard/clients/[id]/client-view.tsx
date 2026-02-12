@@ -31,7 +31,8 @@ import { PurchaseHistoryTable } from './_components/purchase-history-table';
 import { ClientHeader } from '@/components/dashboard/clients/client-header';
 import { ClientOverview } from '@/components/dashboard/clients/tabs/client-overview';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowLeft } from 'lucide-react';
+import { InteractionHistory } from './_components/interaction-history';
+import { ArrowLeft, MessageSquare } from 'lucide-react';
 
 export default function ClientDetailView() {
     const params = useParams();
@@ -158,9 +159,17 @@ export default function ClientDetailView() {
                         <ShoppingCart className="h-4 w-4" />
                         Commandes Verres
                     </TabsTrigger>
-                    <TabsTrigger value="purchase-history" className="gap-2">
+                    <TabsTrigger value="contact-orders" className="gap-2">
+                        <ShoppingCart className="h-4 w-4" />
+                        Commandes Lentilles
+                    </TabsTrigger>
+                    <TabsTrigger value="purchase-history" className="gap-2 text-emerald-600 data-[state=active]:bg-emerald-50">
                         <ShoppingBag className="h-4 w-4" />
                         Historique d'Achats
+                    </TabsTrigger>
+                    <TabsTrigger value="interactions" className="gap-2 text-indigo-600 data-[state=active]:bg-indigo-50">
+                        <MessageSquare className="h-4 w-4" />
+                        Journal de Bord
                     </TabsTrigger>
                 </TabsList>
 
@@ -202,12 +211,23 @@ export default function ClientDetailView() {
 
                 {/* Lens Orders Tab */}
                 <TabsContent value="lens-orders" className="space-y-6">
-                    <LensOrderForm clientId={id} onSuccess={() => setRefreshKey(prev => prev + 1)} />
+                    <LensOrderForm clientId={id} mode="glasses" onSuccess={() => setRefreshKey(prev => prev + 1)} />
                     <Separator />
-                    <LensOrderList key={`lens-orders-${refreshKey}`} clientId={id} clientName={`${client?.prenom || ''} ${client?.nom || ''}`} />
+                    <LensOrderList key={`lens-orders-${refreshKey}`} mode="glasses" clientId={id} clientName={`${client?.prenom || ''} ${client?.nom || ''}`} />
+                </TabsContent>
+
+                {/* Contact Lens Orders Tab */}
+                <TabsContent value="contact-orders" className="space-y-6">
+                    <LensOrderForm clientId={id} mode="contacts" onSuccess={() => setRefreshKey(prev => prev + 1)} />
+                    <Separator />
+                    <LensOrderList key={`contact-orders-${refreshKey}`} mode="contacts" clientId={id} clientName={`${client?.prenom || ''} ${client?.nom || ''}`} />
                 </TabsContent>
 
                 {/* Purchase History Tab */}
+                <TabsContent value="interactions">
+                    <InteractionHistory clientId={id} />
+                </TabsContent>
+
                 <TabsContent value="purchase-history">
                     <PurchaseHistoryTable clientId={id} />
                 </TabsContent>
