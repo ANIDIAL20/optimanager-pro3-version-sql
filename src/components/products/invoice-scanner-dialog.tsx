@@ -162,14 +162,11 @@ export function InvoiceScannerDialog() {
                 e.preventDefault();
                 form.handleSubmit(onSubmit)();
             }
-            if (e.key === 'Escape' && !savedSuccess) {
-                // Let Dialog handle escape by default, but we can intercept if needed
-            }
         };
 
         window.addEventListener('keydown', handleKeys);
         return () => window.removeEventListener('keydown', handleKeys);
-    }, [isOpen, savedSuccess]);
+    }, [isOpen]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
