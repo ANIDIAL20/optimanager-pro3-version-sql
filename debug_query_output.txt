@@ -1,0 +1,5 @@
+﻿[dotenv@17.2.3] injecting env (28) from .env.local -- tip: ÔÜÖ´©Å  specify custom .env file path with { path: '/custom/path/.env' }
+Running query with params: { userId: 'd7daf565-32ff-482d-b798-63120fd75e66', active: true }
+Generated SQL: select "id", "firebase_id", "user_id", "full_name", "prenom", "nom", "email", "phone", "phone_2", "address", "city", "gender", "cin", "date_of_birth", "mutuelle", "notes", "balance", "credit_limit", "total_spent", "is_active", "last_visit", "created_at", "updated_at" from "clients" where ("clients"."user_id" = $1 and "clients"."is_active" = $2) order by "clients"."created_at" desc
+Generated Params: [ 'd7daf565-32ff-482d-b798-63120fd75e66', true ]
+Success! Found 18 clients
