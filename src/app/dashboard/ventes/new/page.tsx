@@ -67,7 +67,7 @@ export default function NewSalePage() {
                     if (Array.isArray(clientsRes)) {
                         // Adapt clients to legacy interface
                         const adaptedClients: any[] = clientsRes.map(c => {
-                            const fullName = c.fullName || c.name || '';
+                            const fullName = c.fullName || (c as any).name || '';
                             const nameParts = fullName.split(' ');
                             const prenom = nameParts.length > 1 ? nameParts[0] : '';
                             const nom = nameParts.length > 1 ? nameParts.slice(1).join(' ') : fullName;
@@ -321,19 +321,23 @@ export default function NewSalePage() {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" asChild>
+                    <Button variant="ghost" size="icon" asChild className="rounded-full hover:bg-slate-100 h-10 w-10">
                         <Link href="/dashboard/ventes">
-                            <ArrowLeft className="h-5 w-5" />
+                            <ArrowLeft className="h-5 w-5 text-slate-500" />
                         </Link>
                     </Button>
                     <div>
-                        <h1 className="text-3xl font-bold flex items-center gap-2">
-                            <Receipt className="h-8 w-8" />
-                            Nouvelle Vente
-                        </h1>
-                        <p className="text-muted-foreground">Point de vente professionnel</p>
+                        <div className="flex items-center gap-3 mb-1">
+                            <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+                                <div className="h-10 w-10 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
+                                    <Receipt className="h-6 w-6" />
+                                </div>
+                                Nouvelle Vente
+                            </h1>
+                        </div>
+                        <p className="text-slate-500 ml-1">Point de vente professionnel — Encaissement rapide</p>
                     </div>
                 </div>
             </div>

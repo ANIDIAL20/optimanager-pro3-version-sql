@@ -123,11 +123,16 @@ export default function AccountingPage() {
 
     return (
         <div className="container mx-auto p-6 space-y-8">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Exports & Rapports</h1>
-                    <p className="text-muted-foreground">Analysez vos performances et exportez vos données.</p>
+            {/* Header - Standardized theme */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 shadow-sm border border-blue-100">
+                        <FileText className="h-6 w-6" />
+                    </div>
+                    <div>
+                        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Exports & Rapports</h1>
+                        <p className="text-slate-500 mt-1">Analysez vos performances et exportez vos données.</p>
+                    </div>
                 </div>
                 <Select value={dateRange} onValueChange={setDateRange}>
                     <SelectTrigger className="w-[180px]">

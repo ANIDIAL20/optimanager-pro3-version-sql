@@ -6,10 +6,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle2, User, Phone, Building2, Receipt, Clock, FileText } from 'lucide-react';
+import { CheckCircle2, User, Phone, Building2, Receipt, Clock, FileText, ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { BackButton } from '@/components/ui/back-button';
-import { PageHeader } from '@/components/page-header';
+import Link from 'next/link';
 import { QuoteActions } from '@/components/quotes/quote-actions';
 import { getShopProfile } from '@/app/actions/shop-actions';
 import { Separator } from '@/components/ui/separator';
@@ -122,18 +121,29 @@ export default function DevisDetailsPage({ params }: DevisDetailsPageProps) {
     if (!devis) return null;
 
     return (
-        <div className="flex flex-1 flex-col gap-6">
+        <div className="flex flex-1 flex-col gap-6 p-6">
 
-            {/* Back Button */}
-            <div className="w-fit">
-                <BackButton />
-            </div>
+            {/* Header - Standardized theme */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="flex items-center gap-4">
+                    <Button variant="ghost" size="icon" asChild className="rounded-full hover:bg-slate-100 h-10 w-10">
+                        <Link href="/dashboard/devis">
+                            <ArrowLeft className="h-5 w-5 text-slate-500" />
+                        </Link>
+                    </Button>
+                    <div>
+                        <div className="flex items-center gap-3 mb-1">
+                            <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+                                <div className="h-10 w-10 bg-sky-50 rounded-lg flex items-center justify-center text-sky-600">
+                                    <FileText className="h-6 w-6" />
+                                </div>
+                                Devis #{devis.id?.slice(0, 8).toUpperCase()}
+                            </h1>
+                        </div>
+                        <p className="text-slate-500 ml-1">Du {new Date(devis.createdAt).toLocaleDateString('fr-FR')}</p>
+                    </div>
+                </div>
 
-            {/* Header */}
-            <PageHeader
-                title={`Devis #${devis.id?.slice(0, 8).toUpperCase()}`}
-                description={`Du ${new Date(devis.createdAt).toLocaleDateString('fr-FR')}`}
-            >
                 <div className="flex items-center gap-2">
                     {devis.status === 'TRANSFORME' && (
                         <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 mr-2">
@@ -160,7 +170,7 @@ export default function DevisDetailsPage({ params }: DevisDetailsPageProps) {
                         </Button>
                     )}
                 </div>
-            </PageHeader>
+            </div>
             
             {/* Top Cards: Status & Client */}
              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

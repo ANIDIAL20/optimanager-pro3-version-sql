@@ -64,9 +64,10 @@ type LensOrderFormValues = z.infer<typeof LensOrderSchema>;
 interface LensOrderFormProps {
   clientId: string;
   onSuccess?: () => void;
+  mode?: 'glasses' | 'contacts';
 }
 
-export function LensOrderForm({ clientId, onSuccess }: LensOrderFormProps) {
+export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrderFormProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   
@@ -81,7 +82,7 @@ export function LensOrderForm({ clientId, onSuccess }: LensOrderFormProps) {
     defaultValues: {
       prescriptionId: '',
       supplierId: '',
-      orderType: 'unifocal',
+      orderType: mode === 'contacts' ? 'contact' : 'unifocal',
       lensType: '',
       sellingPrice: 0,
       estimatedBuyingPrice: undefined,
@@ -148,7 +149,7 @@ export function LensOrderForm({ clientId, onSuccess }: LensOrderFormProps) {
   // Auto-detect order type from lens type input (UX enhancement)
   const lensTypeValue = form.watch('lensType');
   React.useEffect(() => {
-    if (!lensTypeValue) return;
+    if (!lensTypeValue || mode === 'contacts') return;
     const lower = lensTypeValue.toLowerCase();
     if (lower.includes('prog')) {
       form.setValue('orderType', 'progressive');
@@ -157,7 +158,7 @@ export function LensOrderForm({ clientId, onSuccess }: LensOrderFormProps) {
     } else if (lower.includes('uni') || lower.includes('simple')) {
       form.setValue('orderType', 'unifocal');
     }
-  }, [lensTypeValue, form]);
+  }, [lensTypeValue, form, mode]);
 
   const onSubmit = async (data: LensOrderFormValues) => {
     setIsSubmitting(true);
@@ -205,13 +206,13 @@ export function LensOrderForm({ clientId, onSuccess }: LensOrderFormProps) {
 
       if (result.success) {
         toast({
-          title: 'Commande de verres créée',
+          title: mode === 'contacts' ? 'Commande de lentilles créée' : 'Commande de verres créée',
           description: 'La nouvelle commande a été enregistrée en tant que brouillon.',
         });
         form.reset({
             prescriptionId: '',
             supplierId: '',
-            orderType: 'unifocal',
+            orderType: mode === 'contacts' ? 'contact' : 'unifocal',
             lensType: '',
             treatments: [],
             notes: '',
@@ -239,8 +240,12 @@ export function LensOrderForm({ clientId, onSuccess }: LensOrderFormProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Nouvelle Commande de Verres</CardTitle>
-        <CardDescription>Configurez la commande pour le laboratoire.</CardDescription>
+        <CardTitle>
+          {mode === 'contacts' ? 'Nouvelle Commande de Lentilles' : 'Nouvelle Commande de Verres'}
+        </CardTitle>
+        <CardDescription>
+          {mode === 'contacts' ? 'Configurez la commande de lentilles.' : 'Configurez la commande pour le laboratoire.'}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -319,44 +324,61 @@ export function LensOrderForm({ clientId, onSuccess }: LensOrderFormProps) {
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormField
-                control={form.control}
-                name="orderType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Type de commande (Géométrie)</FormLabel>
-                    <SearchableSelect
-                      options={[
-                        { label: 'Unifocal (Vision Simple)', value: 'unifocal' },
-                        { label: 'Progressif', value: 'progressive' },
-                        { label: 'Bifocal (Double Foyer)', value: 'bifocal' },
-                        { label: 'Lentilles de Contact', value: 'contact' },
-                      ]}
-                      value={field.value}
-                      onChange={field.onChange}
-                      placeholder="Sélectionner le type"
-                      searchPlaceholder="Rechercher un type..."
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            {mode !== 'contacts' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="orderType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Type de commande (Géométrie)</FormLabel>
+                      <SearchableSelect
+                        options={[
+                          { label: 'Unifocal (Vision Simple)', value: 'unifocal' },
+                          { label: 'Progressif', value: 'progressive' },
+                          { label: 'Bifocal (Double Foyer)', value: 'bifocal' },
+                        ]}
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder="Sélectionner le type"
+                        searchPlaceholder="Rechercher un type..."
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <FormField
-                control={form.control}
-                name="lensType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Type de verre (Marque/Modèle)</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: Essilor Varilux, Nikon Presio..." {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                <FormField
+                  control={form.control}
+                  name="lensType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Type de verre (Marque/Modèle)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ex: Essilor Varilux, Nikon Presio..." {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
+            {mode === 'contacts' && (
+               <FormField
+                  control={form.control}
+                  name="lensType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Marque de Lentilles / Modèle</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ex: Acuvue Oasys, Biofinity..." {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+            )}
 
 
 

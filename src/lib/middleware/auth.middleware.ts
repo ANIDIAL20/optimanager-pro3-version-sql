@@ -1,5 +1,5 @@
 
-import { requireAuth, type AuthUser } from '@/lib/auth';
+import { requireAuth, type AuthUser } from '@/lib/auth-helpers';
 import type { Middleware } from './compose';
 
 export const authenticate = (): Middleware => {
@@ -25,7 +25,7 @@ export const requireRole = (role: 'admin' | 'user'): Middleware => {
     }
 
     if (ctx.user.role !== role) {
-      throw new Error(`Accès refusé. Rôle requis : ${role}`);
+      throw new Error(`AccÃ¨s refusÃ©. RÃ´le requis : ${role}`);
     }
 
     return next();

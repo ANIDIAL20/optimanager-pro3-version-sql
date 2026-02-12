@@ -7,8 +7,10 @@
 
 
 import { db } from '@/db';
-import { supplierOrders, suppliers, supplierPayments, supplierOrderPayments, products, stockMovements, supplierOrderItems } from '@/db/schema';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { supplierOrders, suppliers, supplierPayments, supplierOrderPayments, products, stockMovements, supplierOrderItems, reminders } from '@/db/schema';
+import { eq, and, desc, sql, sum } from 'drizzle-orm';
+import { getSuppliersList as getSuppliers } from '@/app/actions/supplier-actions';
+import type { Supplier } from '@/lib/types';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure, withAudit, logAudit } from '@/lib/audit-log';
 import { revalidatePath } from 'next/cache';
@@ -16,12 +18,15 @@ import { revalidatePath } from 'next/cache';
 // Types
 export type SupplierOrder = {
     id: number;
+    userId: string;
+    supplierId: string | null;
     orderReference?: string | null;
     orderNumber?: string | null;
     supplierName: string;
     supplierPhone?: string | null;
     totalAmount: number;
     amountPaid: number;
+    resteAPayer: number;
     status: string | null;
     deliveryStatus: string | null;
     createdAt: Date | null;
@@ -33,132 +38,142 @@ export type SupplierOrder = {
  */
 export const getSupplierOrders = secureAction(async (userId, user, supplierId?: string) => {
     try {
-        const whereClause = supplierId 
-            ? and(eq(supplierOrders.userId, userId), eq(supplierOrders.supplierId, supplierId))
-            : eq(supplierOrders.userId, userId);
+        let query;
+        if (supplierId) {
+            query = sql`
+                SELECT * FROM supplier_orders 
+                WHERE "user_id" = ${userId} AND "supplier_id" = ${supplierId}
+                ORDER BY "created_at" DESC
+            `;
+        } else {
+            query = sql`
+                SELECT * FROM supplier_orders 
+                WHERE "user_id" = ${userId}
+                ORDER BY "created_at" DESC
+            `;
+        }
 
-        const results = await db.query.supplierOrders.findMany({
-            where: whereClause,
-            orderBy: [desc(supplierOrders.createdAt)],
-        });
+        const results = await db.execute(query);
 
         // Map to UI friendly format
         const formattedOrders: SupplierOrder[] = results.map((order: any) => ({
             id: order.id,
-            orderReference: order.orderReference,
-            orderNumber: order.orderNumber,
+            userId: order.user_id,
+            supplierId: order.supplier_id,
+            orderReference: order.order_reference,
+            orderNumber: order.order_number,
             supplierName: order.fournisseur,
-            supplierPhone: order.supplierPhone,
-            totalAmount: Number(order.totalAmount),
-            amountPaid: Number(order.amountPaid),
+            supplierPhone: order.supplier_phone,
+            totalAmount: Number(order.montant_total),
+            amountPaid: Number(order.montant_paye),
+            resteAPayer: Number(order.reste_a_payer),
             status: order.statut,
-            deliveryStatus: order.deliveryStatus,
-            createdAt: order.createdAt,
+            deliveryStatus: order.delivery_status,
+            createdAt: order.created_at,
             items: order.items
         }));
 
         return { success: true, orders: formattedOrders };
     } catch (error: any) {
-        console.error("Error fetching supplier orders:", error);
+        console.error("💥 Error fetching supplier orders (SQL):", error);
         return { success: false, error: "Erreur chargement commandes", orders: [] };
     }
 });
 
 export const createSupplierOrder = secureAction(async (userId, user, data: any) => {
     try {
-        console.log("📝 Creating Supplier Order:", data);
+        console.log("📝 Creating Supplier Order (SQL):", data);
 
         const paid = Number(data.amountPaid) || 0;
         
-        // 1. Find Supplier
-        let supplier: any;
-        if (data.supplierId) {
-            supplier = await db.query.suppliers.findFirst({
-                where: and(eq(suppliers.id, data.supplierId), eq(suppliers.userId, userId))
-            });
-        } else if (data.supplierName) {
-             supplier = await db.query.suppliers.findFirst({
-                where: and(eq(suppliers.name, data.supplierName), eq(suppliers.userId, userId))
-            });
-        }
+        // 1. Find Supplier (SQL)
+        const supplierResult = await db.execute(sql`
+            SELECT * FROM suppliers 
+            WHERE ("id" = ${data.supplierId} OR "name" = ${data.supplierName})
+            AND "user_id" = ${userId}
+            LIMIT 1
+        `);
+        const supplier = supplierResult[0];
 
         if (!supplier && !data.supplierName) {
              return { success: false, error: 'Fournisseur manquant' };
         }
-
         return await db.transaction(async (tx: any) => {
-            // 2. Generate Order Number (BC-YYYY-XXXX)
-            // Simple approach: Count orders for this year + 1
+            // 2. Generate Order Number
+            const countResult = await tx.execute(sql`SELECT count(*) as count FROM supplier_orders WHERE "user_id" = ${userId}`);
+            const count = Number(countResult[0].count);
             const year = new Date().getFullYear();
-            const count = await tx.$count(supplierOrders, eq(supplierOrders.userId, userId)); // Approximate
             const orderNumber = `BC-${year}-${(count + 1).toString().padStart(4, '0')}`;
 
-            // 3. Calculate Dates
-            let dueDate: Date | null = null;
-            if (supplier?.paymentTerms && data.date) {
-                // ... (Keep existing logic or use paymentTerms integer if available)
-                // If paymentTerms is integer in new schema:
-                const days = typeof supplier.paymentTerms === 'number' ? supplier.paymentTerms : 30;
-                // But schema suggests it might be text or int. I updated schema to int default 30.
-                // If it's number:
+            // 3. Calculate Due Date
+            let dueDate: string | null = null;
+            if (supplier?.payment_terms && data.date) {
+                const days = typeof supplier.payment_terms === 'number' ? supplier.payment_terms : 30;
                 const date = new Date(data.date);
                 date.setDate(date.getDate() + days);
-                dueDate = date;
+                dueDate = date.toISOString();
             }
             
-            // 4. Prepare Data
-            const newOrder = {
-                userId,
-                fournisseur: supplier ? supplier.name : data.supplierName,
-                supplierId: supplier ? supplier.id : null,
-                orderReference: data.orderReference, // User typed ref
-                orderNumber: orderNumber, // System generated ref
-                
-                // Backwards compat for UI reading 'items' from JSON
-                items: data.items, 
-                
-                // Financials
-                subTotal: data.subTotal?.toString(),
-                tva: data.tva?.toString(),
-                discount: data.discount?.toString(),
-                shippingCost: data.shippingCost?.toString(),
-                montantTotal: data.totalAmount.toString(),
-                montantPaye: paid.toString(),
-                resteAPayer: (data.totalAmount - paid).toString(),
-                
-                // Status
-                statut: 'EN_COURS', 
-                deliveryStatus: 'PENDING',
-                
-                dateCommande: new Date(data.date),
-                expectedDelivery: data.expectedDelivery ? new Date(data.expectedDelivery) : null,
-                dueDate: dueDate,
-                notes: data.notes,
-                createdBy: user?.email || 'System',
-                createdAt: new Date()
-            };
+            // 4. Insert Order
+            const insertResult = await tx.execute(sql`
+                INSERT INTO supplier_orders (
+                    "user_id", "fournisseur", "supplier_id", "order_reference", "order_number", 
+                    "items", "sub_total", "discount", "montant_total", "montant_paye", 
+                    "reste_a_payer", "statut", "delivery_status", "date_commande", 
+                    "due_date", "notes", "created_by", "created_at"
+                ) VALUES (
+                    ${userId}, 
+                    ${supplier ? supplier.name : data.supplierName}, 
+                    ${supplier ? supplier.id : null}, 
+                    ${data.orderReference || null}, 
+                    ${orderNumber}, 
+                    ${JSON.stringify(data.items)}, 
+                    ${data.subTotal?.toString() || '0'}, 
+                    ${data.discount?.toString() || '0'}, 
+                    ${data.totalAmount.toString()}, 
+                    ${paid.toString()}, 
+                    ${(data.totalAmount - paid).toString()}, 
+                    'EN_COURS', 
+                    'PENDING', 
+                    ${new Date(data.date).toISOString()}, 
+                    ${dueDate}, 
+                    ${data.notes || null}, 
+                    ${user?.email || 'System'}, 
+                    ${new Date().toISOString()}
+                ) RETURNING id
+            `);
+            const orderId = insertResult[0].id;
 
-            const result = await tx.insert(supplierOrders).values(newOrder).returning();
-            const orderId = result[0].id;
+            const newOrder = { 
+                id: orderId, 
+                orderNumber, 
+                fournisseur: supplier ? supplier.name : data.supplierName,
+                montantTotal: Number(data.totalAmount)
+            };
 
             // 5. Insert Items into Relation Table
             if (data.items && Array.isArray(data.items)) {
                 for (const item of data.items) {
-                    await tx.insert(supplierOrderItems).values({
-                        supplierOrderId: orderId,
-                        productType: item.type,
-                        productName: item.nomProduit,
-                        description: item.description,
-                        quantity: Number(item.quantity),
-                        unitPrice: item.unitPrice.toString(),
-                        totalPrice: (item.quantity * item.unitPrice).toString(),
-                        // Add specific fields (Explicit Columns)
-                        sphere: item.sphere,
-                        cylindre: item.cylindre,
-                        axe: item.axe,
-                        addition: item.addition,
-                        hauteur: item.hauteur,
-                    });
+                    await tx.execute(sql`
+                        INSERT INTO supplier_order_items (
+                            "supplier_order_id", "product_type", "product_name", "description", 
+                            "quantity", "unit_price", "total_price", "sphere", "cylindre", 
+                            "axe", "addition", "hauteur"
+                        ) VALUES (
+                            ${orderId}, 
+                            ${item.type}, 
+                            ${item.nomProduit || null}, 
+                            ${item.description || null}, 
+                            ${Number(item.quantity)}, 
+                            ${item.unitPrice.toString()}, 
+                            ${(item.quantity * item.unitPrice).toString()},
+                            ${item.sphere || null},
+                            ${item.cylindre || null},
+                            ${item.axe || null},
+                            ${item.addition || null},
+                            ${item.hauteur || null}
+                        )
+                    `);
                 }
             }
 
@@ -181,16 +196,16 @@ export const createSupplierOrder = secureAction(async (userId, user, data: any) 
                // Leave out for now to avoid double logic with payments until fully tested.
             }
 
-            await logSuccess(userId, 'CREATE', 'supplier_orders', orderId.toString(), { supplier: supplier ? supplier.name : data.supplierName, total: data.totalAmount }, null, newOrder);
+            await logSuccess(userId, 'CREATE', 'supplier_orders', orderId.toString(), { supplier: supplier ? supplier.name : data.supplierName, total: data.totalAmount }, null);
             revalidatePath('/dashboard/supplier-orders');
             return { success: true, id: orderId.toString(), message: 'Commande créée avec succès' };
         });
 
-        } catch (error: any) {
-            await logFailure(userId, 'CREATE_SUPPLIER_ORDER', 'supplier_orders', error.message);
-            console.error("Error creating supplier order:", error);
-            return { success: false, error: 'Erreur création commande' };
-        }
+    } catch (error: any) {
+        await logFailure(userId, 'CREATE_SUPPLIER_ORDER', 'supplier_orders', error.message);
+        console.error("Error creating supplier order:", error);
+        return { success: false, error: 'Erreur création commande' };
+    }
 });
 
 /**
@@ -206,62 +221,43 @@ async function updateOrderReceptionCore(userId: string, user: any, orderId: numb
         
         await db.transaction(async (tx: any) => {
              // 1. Get Order
-             const order: any = await tx.query.supplierOrders.findFirst({
-                 where: and(eq(supplierOrders.id, id), eq(supplierOrders.userId, userId))
-             });
+             const orderResult = await tx.execute(sql`SELECT * FROM supplier_orders WHERE "id" = ${id} AND "user_id" = ${userId} FOR UPDATE`);
+             const order = orderResult[0];
              
              if (!order) throw new Error("Commande introuvable");
 
              // 2. Prevent Double Counting
-             if (order.statut === 'REÇU' || order.deliveryStatus === 'FULL') {
+             if (order.statut === 'REÇU' || order.delivery_status === 'FULL') {
                  if (data.status === 'REÇU') {
                     // return; 
                  }
              }
 
-             // 3. Update Stock (Only if switching to REÇU/FULL for now)
+             // 3. Update Stock
              if (data.status === 'REÇU') {
+                 // Backward compatibility: items might be in JSON or in table
+                 // We'll read from JSON 'items' column for bulk update
                  const items = order.items as any[];
                  
                  for (const item of items) {
-                     let product = null;
-                     
-                     if (item.reference) {
-                         product = await tx.query.products.findFirst({
-                             where: and(eq(products.reference, item.reference), eq(products.userId, userId))
-                         });
-                     }
-                     
-                     // If linked product found, update inventory
+                      if (!item.reference) continue;
+
+                      const productResult = await tx.execute(sql`SELECT * FROM products WHERE "reference" = ${item.reference} AND "user_id" = ${userId} FOR UPDATE`);
+                      const product = productResult[0];
+                      
                       if (product) {
-                          const qty = Number(item.quantity) || 0;
-                          
-                          // ✅ Optimistic Locking update
-                          const updateRes = await tx.update(products)
-                              .set({ 
-                                  quantiteStock: sql`${products.quantiteStock} + ${qty}`,
-                                  version: sql`${products.version} + 1`,
-                                  updatedAt: new Date()
-                              })
-                              .where(and(
-                                  eq(products.id, product.id),
-                                  eq(products.version, product.version)
-                              ));
+                           const qty = Number(item.quantity) || 0;
+                           
+                           await tx.execute(sql`
+                               UPDATE products 
+                               SET "quantite_stock" = "quantite_stock" + ${qty}, "version" = "version" + 1, "updated_at" = ${new Date().toISOString()}
+                               WHERE "id" = ${product.id}
+                           `);
 
-                          if (updateRes.rowCount === 0) {
-                              throw new Error(`Erreur de concurrence pour le produit ${product.nom}.`);
-                          }
-
-                          // Log Movement
-                          await tx.insert(stockMovements).values({
-                             userId,
-                             productId: product.id,
-                             quantite: qty,
-                             type: 'Achat',
-                             ref: `BC #${order.orderReference || id}`,
-                             date: new Date(),
-                             notes: `Réception commande fournisseur ${order.fournisseur}`
-                          });
+                           await tx.execute(sql`
+                               INSERT INTO stock_movements ("user_id", "product_id", "quantity", "type", "reason", "created_at")
+                               VALUES (${userId}, ${product.id}, ${qty}, 'IN', ${`Réception BC #${order.order_reference || id}`}, ${new Date().toISOString()})
+                           `);
 
                           // Audit log product
                           await logAudit({
@@ -269,8 +265,8 @@ async function updateOrderReceptionCore(userId: string, user: any, orderId: numb
                               entityType: 'product',
                               entityId: product.id.toString(),
                               action: 'UPDATE_STOCK_INBOUND',
-                              oldValue: { stock: product.quantiteStock, version: product.version },
-                              newValue: { stock: product.quantiteStock + qty, version: product.version + 1 },
+                              oldValue: { stock: product.quantite_stock, version: product.version },
+                              newValue: { stock: product.quantite_stock + qty, version: product.version + 1 },
                               metadata: { orderId: id.toString() },
                               success: true
                           });
@@ -279,17 +275,14 @@ async function updateOrderReceptionCore(userId: string, user: any, orderId: numb
              }
 
              // 4. Update Order Status
-              await tx.update(supplierOrders)
-                 .set({
-                     statut: data.status, 
-                     deliveryStatus: data.deliveryStatus || 'FULL',
-                     dateReception: new Date(),
-                     updatedAt: new Date()
-                 })
-                 .where(eq(supplierOrders.id, id));
+             await tx.execute(sql`
+                UPDATE supplier_orders 
+                SET "statut" = ${data.status}, "delivery_status" = ${data.deliveryStatus || 'FULL'}, "date_reception" = ${new Date().toISOString()}, "updated_at" = ${new Date().toISOString()}
+                WHERE "id" = ${id}
+             `);
 
               // Audit order status change
-              await logSuccess(userId, 'UPDATE_STATUS', 'supplier_orders', id.toString(), { status: data.status, deliveryStatus: data.deliveryStatus || 'FULL' }, order, { ...order, statut: data.status, deliveryStatus: data.deliveryStatus || 'FULL' });
+              await logSuccess(userId, 'UPDATE_STATUS', 'supplier_orders', id.toString(), { status: data.status, deliveryStatus: data.deliveryStatus || 'FULL' }, order, { ...order, statut: data.status, delivery_status: data.deliveryStatus || 'FULL' });
         });
 
         revalidatePath('/dashboard/supplier-orders');
@@ -321,11 +314,130 @@ export const confirmOrderReception = secureAction(async (userId, user, orderId: 
 export const deleteSupplierOrder = secureAction(async (userId, user, orderId: number | string) => {
     try {
         const id = Number(orderId);
-        await db.delete(supplierOrders)
-            .where(and(eq(supplierOrders.id, id), eq(supplierOrders.userId, userId)));
+        await db.execute(sql`
+            DELETE FROM supplier_orders 
+            WHERE "id" = ${id} AND "user_id" = ${userId}
+        `);
             
         revalidatePath('/dashboard/supplier-orders');
         return { success: true, message: 'Commande supprimée' };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * 2. Supplier Payment management (Requirement 2)
+ */
+export const createSupplierPayment = secureAction(async (userId, user, data: { supplierId: string, amount: number, method: string, reference?: string, orderIds?: number[], date?: string }) => {
+    try {
+        console.log("💰 Processing Supplier Payment:", data);
+
+        return await db.transaction(async (tx: any) => {
+            // 1. Create Payment Record
+            const paymentNumber = `PAY-${Date.now().toString().slice(-6)}`;
+            
+            const insertPayment = await tx.execute(sql`
+                INSERT INTO supplier_payments (
+                    "user_id", "supplier_id", "supplier_name", "payment_number", 
+                    "amount", "method", "reference", "date", "status", "created_by"
+                )
+                SELECT 
+                    ${userId}, "id", "name", ${paymentNumber}, 
+                    ${data.amount.toString()}, ${data.method}, ${data.reference || null}, 
+                    ${data.date ? new Date(data.date).toISOString() : new Date().toISOString()}, 
+                    'COMPLETED', ${user?.email || 'System'}
+                FROM suppliers WHERE "id" = ${data.supplierId}
+                RETURNING id, supplier_name
+            `);
+
+            const paymentId = insertPayment[0].id;
+            const supplierName = insertPayment[0].supplier_name;
+
+            // 2. Allocate to Orders if provided
+            if (data.orderIds && data.orderIds.length > 0) {
+                let remainingToAllocate = data.amount;
+
+                for (const orderId of data.orderIds) {
+                    if (remainingToAllocate <= 0) break;
+
+                    const orderResult = await tx.execute(sql`SELECT * FROM supplier_orders WHERE "id" = ${orderId} FOR UPDATE`);
+                    const order = orderResult[0];
+                    if (!order) continue;
+
+                    const debt = Number(order.reste_a_payer);
+                    const allocation = Math.min(debt, remainingToAllocate);
+
+                    if (allocation > 0) {
+                        await tx.execute(sql`
+                            INSERT INTO supplier_order_payments ("user_id", "payment_id", "order_id", "amount")
+                            VALUES (${userId}, ${paymentId}, ${orderId}, ${allocation.toString()})
+                        `);
+
+                        await tx.execute(sql`
+                            UPDATE supplier_orders 
+                            SET "montant_paye" = "montant_paye" + ${allocation.toString()},
+                                "reste_a_payer" = "reste_a_payer" - ${allocation.toString()}
+                            WHERE "id" = ${orderId}
+                        `);
+                        
+                        remainingToAllocate -= allocation;
+                    }
+                }
+            }
+
+            // 3. Update Global Supplier Balance
+            await tx.execute(sql`
+                UPDATE suppliers 
+                SET "current_balance" = "current_balance" - ${data.amount.toString()}
+                WHERE "id" = ${data.supplierId}
+            `);
+
+            await logSuccess(userId, 'CREATE', 'supplier_payments', paymentId, { amount: data.amount, supplier: supplierName });
+            
+            revalidatePath('/dashboard/suppliers');
+            return { success: true, message: 'Paiement enregistré avec succès' };
+        });
+    } catch (error: any) {
+        console.error("💥 Error creating supplier payment:", error);
+        return { success: false, error: 'Erreur lors du paiement' };
+    }
+});
+
+/**
+ * 4. Supplier Dashboard Stats (Requirement 4)
+ */
+export const getSupplierStats = secureAction(async (userId, user, supplierId: string) => {
+    try {
+        const stats = await db.execute(sql`
+            SELECT 
+                COALESCE(SUM(montant_total), 0) as total_ordered,
+                COALESCE(SUM(montant_paye), 0) as total_paid,
+                COALESCE(SUM(reste_a_payer), 0) as total_debt,
+                COUNT(*) as orders_count
+            FROM supplier_orders
+            WHERE "user_id" = ${userId} AND "supplier_id" = ${supplierId}
+        `);
+
+        return { success: true, stats: stats[0] };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * Get Global Supplier Balances
+ */
+export const getGlobalSupplierBalances = secureAction(async (userId) => {
+    try {
+        const results = await db.execute(sql`
+            SELECT 
+                COALESCE(SUM(montant_total), 0) as total_purchases,
+                COALESCE(SUM(reste_a_payer), 0) as total_debt
+            FROM supplier_orders
+            WHERE "user_id" = ${userId}
+        `);
+        return { success: true, data: results[0] };
     } catch (error: any) {
         return { success: false, error: error.message };
     }

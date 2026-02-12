@@ -4,7 +4,7 @@
 import { db } from '@/db';
 import { suppliers } from '@/db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
-import { secureAction } from '@/lib/secure-action';
+import { secureAction, secureActionWithResponse } from '@/lib/secure-action';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { unstable_noStore as noStore } from 'next/cache';
 import { measurePerformance } from '@/lib/performance';
@@ -46,14 +46,16 @@ function parseContactInfo(notes: string | null) {
 /**
  * Get all suppliers for the current user
  */
-export const getSuppliersList = secureAction(async (userId, user) => {
+/**
+ * Get all suppliers for the current user
+ */
+export const getSuppliersList = secureActionWithResponse(async (userId, user) => {
   return await measurePerformance(`getSuppliersList-${userId}`, async () => {
     noStore();
     
     console.log('⚡ [v2] Fetching suppliers list for user:', userId);
 
     try {
-      // Standard Drizzle Query
       const results = await db.select()
         .from(suppliers)
         .where(eq(suppliers.userId, userId))
@@ -64,8 +66,6 @@ export const getSuppliersList = secureAction(async (userId, user) => {
         return {
           id: row.id,
           userId: row.userId,
-          
-          // Use schema keys (camelCase from Drizzle results)
           name: row.name,
           email: row.email,
           phone: row.phone,
@@ -80,12 +80,10 @@ export const getSuppliersList = secureAction(async (userId, user) => {
           paymentMethod: row.paymentMethod,
           bank: row.bank,
           rib: row.rib,
-          notes: contactInfo.cleanNotes, // Return clean notes
+          notes: contactInfo.cleanNotes,
           status: row.status,
-          createdAt: row.createdAt,
-          updatedAt: row.updatedAt,
-    
-          // UI Keys (French, matching types.ts & columns.tsx)
+          createdAt: row.createdAt ? (typeof row.createdAt === 'string' ? row.createdAt : row.createdAt.toISOString()) : null,
+          updatedAt: row.updatedAt ? (typeof row.updatedAt === 'string' ? row.updatedAt : row.updatedAt.toISOString()) : null,
           nomCommercial: row.name,
           telephone: row.phone,
           typeProduits: row.category ? row.category.split(', ') : [],
@@ -94,18 +92,18 @@ export const getSuppliersList = secureAction(async (userId, user) => {
           delaiPaiement: row.paymentTerms,
           modePaiement: row.paymentMethod,
           banque: row.bank,
-        
-        // Add parsed contact info
-        contactNom: contactInfo.nom,
-        contactTelephone: contactInfo.tel,
-        contactEmail: contactInfo.email,
+          contactNom: contactInfo.nom,
+          contactTelephone: contactInfo.tel,
+          contactEmail: contactInfo.email,
+          defaultTaxMode: row.defaultTaxMode,
+          currentBalance: Number(row.currentBalance || 0),
         };
       });
 
       return mappedItems;
     } catch (error: any) {
-      console.error('[getSuppliersList] CRITICAL SQL ERROR:', error);
-      throw new Error(`Erreur récupération fournisseurs (SQL): ${error.message}`);
+      console.error('[getSuppliersList] CRITICAL ERROR:', error);
+      throw new Error(`Erreur récupération fournisseurs: ${error.message}`);
     }
   }, { userId });
 });
@@ -117,13 +115,10 @@ export const getSupplier = secureAction(async (userId, user, id: string) => {
   noStore();
 
   try {
-    // Standard Drizzle Query for single item
-    const results = await db.select()
+    const [row] = await db.select()
       .from(suppliers)
       .where(and(eq(suppliers.id, id), eq(suppliers.userId, userId)))
       .limit(1);
-    
-    const row = results[0];
 
     if (!row) return null;
 
@@ -148,8 +143,8 @@ export const getSupplier = secureAction(async (userId, user, id: string) => {
         rib: row.rib,
         notes: contactInfo.cleanNotes,
         status: row.status,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
+        createdAt: row.createdAt ? (typeof row.createdAt === 'string' ? row.createdAt : row.createdAt.toISOString()) : null,
+        updatedAt: row.updatedAt ? (typeof row.updatedAt === 'string' ? row.updatedAt : row.updatedAt.toISOString()) : null,
         
         // UI Keys
         nomCommercial: row.name,
@@ -163,9 +158,10 @@ export const getSupplier = secureAction(async (userId, user, id: string) => {
         contactNom: contactInfo.nom,
         contactTelephone: contactInfo.tel,
         contactEmail: contactInfo.email,
+        defaultTaxMode: row.defaultTaxMode,
     };
   } catch (error: any) {
-    console.error('❌ Error fetching supplier:', error);
+    console.error('💥 Error fetching supplier:', error);
     throw new Error(`Erreur lors de la récupération du fournisseur: ${error.message}`);
   }
 });
@@ -206,6 +202,7 @@ export const createSupplier = secureAction(async (userId, user, data: any) => {
         rib: data.rib || null,
         notes: notesWithContact, // Save with contact info hidden
         status: data.status || 'Actif',
+        defaultTaxMode: data.defaultTaxMode || 'HT',
       } as any)
       .returning();
 
@@ -248,6 +245,7 @@ export const updateSupplier = secureAction(async (userId, user, id: string, data
   if (data.paymentTerms !== undefined) dbPayload.paymentTerms = data.paymentTerms;
   if (data.paymentMethod !== undefined) dbPayload.paymentMethod = data.paymentMethod;
   if (data.status !== undefined) dbPayload.status = data.status;
+  if (data.defaultTaxMode !== undefined) dbPayload.defaultTaxMode = data.defaultTaxMode;
 
   if(data.typeProduits && Array.isArray(data.typeProduits)) {
     dbPayload.category = data.typeProduits.join(', ');

@@ -14,8 +14,7 @@ import { SensitiveData } from '@/components/ui/sensitive-data';
 import { cn } from '@/lib/utils';
 
 // Server Actions
-import { getProducts } from '@/app/actions/products-actions';
-import { getCategories } from '@/app/actions/products-actions';
+import { getProducts, getCategories } from '@/app/actions/products-actions';
 import { createSale } from '@/app/actions/sales-actions';
 import { getPendingLensOrders, type LensOrder } from '@/app/actions/lens-orders-actions';
 import { BrandLoader } from '@/components/ui/loader-brand';
@@ -205,12 +204,13 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
             return;
         }
 
+        const isContact = order.orderType === 'contact';
         const virtualProduct: Product = {
             id: `LO-${order.id}`,
-            nomProduit: `Verres: ${order.lensType}`,
+            nomProduit: `${isContact ? 'Lentilles' : 'Verres'}: ${order.lensType}`,
             reference: `CMD-#${order.id}`,
-            categorie: 'Verres',
-            categorieId: 'verres',
+            categorie: isContact ? 'Lentilles' : 'Verres',
+            categorieId: isContact ? 'lentilles' : 'verres',
             prixVente: parseFloat(order.sellingPrice),
             quantiteStock: 1
         };
@@ -300,13 +300,13 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
                 {pendingOrders.length > 0 && (
                     <div className="mb-6 animate-in fade-in slide-in-from-top-4 duration-500">
                          <div className="flex items-center gap-2 mb-3">
-                            <h3 className="font-semibold text-lg text-indigo-900">Commandes en attente ({pendingOrders.length})</h3>
+                            <h3 className="font-semibold text-lg text-indigo-900">Commandes en attente (Verres & Lentilles) ({pendingOrders.length})</h3>
                         </div>
                         <Card className="border-indigo-100 bg-indigo-50/30 shadow-sm">
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-base font-medium flex items-center gap-2">
                                     <Package className="h-4 w-4 text-indigo-600" />
-                                    Ce client a des commandes de verres prêtes à être facturées.
+                                    Ce client a des commandes prêtes à être facturées.
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="grid gap-3 pt-0">

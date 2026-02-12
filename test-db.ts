@@ -1,18 +1,14 @@
 import { db } from './src/db';
-import { reminders } from './src/db/schema.ts';
-import { sql, and, eq } from 'drizzle-orm';
+import { auditLogs } from './src/db/schema';
+import { count } from 'drizzle-orm';
 
-async function testQuery() {
+async function test() {
     try {
-        const results = await db
-            .select()
-            .from(reminders)
-            .where(sql`CAST(COALESCE(metadata->>'installmentAmount', '0') AS NUMERIC) >= 0`)
-            .limit(1);
-        console.log('Success:', results);
+        const result = await db.select({ value: count() }).from(auditLogs);
+        console.log('✅ audit_logs table exists. Count:', result[0].value);
     } catch (e) {
-        console.error('Error:', e);
+        console.error('❌ audit_logs table error:', e.message);
     }
 }
 
-testQuery();
+test();
