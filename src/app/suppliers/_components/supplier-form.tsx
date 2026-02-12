@@ -138,21 +138,24 @@ export function SupplierForm({ supplier }: SupplierFormProps) {
   });
 
   const { toast } = useToast();
-  
+
   // Banks State
   const [banksList, setBanksList] = React.useState<{ id: number; name: string }[]>([]);
   const [isLoadingBanks, setIsLoadingBanks] = React.useState(true);
 
   React.useEffect(() => {
     async function loadBanks() {
-        try {
-            const data = await getSettings('banks');
-            setBanksList(data);
-        } catch (error) {
-            console.error("Failed to fetch banks:", error);
-        } finally {
-            setIsLoadingBanks(false);
-        }
+      try {
+        const data = await getSettings('banks');
+        // Handle wrapped response or direct array
+        const banksList = Array.isArray(data) ? data : (data?.data || []);
+        setBanksList(banksList);
+      } catch (error) {
+        console.error("Failed to fetch banks:", error);
+        setBanksList([]); // Ensure banksList is always an array
+      } finally {
+        setIsLoadingBanks(false);
+      }
     }
     loadBanks();
   }, []);

@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { Separator } from '@/components/ui/separator';
 import { SuppliersClientView } from './_components/suppliers-client-view';
 import { BrandLoader } from '@/components/ui/loader-brand';
+import { SensitiveData } from '@/components/ui/sensitive-data';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,15 +31,23 @@ export default function SuppliersPage() {
     const fetchSuppliers = async () => {
       try {
         const [suppliersData, globalData] = await Promise.all([
-            getSuppliersList(),
-            getGlobalSupplierBalances()
+          getSuppliersList(),
+          getGlobalSupplierBalances()
         ]);
-        setSuppliers(suppliersData);
-        if (globalData.success) {
-            setGlobalStats(globalData.data);
+
+        // Handle secureActionWithResponse wrapper
+        const suppliersList = Array.isArray(suppliersData) ? suppliersData : (suppliersData?.data || []);
+        setSuppliers(suppliersList);
+
+        if (globalData?.success && globalData?.data) {
+          setGlobalStats(globalData.data);
+        } else if (globalData && typeof globalData === 'object' && 'total_purchases' in globalData) {
+          // Handle case where data is not wrapped
+          setGlobalStats(globalData as any);
         }
       } catch (error) {
         console.error("Failed to fetch suppliers:", error);
+        setSuppliers([]); // Ensure suppliers is always an array
       } finally {
         setLoading(false);
       }
@@ -124,7 +133,7 @@ export default function SuppliersPage() {
             <div>
               <p className="text-sm font-medium text-slate-600">Total Dettes</p>
               <h3 className="text-2xl font-bold text-red-600">
-                 <SensitiveData value={globalStats.total_debt} type="currency" />
+                <SensitiveData value={globalStats.total_debt} type="currency" />
               </h3>
             </div>
           </div>
