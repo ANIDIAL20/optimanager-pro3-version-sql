@@ -18,8 +18,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Image requise' }, { status: 400 });
     }
     
+    // Nettoyer le base64 s'il contient le préfixe data:image/...
+    const cleanBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
+    
     console.log('🚀 [DEBUG-MARKER-V2] Prescription API Route called');
-    console.log('📸 Processing prescription... Base64 length:', imageBase64.length);
+    console.log('📸 Processing prescription... Base64 length:', cleanBase64.length);
     
     const prompt = `Tu es un expert en lecture d'ordonnances optiques.
 
@@ -72,7 +75,7 @@ Si pas ordonnance valide:
         console.log(`🤖 Gemini API Call (Attempt ${4-retries})...`);
         result = await visionModel.generateContent([
           { text: prompt },
-          { inlineData: { mimeType: "image/jpeg", data: imageBase64 } }
+          { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } }
         ]);
         break;
       } catch (error: any) {

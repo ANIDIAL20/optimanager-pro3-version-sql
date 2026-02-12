@@ -64,7 +64,7 @@ const ProductItemSchema = z.object({
   reference: z.string().optional(),
   nomProduit: z.string().min(1, 'Nom requis.'),
   categorieId: z.string().min(1, 'Catégorie requise.'),
-  marqueId: z.string().min(1, 'Marque requise.'),
+  marqueId: z.string().optional(),
   matiereId: z.string().optional(),
   couleurId: z.string().optional(),
   prixAchat: z.coerce.number().optional().default(0),
@@ -172,7 +172,7 @@ export function ProductForm({ product }: ProductFormProps) {
   }, [selectedSupplier?.id, isEditMode, form, toast]);
 
   const invalidLinesCount = React.useMemo(() => {
-    return watchedItems.filter(it => !it.nomProduit || !it.marqueId || !it.categorieId).length;
+    return watchedItems.filter(it => !it.nomProduit || !it.categorieId).length;
   }, [watchedItems]);
 
   const hasMixedTaxes = React.useMemo(() => {
@@ -799,7 +799,6 @@ function ProductRow({
     const prixVente = useWatch({ control, name: `items.${index}.prixVente` });
     const isAchatTTC = useWatch({ control, name: `items.${index}.isAchatTTC` });
     const nomProduit = useWatch({ control, name: `items.${index}.nomProduit` });
-    const marqueId = useWatch({ control, name: `items.${index}.marqueId` });
     const categorieId = useWatch({ control, name: `items.${index}.categorieId` });
 
     const valPrixAchat = Number(prixAchat) || 0;
@@ -809,7 +808,7 @@ function ProductRow({
     const marginPercent = valPrixVente > 0 ? (margin / valPrixVente) * 100 : 0;
     const isLowMargin = marginPercent < 20 && valPrixVente > 0;
     
-    const isIncomplete = !nomProduit || !marqueId || !categorieId;
+    const isIncomplete = !nomProduit || !categorieId;
 
     const handleKeyDown = (e: React.KeyboardEvent) => { 
         if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); onAddRow(); }
@@ -846,7 +845,7 @@ function ProductRow({
                     <div className="flex items-center gap-2">
                         <FormField control={control} name={`items.${index}.marqueId`} render={({ field }) => (
                             <div className="flex-1">
-                                <SearchableSelect options={brands.map(b => ({ label: b.name, value: b.id }))} value={field.value} onChange={field.onChange} placeholder="Marque..." className={cn("h-10 text-xs font-medium border-slate-200 bg-white shadow-sm w-full", !marqueId && "border-red-200 text-red-500")} onCreateNew={(name) => handleQuickCreate('brands', name, setBrands, `items.${index}.marqueId`)} isCreating={isCreatingSetting} />
+                                <SearchableSelect options={brands.map(b => ({ label: b.name, value: b.id }))} value={field.value} onChange={field.onChange} placeholder="Marque..." className="h-10 text-xs font-medium border-slate-200 bg-white shadow-sm w-full" onCreateNew={(name) => handleQuickCreate('brands', name, setBrands, `items.${index}.marqueId`)} isCreating={isCreatingSetting} />
                             </div>
                         )} />
                         <FormField control={control} name={`items.${index}.categorieId`} render={({ field }) => (

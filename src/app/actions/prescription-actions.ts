@@ -60,7 +60,7 @@ export const savePrescription = secureAction(async (userId, user, input: SavePre
     const vals = {
       userId,
       clientId: clientIdNum,
-      imageUrl: input.imageUrl,
+      imageUrl: null, // User requested no photo/pdf storage
       prescriptionDate: pDate,
       doctorName: doctorName || null,
       
