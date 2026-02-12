@@ -382,8 +382,8 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
             revalidatePath('/dashboard/sales');
             revalidatePath('/dashboard/stock');
             if (clientIdNum) revalidatePath(`/dashboard/clients/${clientIdNum}`);
-            revalidateTag('sales', 'page');
-            revalidateTag('products', 'page');
+            revalidateTag('sales');
+            revalidateTag('products');
             
             return { success: true, id: createdSaleId.toString(), message: `Vente #${saleNumber} créée avec succès` };
             });

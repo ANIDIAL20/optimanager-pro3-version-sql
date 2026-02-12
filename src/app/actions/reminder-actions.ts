@@ -224,7 +224,7 @@ export async function createReminder(data: any) {
       await db.insert(reminders).values(remindersToCreate);
     }
 
-    revalidatePath('/dashboard', 'page');
+    revalidatePath('/dashboard');
     revalidateTag('reminders');
     return { success: true, count: remindersToCreate.length };
 
@@ -240,7 +240,7 @@ export async function createReminder(data: any) {
       } as any)
       .returning();
 
-    revalidatePath('/dashboard', 'page');
+    revalidatePath('/dashboard');
     revalidateTag('reminders');
     return newReminder;
   }
@@ -270,8 +270,8 @@ export async function markReminderAsRead(id: number) {
     )
     .returning();
 
-  revalidatePath('/dashboard', 'page');
-  revalidatePath('/', 'layout'); // Update sidebar badge
+  revalidatePath('/dashboard');
+  revalidatePath('/'); // Update sidebar badge
   revalidateTag('reminders');
   return updated;
 }
@@ -300,8 +300,8 @@ export async function completeReminder(id: number) {
     )
     .returning();
 
-  revalidatePath('/dashboard', 'page');
-  revalidatePath('/', 'layout'); // Update sidebar badge
+  revalidatePath('/dashboard');
+  revalidatePath('/'); // Update sidebar badge
   revalidateTag('reminders');
   return updated;
 }
@@ -326,8 +326,8 @@ export async function deleteReminder(id: number) {
     )
     .returning();
 
-  revalidatePath('/dashboard', 'page');
-  revalidatePath('/', 'layout'); // Update sidebar badge
+  revalidatePath('/dashboard');
+  revalidatePath('/'); // Update sidebar badge
   revalidateTag('reminders');
   return deleted;
 }
@@ -358,8 +358,8 @@ export async function updateReminder(id: number, data: any) {
     )
     .returning();
 
-  revalidatePath('/dashboard', 'page');
-  revalidatePath('/', 'layout');
+  revalidatePath('/dashboard');
+  revalidatePath('/');
   revalidateTag('reminders');
   return updated;
 }
@@ -558,7 +558,7 @@ export async function checkDeadlines(shouldRevalidate = true) {
 
   if (newRemindersCount > 0 && shouldRevalidate) {
     revalidatePath('/dashboard');
-    revalidatePath('/', 'layout'); // Update sidebar badge
+    revalidatePath('/'); // Update sidebar badge
     revalidateTag('reminders');
   }
 
