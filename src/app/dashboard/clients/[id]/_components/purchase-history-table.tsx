@@ -54,9 +54,9 @@ export function PurchaseHistoryTable({ clientId }: PurchaseHistoryTableProps) {
             setIsLoading(true);
             try {
                 const result = await getClientSales(clientId);
-                if (result.success && result.data) {
-                    setSales(result.data as ExtendedSale[]);
-                    console.log(`✅ Found ${result.data.length} sales for client ${clientId}`);
+                if (result.success && result.sales) {
+                    setSales(result.sales as ExtendedSale[]);
+                    console.log(`✅ Found ${result.sales.length} sales for client ${clientId}`);
                 } else {
                     setSales([]);
                 }
@@ -136,8 +136,8 @@ export function PurchaseHistoryTable({ clientId }: PurchaseHistoryTableProps) {
                 });
                 // Reload sales after delivery
                 const updatedResult = await getSales();
-                if (updatedResult.success && updatedResult.data) {
-                    const clientSales = updatedResult.data
+                if (updatedResult.success && updatedResult.sales) {
+                    const clientSales = updatedResult.sales
                         .filter(s => s.clientId?.toString() === clientId)
                         .sort((a, b) => {
                             const dateA = new Date(a.createdAt || a.date || 0).getTime();

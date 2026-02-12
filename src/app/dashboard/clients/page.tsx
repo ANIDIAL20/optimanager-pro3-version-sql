@@ -52,6 +52,7 @@ interface ExtendedClient {
     mutuelle?: string | null;
     address?: string | null;
     balance: number;
+    creditLimit?: number;
     lastVisit: Date | null;
     createdAt?: Date | null;
     updatedAt?: Date | null;
@@ -142,6 +143,7 @@ export default function ClientsPage() {
                     mutuelle: client.mutuelle, // Mapped correctly now
                     address: client.address,
                     balance,
+                    creditLimit: parseFloat(client.creditLimit || '5000'),
                     lastVisit,
                     createdAt: client.createdAt,
                     updatedAt: client.updatedAt
@@ -202,6 +204,42 @@ export default function ClientsPage() {
         } catch (error: any) {
             toast({ title: '❌ Erreur', description: error.message, variant: 'destructive' });
         }
+    };
+
+    // Helper for Financial Health Badge
+    const getFinancialHealthBadge = (client: ExtendedClient) => {
+        const balance = client.balance;
+        const limit = client.creditLimit || 5000;
+        
+        if (balance <= 0) {
+            return (
+                <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 transition-all font-medium">
+                    Parfait
+                </Badge>
+            );
+        }
+        
+        if (balance < limit * 0.4) {
+            return (
+                <Badge className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-all font-medium">
+                    Sain
+                </Badge>
+            );
+        }
+        
+        if (balance < limit) {
+            return (
+                <Badge className="bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 transition-all font-medium">
+                    À surveiller
+                </Badge>
+            );
+        }
+        
+        return (
+            <Badge className="bg-red-50 text-red-700 border-red-200 animate-pulse hover:animate-none transition-all font-bold">
+                Critique
+            </Badge>
+        );
     };
 
     if (isLoading) {
@@ -338,6 +376,7 @@ export default function ClientsPage() {
                                 <TableHead>Téléphone</TableHead>
                                 <TableHead>Mutuelle</TableHead>
                                 <TableHead>Dernière Visite</TableHead>
+                                <TableHead className="text-center">Santé Fin.</TableHead>
                                 <TableHead className="text-right">Solde</TableHead>
                                 <TableHead className="text-right w-[100px]">Actions</TableHead>
                             </TableRow>
@@ -368,6 +407,9 @@ export default function ClientsPage() {
                                         <TableCell>{client.mutuelle || '-'}</TableCell>
                                         <TableCell className="text-sm text-slate-600">
                                             {lastVisitText}
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            {getFinancialHealthBadge(client)}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             {client.balance > 0.01 ? (
