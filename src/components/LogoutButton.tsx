@@ -1,6 +1,7 @@
 'use client';
 
 import { signOut } from 'next-auth/react';
+import { logout } from '@/app/actions/auth-actions';
 import { useRouter } from 'next/navigation';
 import { LogOut } from 'lucide-react';
 
@@ -9,7 +10,7 @@ export default function LogoutButton() {
 
     const handleLogout = async () => {
         try {
-            await signOut({ redirectTo: '/login' });
+            await logout();
         } catch (error) {
             console.error("Erreur lors de la déconnexion:", error);
         }

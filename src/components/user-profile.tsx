@@ -34,6 +34,7 @@ import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 
 import { useSession, signOut } from "next-auth/react";
+import { logout } from "@/app/actions/auth-actions";
 import { useRouter } from "next/navigation";
 import { cn } from '@/lib/utils';
 import { usePrivacy } from "@/context/privacy-context";
@@ -66,7 +67,7 @@ export function UserProfile() {
 
     const handleLogout = async () => {
         try {
-            await signOut({ redirectTo: '/login' });
+            await logout();
         } catch (error) {
             console.error("Erreur logout:", error);
         }
