@@ -70,9 +70,9 @@ export const createClient = adminAction(async (user, formData: FormData) => {
     }
 
     // Parse limits
-    let maxProducts = 50;
-    let maxClients = 20;
-    let maxSuppliers = 10;
+    let maxProducts = 500;
+    let maxClients = 200;
+    let maxSuppliers = 100;
 
     if (limitsRaw) {
         try {
@@ -290,9 +290,9 @@ export async function getClientUsageStats(uid: string) {
     if (!uid) {
         console.warn("⚠️ getClientUsageStats called without uid");
         return { 
-            products: { count: 0, limit: 50 },
-            clients: { count: 0, limit: 20 },
-            suppliers: { count: 0, limit: 10 }
+            products: { count: 0, limit: 500 },
+            clients: { count: 0, limit: 200 },
+            suppliers: { count: 0, limit: 100 }
         };
     }
     const trimmedId = uid.trim();
@@ -328,9 +328,9 @@ export async function getClientUsageStats(uid: string) {
 
             // Return default limits to keep the UI functional
             return {
-                maxProducts: 50,
-                maxClients: 20,
-                maxSuppliers: 10
+                maxProducts: 500,
+                maxClients: 200,
+                maxSuppliers: 100
             };
         }
     };
@@ -388,9 +388,9 @@ export async function getClientUsageStats(uid: string) {
   } catch (error: any) {
     console.error("❌ Usage Stats Error (Final):", error);
     return { 
-        products: { count: 0, limit: 50 },
-        clients: { count: 0, limit: 20 },
-        suppliers: { count: 0, limit: 10 }
+        products: { count: 0, limit: 500 },
+        clients: { count: 0, limit: 200 },
+        suppliers: { count: 0, limit: 100 }
     };
   }
 }
