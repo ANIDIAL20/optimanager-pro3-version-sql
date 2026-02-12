@@ -13,6 +13,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
+import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -51,11 +52,11 @@ import { BrandLoader } from '@/components/ui/loader-brand';
 import { useToast } from '@/hooks/use-toast';
 import { createBulkProducts } from '@/app/actions/products-actions';
 import { getBrands, getCategories, getMaterials, getColors, createSetting } from '@/app/actions/settings-actions';
-import { getSuppliersList } from '@/app/actions/supplier-actions';
+import { getSuppliersList, createSupplier } from '@/app/actions/supplier-actions';
 import { cn } from '@/lib/utils';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Brand, Category, Material, Color, Supplier } from '@/lib/types';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { processAIScanResult } from '@/features/invoice-scanner/utils/process-scan-result';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 // --- Schema Definition (Matching Manual Form) ---
@@ -75,6 +76,7 @@ const ProductItemSchema = z.object({
   description: z.string().optional(),
   details: z.string().optional(),
   imageUrl: z.string().optional(),
+  isNameGenerated: z.boolean().optional().default(false),
 });
 
 const ScannerFormSchema = z.object({
@@ -102,10 +104,14 @@ export function InvoiceScannerDialog() {
     const [colors, setColors] = React.useState<Color[]>([]);
     const [suppliers, setSuppliers] = React.useState<Supplier[]>([]);
     const [isCreatingSetting, setIsCreatingSetting] = React.useState(false);
+    const [savedSuccess, setSavedSuccess] = React.useState(false);
+    const [savedCount, setSavedCount] = React.useState(0);
+    const router = useRouter();
 
     // Form
     const form = useForm<ScannerFormValues>({
         resolver: zodResolver(ScannerFormSchema),
+        mode: 'onChange', // P0: Real-time validation
         defaultValues: {
             fournisseurId: '',
             numFacture: '',
@@ -144,6 +150,28 @@ export function InvoiceScannerDialog() {
             loadSettings();
         }
     }, [isOpen]);
+
+    // P0: Keyboard Shortcuts
+    React.useEffect(() => {
+        if (!isOpen) return;
+        
+        const handleKeys = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                form.handleSubmit(onSubmit)();
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                form.handleSubmit(onSubmit)();
+            }
+            if (e.key === 'Escape' && !savedSuccess) {
+                // Let Dialog handle escape by default, but we can intercept if needed
+            }
+        };
+
+        window.addEventListener('keydown', handleKeys);
+        return () => window.removeEventListener('keydown', handleKeys);
+    }, [isOpen, savedSuccess]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -204,73 +232,109 @@ export function InvoiceScannerDialog() {
 
                     const invoiceData = aiResult.data;
                     
-                    // Map AI data to Form
-                    const supplier = suppliers.find(s => {
-                        const dbName = s.name.toLowerCase();
-                        const aiName = (invoiceData.supplierName || '').toLowerCase();
-                        return dbName.includes(aiName) || aiName.includes(dbName);
-                    });
+                    // --- AUTO-CREATE ENTITIES ---
                     
-                    const defaultCat = categories.find(c => c.name === 'Import IA') || categories[0];
-                    const defaultBrand = brands.find(b => b.name === 'Générique') || brands[0];
+                    // 1. Supplier
+                    let supplierId = '';
+                    if (invoiceData.supplierName) {
+                        const existingSupplier = suppliers.find(s => 
+                            s.name.toLowerCase().includes(invoiceData.supplierName.toLowerCase()) ||
+                            invoiceData.supplierName.toLowerCase().includes(s.name.toLowerCase())
+                        );
+                        if (existingSupplier) {
+                            supplierId = existingSupplier.id;
+                        } else {
+                            try {
+                                const created = await createSupplier({ nomCommercial: invoiceData.supplierName, status: 'Actif' });
+                                if (created) {
+                                    const newSupp = { ...created, id: created.id.toString(), name: created.name } as Supplier;
+                                    setSuppliers(prev => [...prev, newSupp]);
+                                    supplierId = newSupp.id;
+                                    toast({ title: "Nouveau Fournisseur", description: `${invoiceData.supplierName} a été ajouté auto.` });
+                                }
+                            } catch (e) { console.error("Auto-supplier fail", e); }
+                        }
+                    }
 
+                    // 2. Prepare for batch processing of product attributes
+                    const uniqueCategories = Array.from(new Set(invoiceData.products?.map((p: any) => p.category).filter(Boolean))) as string[];
+                    const uniqueBrands = Array.from(new Set(invoiceData.products?.map((p: any) => p.brand).filter(Boolean))) as string[];
+                    // Optional: colors, materials if AI provides them
+
+                    // Helper for Setting Creation
+                    const findOrCreate = async (type: string, name: string, currentList: any[], setter: any) => {
+                        if (!name) return '';
+                        const existing = currentList.find(i => i.name.toLowerCase() === name.toLowerCase());
+                        if (existing) return existing.id;
+                        
+                        try {
+                            const created = await createSetting(type as any, { name });
+                            if (created) {
+                                const newItem = { ...created, id: created.id.toString() };
+                                setter((prev: any) => [...prev, newItem]);
+                                return newItem.id;
+                            }
+                        } catch (e) { console.error(`Auto-${type} fail`, e); }
+                        return '';
+                    };
+
+                    // Process Categories first
+                    const catMap: Record<string, string> = {};
+                    for (const catName of uniqueCategories) {
+                        catMap[catName] = await findOrCreate('categories', catName, categories, setCategories);
+                    }
+
+                    // Process Brands
+                    const brandMap: Record<string, string> = {};
+                    for (const brandName of uniqueBrands) {
+                        brandMap[brandName] = await findOrCreate('brands', brandName, brands, setBrands);
+                    }
+
+                    // --- MAP DATA TO FORM ---
                     form.setValue('numFacture', invoiceData.invoiceNumber || '');
+                    if (supplierId) form.setValue('fournisseurId', supplierId);
                     
-                    // Try to parse the date safely
                     if (invoiceData.date) {
                         try {
                             const parsedDate = new Date(invoiceData.date);
                             if (!isNaN(parsedDate.getTime())) {
-                                // Input type="date" expects YYYY-MM-DD string
                                 const isoDate = parsedDate.toISOString().split('T')[0];
                                 form.setValue('dateAchat', isoDate);
                             }
-                        } catch (e) {
-                            console.error("Date parsing error", e);
-                        }
+                        } catch (e) {}
                     }
 
-                    if (supplier) {
-                        form.setValue('fournisseurId', supplier.id);
-                    }
+                    const processedProducts = processAIScanResult(invoiceData.products || []);
 
-                    const newItems = invoiceData.products?.map((p: any) => {
-                        // Intelligent matching for Brand and Category
-                        const matchedBrand = brands.find(b => 
-                            b.name.toLowerCase() === (p.brand || '').toLowerCase()
-                        );
-                        const matchedCat = categories.find(c => 
-                            c.name.toLowerCase() === (p.category || '').toLowerCase()
-                        );
-
-                        return {
-                            reference: p.reference || '', 
-                            nomProduit: p.name,
-                            categorieId: matchedCat?.id || '', // Leave empty if not sure, forcing user selection
-                            marqueId: matchedBrand?.id || '',
-                            matiereId: '',
-                            couleurId: '',
-                            prixAchat: p.unitPrice || 0,
-                            isAchatTTC: false,
-                            prixVente: (p.unitPrice || 0) * 1.5,
-                            quantiteStock: p.quantity || 1,
-                            stockMin: 0,
-                            description: '',
-                            details: '',
-                            imageUrl: '',
-                        };
-                    }) || [];
+                    const newItems = processedProducts.map((p: any) => ({
+                        reference: p.reference || '', 
+                        nomProduit: p.nomProduit,
+                        categorieId: catMap[p.category] || '',
+                        marqueId: brandMap[p.brand] || brandMap['Générique'] || brands.find(b => b.name === 'Générique')?.id || '',
+                        matiereId: '',
+                        couleurId: '',
+                        prixAchat: p.unitPrice || 0,
+                        isAchatTTC: false,
+                        prixVente: (p.unitPrice || 0) * 1.5,
+                        quantiteStock: p.quantity || 1,
+                        stockMin: 0,
+                        description: '',
+                        details: '',
+                        imageUrl: '',
+                        isNameGenerated: p.isNameGenerated
+                    })) || [];
 
                     replace(newItems);
 
                     toast({
-                        title: "Analyse terminée ! ✅",
-                        description: `${newItems.length} produits identifiés. Veuillez vérifier les détails.`,
+                        title: "Analyse et Import Auto terminés ! 🚀",
+                        description: `${newItems.length} produits extraits. Les nouveaux paramètres ont été créés.`,
                     });
 
                 } catch (err: any) {
                     toast({ variant: "destructive", title: "Erreur", description: err.message });
                 } finally {
+                    setIsProcessing(true); // Keep processing state while toast is shown? No, use false.
                     setIsProcessing(false);
                 }
             };
@@ -288,10 +352,20 @@ export function InvoiceScannerDialog() {
 
         setIsSaving(true);
         try {
-             // Basic Validation
-             const validItems = data.items.filter(it => it.nomProduit && it.categorieId);
-             if (validItems.length !== data.items.length) {
-                 toast({ variant: "destructive", title: "Données incomplètes", description: "Vérifiez que tous les produits ont un Nom et une Catégorie." });
+             // 🛡️ Advanced Validation
+             if (!data.fournisseurId) {
+                 toast({ variant: "destructive", title: "Fournisseur Requis", description: "Veuillez sélectionner un fournisseur pour cette facture." });
+                 setIsSaving(false);
+                 return;
+             }
+
+             const invalidRows = data.items.filter(it => !it.nomProduit || !it.categorieId);
+             if (invalidRows.length > 0) {
+                 toast({ 
+                     variant: "destructive", 
+                     title: "Données Incomplètes", 
+                     description: `Il y a ${invalidRows.length} produit(s) sans nom ou catégorie. Veuillez les corriger.` 
+                 });
                  setIsSaving(false);
                  return;
              }
@@ -301,7 +375,7 @@ export function InvoiceScannerDialog() {
              // but here we used IDs in the form. Let's see if update logic handles it.
              // Actually ProductForm maps IDs back to Names before sending.
              
-             const apiItems = validItems.map(item => ({
+             const apiItems = data.items.map(item => ({
                  ...item,
                  categorieId: item.categorieId, // The API might need ID or Name depending on implementaiton. 
                                                 // Assuming keys match ProductInput interface
@@ -322,9 +396,9 @@ export function InvoiceScannerDialog() {
 
              if (result.success) {
                  toast({ title: "Succès !", description: `${result.count} produits ajoutés.` });
-                 setIsOpen(false);
-                 setPreviewUrl(null);
-                 form.reset();
+                 setSavedCount(result.count || 0);
+                 setSavedSuccess(true);
+                 // form.reset(); // Don't reset yet so they can see what was saved if needed, or clear it
              } else {
                  throw new Error(result.error);
              }
@@ -341,10 +415,21 @@ export function InvoiceScannerDialog() {
         if (!firstVal) return;
         const currentItems = form.getValues().items;
         currentItems.forEach((_, index) => {
-            if (index === 0) return;
-            form.setValue(`items.${index}.${fieldName}` as any, firstVal);
+            form.setValue(`items.${index}.${fieldName}` as any, firstVal, { shouldValidate: true });
         });
-        toast({ title: "Appliqué", description: `Valeur copiée sur toutes les lignes.` });
+        toast({ title: "Appliqué", description: `Valeur copiée sur ${currentItems.length} lignes.` });
+    };
+
+    const applyMarginToAll = (percent: number) => {
+        const currentItems = form.getValues().items;
+        currentItems.forEach((_, index) => {
+            const buyingPrice = Number(form.getValues(`items.${index}.prixAchat` as any)) || 0;
+            if (buyingPrice > 0) {
+                const suggestedSelling = buyingPrice * (1 + percent / 100);
+                form.setValue(`items.${index}.prixVente` as any, Math.round(suggestedSelling * 10) / 10, { shouldValidate: true });
+            }
+        });
+        toast({ title: "Marge Appliquée", description: `Marge de ${percent}% appliquée à tous les produits.` });
     };
 
     const duplicateRow = (index: number) => {
@@ -356,15 +441,30 @@ export function InvoiceScannerDialog() {
         append({
             reference: '', nomProduit: '', categorieId: '', marqueId: '', 
             matiereId: '', couleurId: '', prixAchat: 0, prixVente: 0, 
-            quantiteStock: 1, stockMin: 0
+            quantiteStock: 1, stockMin: 0, isNameGenerated: false
         });
     };
+
+    // P1: Duplicate Detection
+    const duplicateMap = React.useMemo(() => {
+        const map = new Map<string, number[]>();
+        fields.forEach((item, index) => {
+            if (!item.reference) return;
+            const key = `${item.reference.trim().toUpperCase()}-${(item.couleurId || '').trim().toUpperCase()}`;
+            if (!map.has(key)) map.set(key, []);
+            map.get(key)?.push(index);
+        });
+        return map;
+    }, [fields]);
+
+    const duplicateCount = Array.from(duplicateMap.values()).filter(indices => indices.length > 1).length;
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => {
             setIsOpen(open);
             if (!open) {
                 setPreviewUrl(null);
+                setSavedSuccess(false);
                 form.reset();
                 if (fileInputRef.current) fileInputRef.current.value = '';
             }
@@ -372,240 +472,378 @@ export function InvoiceScannerDialog() {
             <DialogTrigger asChild>
                 <Button 
                     size="default"
-                    className="relative overflow-hidden group bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg transition-all duration-300 hover:shadow-violet-500/25 border-0 gap-2"
+                    className="relative overflow-hidden group bg-slate-900 hover:bg-slate-800 text-white shadow-xl transition-all duration-300 border-0 gap-2 px-5"
                 >
-                    <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-                    <Sparkles className="h-4 w-4 animate-pulse text-violet-100" />
-                    <span className="font-semibold tracking-wide">Scanner Facture IA</span>
-                    <ScanEye className="h-4 w-4 opacity-70" />
+                    <Sparkles className="h-4 w-4 text-indigo-400 group-hover:text-indigo-300 transition-colors" />
+                    <span className="font-medium tracking-wide">Scanner IA</span>
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-700" />
                 </Button>
             </DialogTrigger>
             <DialogContent 
                 key={isOpen ? "open" : "closed"}
-                className="max-w-[95vw] w-full h-[95vh] flex flex-col p-0 overflow-hidden border-0 shadow-2xl"
+                className="max-w-[98vw] w-full h-[95vh] p-0 gap-0 bg-slate-50/50 backdrop-blur-xl border-slate-200/60 shadow-2xl overflow-hidden block [&>button:last-child]:hidden"
             >
-                {/* Header */}
-                <div className="bg-gradient-to-r from-violet-600 to-indigo-700 p-4 text-white shrink-0 flex justify-between items-center">
-                    <div>
-                        <DialogTitle className="text-xl font-bold flex items-center gap-2 text-white">
-                            <Sparkles className="h-5 w-5 text-violet-200" />
-                            Scanner Facture (Gemini Vision)
-                        </DialogTitle>
-                        <DialogDescription className="text-violet-100/80 text-xs mt-1">
-                            Analysez vos factures et ajoutez les produits au stock en un clic.
-                        </DialogDescription>
+                {/* 1. Header: Professional & Clean */}
+                <div className="h-16 border-b border-slate-200/60 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/50 flex items-center justify-between px-6 shrink-0 z-50">
+                    <div className="flex items-center gap-4">
+                        <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center border border-indigo-100/50 shadow-sm">
+                            <Sparkles className="h-5 w-5 text-indigo-600" />
+                        </div>
+                        <div>
+                            <DialogTitle className="text-lg font-bold text-slate-800 tracking-tight">
+                                Importation Intelligente
+                            </DialogTitle>
+                            <DialogDescription className="text-xs font-medium text-slate-500">
+                                Prévisualisation et validation des données extraites
+                            </DialogDescription>
+                        </div>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="text-white hover:bg-white/20 rounded-full">
-                        <X className="h-5 w-5" />
-                    </Button>
+                    <div className="flex items-center gap-3">
+                         {/* Global Actions could go here */}
+                        <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="h-9 w-9 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-all">
+                            <X className="h-5 w-5" />
+                        </Button>
+                    </div>
                 </div>
 
-                <div className="flex-1 overflow-hidden grid grid-cols-12 h-full">
-                    {/* Left: Preview */}
-                    <div className="col-span-3 bg-slate-50 border-r border-slate-200 flex flex-col p-4 overflow-y-auto h-full min-h-0">
-                         <div className="mb-4">
-                             <Label className="text-xs font-bold uppercase text-slate-500 mb-2 block">Document Source</Label>
-                             <div 
-                                className={cn(
-                                    "relative group cursor-pointer aspect-[3/4] rounded-xl border-2 border-dashed transition-all duration-300 flex flex-col items-center justify-center gap-4 bg-white shadow-sm hover:border-violet-400 hover:bg-violet-50/30 overflow-hidden",
-                                    previewUrl ? "border-violet-200" : "border-slate-300"
-                                )}
-                                onClick={(e) => {
-                                    if (e.target !== fileInputRef.current) {
-                                        if (fileInputRef.current) {
-                                            fileInputRef.current.value = '';
-                                            fileInputRef.current.click();
-                                        }
-                                    }
+                {savedSuccess ? (
+                    <div className="flex-1 flex flex-col items-center justify-center bg-white p-12 text-center">
+                        <div className="h-24 w-24 rounded-full bg-emerald-50 flex items-center justify-center border-4 border-emerald-100 mb-8 animate-in zoom-in duration-500">
+                            <CheckCircle className="h-12 w-12 text-emerald-500" />
+                        </div>
+                        <h2 className="text-3xl font-extrabold text-slate-900 mb-3 tracking-tight">Enregistrement Réussi !</h2>
+                        <p className="text-slate-500 text-lg mb-10 max-w-md mx-auto">
+                            <strong>{savedCount}</strong> produits ont été ajoutés à votre inventaire avec succès. 
+                            Que souhaitez-vous faire maintenant ?
+                        </p>
+                        <div className="flex flex-col sm:flex-row gap-4 w-full max-w-lg">
+                            <Button 
+                                className="flex-1 h-14 bg-slate-900 hover:bg-slate-800 text-white text-md font-bold rounded-2xl shadow-xl hover:shadow-2xl transition-all gap-3"
+                                onClick={() => {
+                                    setIsOpen(false);
+                                    router.push('/produits'); // Assuming this is the products page
                                 }}
                             >
+                                <LayoutGrid className="h-5 w-5" />
+                                Voir le stock
+                            </Button>
+                            <Button 
+                                variant="outline"
+                                className="flex-1 h-14 border-2 border-slate-200 text-slate-700 hover:bg-slate-50 text-md font-bold rounded-2xl transition-all gap-3"
+                                onClick={() => {
+                                    setSavedSuccess(false);
+                                    setPreviewUrl(null);
+                                    form.reset();
+                                    replace([]);
+                                    if (fileInputRef.current) fileInputRef.current.value = '';
+                                }}
+                            >
+                                <Sparkles className="h-5 w-5 text-indigo-500" />
+                                Scanner une autre
+                            </Button>
+                        </div>
+                    </div>
+                ) : (
+                    <>
+                    {/* 2. Main Content: Split Layout */}
+                <div className="flex-1 overflow-hidden flex flex-row relative h-[calc(95vh-64px)]">
+                    
+                    {/* LEFT PANEL: Source Document (Fixed Width) */}
+                    <div className="w-[380px] bg-slate-50/80 border-r border-slate-200/60 flex flex-col relative shrink-0 z-20">
+                         <div className="p-5 flex flex-col h-full gap-5 overflow-y-auto">
+                             
+                             {/* Upload Zone */}
+                             <div className="relative group w-full aspect-[21/29] rounded-2xl border-2 border-dashed border-slate-300/80 bg-white shadow-sm hover:border-indigo-400/50 hover:shadow-md transition-all duration-300 overflow-hidden cursor-pointer"
+                                 onClick={(e) => {
+                                    if (e.target !== fileInputRef.current) {
+                                        fileInputRef.current?.click();
+                                    }
+                                 }}
+                             >
                                 {previewUrl ? (
-                                    <div className="w-full h-full relative" onClick={(e) => e.stopPropagation()}>
-                                        <img src={previewUrl} alt="Preview" className="w-full h-full object-contain" />
+                                    <div className="w-full h-full relative group/preview">
+                                        <img src={previewUrl.startsWith('pdf-marker') ? '/pdf-placeholder.png' : previewUrl} alt="Preview" className="w-full h-full object-contain p-2" />
+                                        <div className="absolute inset-0 bg-slate-900/0 group-hover/preview:bg-slate-900/10 transition-colors flex items-center justify-center opacity-0 group-hover/preview:opacity-100">
+                                            <Button variant="secondary" size="sm" className="shadow-lg transform translate-y-2 group-hover/preview:translate-y-0 transition-transform">
+                                                Changer le fichier
+                                            </Button>
+                                        </div>
                                         <button
                                             onClick={(e) => { 
                                                 e.stopPropagation(); 
                                                 setPreviewUrl(null); 
                                                 replace([]);
                                             }}
-                                            className="absolute top-2 right-2 p-1 bg-black/50 text-white rounded-full hover:bg-red-500 transition-colors"
+                                            className="absolute top-3 right-3 p-1.5 bg-white/90 text-slate-500 rounded-full hover:bg-red-50 hover:text-red-600 shadow-sm border border-slate-100 transition-all opacity-0 group-hover/preview:opacity-100"
                                         >
                                             <X className="w-4 h-4" />
                                         </button>
                                     </div>
                                 ) : (
-                                    <div className="text-center p-4">
-                                        <UploadCloud className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                                        <p className="text-sm font-medium">Cliquez pour importer</p>
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 gap-3">
+                                        <div className="h-16 w-16 rounded-full bg-indigo-50/50 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform duration-300">
+                                            <UploadCloud className="w-8 h-8 text-indigo-400" />
+                                        </div>
+                                        <div className="text-center space-y-1">
+                                            <p className="text-sm font-semibold text-slate-700">Glissez ou cliquez</p>
+                                            <p className="text-xs text-slate-400">PDF, JPG, PNG (Max 10MB)</p>
+                                        </div>
                                     </div>
                                 )}
-                                <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleFileChange} />
+                                <input type="file" ref={fileInputRef} accept="image/*,application/pdf" className="hidden" onChange={handleFileChange} />
                             </div>
-                         </div>
 
-                         <Button 
-                            className="w-full bg-violet-600 hover:bg-violet-700 text-white shadow-md mb-4" 
-                            onClick={handleScan}
-                            disabled={isProcessing || !previewUrl}
-                        >
-                            {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ScanEye className="h-4 w-4 mr-2" />}
-                            {isProcessing ? 'Analyse...' : 'Lancer l\'IA'}
-                        </Button>
+                            <Button 
+                                size="lg"
+                                className={cn(
+                                    "w-full font-semibold shadow-lg transition-all duration-500",
+                                    isProcessing 
+                                        ? "bg-slate-100 text-slate-400 cursor-not-allowed" 
+                                        : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/25 text-white"
+                                )} 
+                                onClick={handleScan}
+                                disabled={isProcessing || !previewUrl}
+                            >
+                                {isProcessing ? (
+                                    <div className="flex items-center gap-2">
+                                        <Loader2 className="h-5 w-5 animate-spin" />
+                                        <span>Analyse en cours...</span>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2">
+                                        <ScanEye className="h-5 w-5" />
+                                        <span>Lancer l'extraction IA</span>
+                                    </div>
+                                )}
+                            </Button>
 
-                        {/* Invoice Header Form */}
-                        <div className="space-y-3 bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
-                            <h4 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-2">
-                                <FileText className="h-3 w-3" /> Info Facture
-                            </h4>
-                            <div className="space-y-2">
+                            {/* Metadata Card */}
+                            <div className="bg-white rounded-xl border border-slate-200/60 p-4 shadow-sm space-y-4">
+                                <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                                    <FileText className="h-4 w-4 text-indigo-500" />
+                                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Détails Facture</span>
+                                </div>
                                 <Form {...form}>
-                                    <FormField control={form.control} name="fournisseurId" render={({ field }) => (
-                                        <FormItem>
-                                            <Label className="text-[10px] uppercase text-slate-400 font-bold">Fournisseur</Label>
-                                            <SearchableSelect 
-                                                options={suppliers.map(s => ({ label: s.name, value: s.id }))} 
-                                                value={field.value} 
-                                                onChange={field.onChange} 
-                                                placeholder="Fournisseur..." 
-                                                className="h-8 text-xs bg-slate-50 border-slate-200" 
-                                            />
-                                        </FormItem>
-                                    )} />
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <FormField control={form.control} name="numFacture" render={({ field }) => (
-                                            <FormItem>
-                                                <Label className="text-[10px] uppercase text-slate-400 font-bold">N° Facture</Label>
-                                                <Input {...field} className="h-8 text-xs bg-slate-50 border-slate-200" placeholder="FAC-001" />
+                                    <div className="space-y-4">
+                                        <FormField control={form.control} name="fournisseurId" render={({ field }) => (
+                                            <FormItem className="space-y-1.5">
+                                                <Label className="text-[11px] font-semibold text-slate-500 uppercase">Fournisseur</Label>
+                                                <SearchableSelect 
+                                                    options={suppliers.map(s => ({ label: s.name, value: s.id }))} 
+                                                    value={field.value} 
+                                                    onChange={field.onChange} 
+                                                    placeholder="Sélectionner..." 
+                                                    className="h-9 w-full bg-slate-50/50 border-slate-200 focus:bg-white transition-all text-sm" 
+                                                />
                                             </FormItem>
                                         )} />
-                                        <FormField control={form.control} name="dateAchat" render={({ field }) => (
-                                            <FormItem>
-                                                <Label className="text-[10px] uppercase text-slate-400 font-bold">Date</Label>
-                                                <Input type="date" {...field} className="h-8 text-xs bg-slate-50 border-slate-200" />
-                                            </FormItem>
-                                        )} />
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <FormField control={form.control} name="numFacture" render={({ field }) => (
+                                                <FormItem className="space-y-1.5">
+                                                    <Label className="text-[11px] font-semibold text-slate-500 uppercase">N° Pièce</Label>
+                                                    <Input {...field} className="h-9 bg-slate-50/50 border-slate-200 focus:bg-white transition-all font-mono text-sm" placeholder="FAC-..." />
+                                                </FormItem>
+                                            )} />
+                                            <FormField control={form.control} name="dateAchat" render={({ field }) => (
+                                                <FormItem className="space-y-1.5">
+                                                    <Label className="text-[11px] font-semibold text-slate-500 uppercase">Date</Label>
+                                                    <Input type="date" {...field} className="h-9 bg-slate-50/50 border-slate-200 focus:bg-white transition-all text-sm" />
+                                                </FormItem>
+                                            )} />
+                                        </div>
                                     </div>
                                 </Form>
                             </div>
-                        </div>
+                         </div>
                     </div>
 
-                    {/* Right: Product Modification Zone */}
-                    <div className="col-span-9 flex flex-col bg-white min-h-0 h-full overflow-hidden">
+                    {/* RIGHT PANEL: Workspace (Flexible) */}
+                    <div className="flex-1 bg-white flex flex-col min-w-0 z-10">
                         <TooltipProvider>
                         <Form {...form}>
                             <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col h-full min-h-0">
-                                {/* Toolbar */}
-                                <div className="p-3 border-b flex items-center justify-between bg-white shrink-0">
-                                    <div className="flex items-center gap-2">
-                                        <div className="bg-violet-100 text-violet-700 p-1.5 rounded-md">
-                                            <PackagePlus className="h-5 w-5" />
-                                        </div>
-                                        <div>
-                                            <h3 className="text-sm font-bold text-slate-800">Zone de Modification</h3>
-                                            <p className="text-xs text-slate-500">{fields.length} produits détectés</p>
+                                
+                                {/* Professional Toolbar */}
+                                <div className="h-14 px-6 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
+                                    <div className="flex items-center gap-4 text-sm text-slate-500">
+                                        <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                                            <PackagePlus className="h-4 w-4 text-indigo-500" />
+                                            <span className="font-semibold text-slate-700">{fields.length}</span>
+                                            <span className="text-slate-400">produits détectés</span>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-4">
-                                        <div className="flex items-center gap-2 border-r pr-4 mr-2">
-                                            <Label className="text-[10px] uppercase font-bold text-slate-400">Catégorie Globale :</Label>
+                                    
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-md border border-slate-200 mr-2">
+                                            <Label className="text-[10px] font-bold text-slate-400 uppercase px-2">Marge :</Label>
+                                            {[20, 30, 40].map(pct => (
+                                                <Button 
+                                                    key={pct}
+                                                    type="button" 
+                                                    variant="ghost" 
+                                                    size="sm" 
+                                                    className="h-6 text-[10px] font-bold px-2 hover:bg-white hover:text-indigo-600 rounded"
+                                                    onClick={() => applyMarginToAll(pct)}
+                                                >
+                                                    {pct}%
+                                                </Button>
+                                            ))}
+                                        </div>
+
+                                        <div className="h-8 w-px bg-slate-200 mx-1" />
+                                        
+                                        {duplicateCount > 0 && (
+                                            <div className="flex items-center gap-1.5 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-100 animate-pulse">
+                                                <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+                                                <span className="text-[11px] font-bold text-amber-700">{duplicateCount} doublons</span>
+                                            </div>
+                                        )}
+
+                                        <div className="flex items-center gap-2">
+                                            <Label className="text-xs font-semibold text-slate-400 uppercase mr-1">Appliquer à tous :</Label>
+                                            
+                                            {/* Global HT/TTC Toggle */}
+                                            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-md border border-slate-200 mr-2">
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => {
+                                                        const currentItems = form.getValues().items;
+                                                        currentItems.forEach((_, index) => form.setValue(`items.${index}.isAchatTTC`, false));
+                                                        toast({ title: "Action Groupée", description: "Mode HT appliqué à tous les produits.", className: "bg-indigo-950 text-white border-none" });
+                                                    }}
+                                                    className="text-[10px] font-bold px-2.5 py-1 rounded hover:bg-white hover:shadow-sm transition-all text-slate-600 uppercase"
+                                                >
+                                                    HT
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => {
+                                                        const currentItems = form.getValues().items;
+                                                        currentItems.forEach((_, index) => form.setValue(`items.${index}.isAchatTTC`, true));
+                                                        toast({ title: "Action Groupée", description: "Mode TTC appliqué à tous les produits.", className: "bg-indigo-950 text-white border-none" });
+                                                    }}
+                                                    className="text-[10px] font-bold px-2.5 py-1 rounded hover:bg-white hover:shadow-sm transition-all text-slate-600 uppercase"
+                                                >
+                                                    TTC
+                                                </button>
+                                            </div>
+
                                             <SearchableSelect 
                                                 options={categories.map(c => ({ label: c.name, value: c.id }))} 
-                                                placeholder="Appliquer à tous..." 
-                                                className="h-8 w-[180px] text-xs"
+                                                placeholder="Catégorie..." 
+                                                className="h-8 w-[160px] text-xs border-slate-200 shadow-none bg-slate-50 hover:bg-white transition-colors"
                                                 onChange={(val) => {
                                                     const currentItems = form.getValues().items;
                                                     currentItems.forEach((_, index) => {
                                                         form.setValue(`items.${index}.categorieId`, val);
                                                     });
-                                                    toast({ title: "Appliqué", description: "Catégorie mise à jour pour tous les produits." });
+                                                    toast({ title: "Action Groupée", description: "Catégorie appliquée à tous les produits.", className: "bg-indigo-950 text-white border-none" });
                                                 }}
                                             />
                                         </div>
-                                        <Button type="button" variant="outline" size="sm" onClick={() => onAddRow()} className="h-8 text-xs gap-1.5">
-                                            <PlusCircle className="h-3.5 w-3.5" /> Ajouter
+                                        <Button type="button" variant="outline" size="sm" onClick={() => onAddRow()} className="h-8 text-xs font-medium border-dashed border-slate-300 text-slate-600 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50">
+                                            <PlusCircle className="h-3.5 w-3.5 mr-1.5" /> Ajouter
                                         </Button>
                                     </div>
                                 </div>
 
-                                {/* Table Scroll Area */}
-                                <ScrollArea className="flex-1 bg-slate-50/30 relative">
-                                    {fields.length === 0 ? (
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
-                                            <Scan className="h-12 w-12 opacity-20 mb-3" />
-                                            <p className="text-sm font-medium">Importez une facture pour commencer</p>
+                                {/* Table Grid */}
+                                <div className="flex-1 relative bg-slate-50/50 overflow-hidden">
+                                    <ScrollArea className="h-full w-full">
+                                        {fields.length === 0 ? (
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
+                                                <div className="h-24 w-24 rounded-full bg-slate-50 border-4 border-dashed border-slate-200 flex items-center justify-center mb-6">
+                                                    <Scan className="h-10 w-10 text-slate-300" />
+                                                </div>
+                                                <h3 className="text-lg font-semibold text-slate-600 mb-2">Espace de travail vide</h3>
+                                                <p className="text-sm text-slate-400 max-w-xs text-center">Importez une facture ou ajoutez des produits manuellement pour commencer.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="min-w-[1000px] pb-20 overflow-visible">
+                                                <Table className="border-separate border-spacing-0">
+                                                    <TableHeader className="sticky top-0 z-30 bg-white shadow-[0_1px_0_0_rgba(226,232,240,1)]">
+                                                        <TableRow className="border-none hover:bg-transparent">
+                                                            <TableHead className="h-12 w-[60px] text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-white">#</TableHead>
+                                                            <TableHead className="h-12 text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-white pl-4">Identification Produit</TableHead>
+                                                            <TableHead className="h-12 w-[220px] text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-white">Classification</TableHead>
+                                                            <TableHead className="h-12 w-[320px] text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-white px-6">Données Financières</TableHead>
+                                                            <TableHead className="h-12 w-[80px] text-center bg-white"></TableHead>
+                                                        </TableRow>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                        {fields.map((field, index) => (
+                                                            <ScannerProductRow 
+                                                                key={field.id} 
+                                                                index={index} 
+                                                                control={form.control} 
+                                                                remove={remove} 
+                                                                duplicate={duplicateRow}
+                                                                brands={brands}
+                                                                categories={categories}
+                                                                materials={materials}
+                                                                colors={colors}
+                                                                handleQuickCreate={handleQuickCreate}
+                                                                isCreatingSetting={isCreatingSetting}
+                                                                setBrands={setBrands}
+                                                                setCategories={setCategories}
+                                                                setMaterials={setMaterials}
+                                                                setColors={setColors}
+                                                            />
+                                                        ))}
+                                                    </TableBody>
+                                                </Table>
+                                            </div>
+                                        )}
+                                        <ScrollBar orientation="horizontal" className="z-50" />
+                                        <ScrollBar orientation="vertical" className="z-50" />
+                                    </ScrollArea>
+                                </div>
+                                {/* Footer Bar */}
+                                <div className="h-20 bg-white border-t border-slate-200 px-8 flex items-center justify-between shrink-0 z-40 shadow-[0_-5px_20px_-10px_rgba(0,0,0,0.05)]">
+                                    <div className="flex items-center gap-3">
+                                        <div className="h-8 w-8 rounded-full bg-amber-50 flex items-center justify-center border border-amber-100 text-amber-500">
+                                            <Info className="h-4 w-4" />
                                         </div>
-                                    ) : (
-                                        <div className="min-w-[1100px]">
-                                            <Table className="border-separate border-spacing-0">
-                                                <TableHeader className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md border-b-2 border-slate-200">
-                                                    <TableRow className="grid grid-cols-[50px_1fr_200px_300px_80px] items-center gap-4 hover:bg-transparent border-none">
-                                                        <TableHead className="py-4 font-semibold text-xs text-slate-500 text-center">#</TableHead>
-                                                        <TableHead className="py-4 font-semibold text-xs text-slate-500">
-                                                            <div className="flex items-center gap-2">
-                                                                Produit (Réf / Nom / Marque / Cat)
-                                                                <ArrowDownToLine className="h-3.5 w-3.5 cursor-pointer text-slate-300 hover:text-primary transition-colors" onClick={() => { applyToAll('marqueId'); applyToAll('categorieId'); }} />
-                                                            </div>
-                                                        </TableHead>
-                                                        <TableHead className="py-4 font-semibold text-xs text-slate-500">Détails</TableHead>
-                                                        <TableHead className="py-4 font-semibold text-xs text-slate-500 text-right pr-4">Finance & Stock</TableHead>
-                                                        <TableHead className="py-4 font-semibold text-xs text-slate-500 text-center"></TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody className="divide-y divide-slate-100 table-row-group">
-                                                    {fields.map((field, index) => (
-                                                        <ScannerProductRow 
-                                                            key={field.id} 
-                                                            index={index} 
-                                                            control={form.control} 
-                                                            remove={remove} 
-                                                            duplicate={duplicateRow}
-                                                            brands={brands}
-                                                            categories={categories}
-                                                            materials={materials}
-                                                            colors={colors}
-                                                            handleQuickCreate={handleQuickCreate}
-                                                            isCreatingSetting={isCreatingSetting}
-                                                            setBrands={setBrands}
-                                                            setCategories={setCategories}
-                                                            setMaterials={setMaterials}
-                                                            setColors={setColors}
-                                                        />
-                                                    ))}
-                                                </TableBody>
-                                            </Table>
+                                        <div className="text-xs text-slate-500">
+                                            <p className="font-semibold text-slate-700">Vérification requise</p>
+                                            <p>Les marges faibles (&lt;20%) sont surlignées en rouge.</p>
                                         </div>
-                                    )}
-                                    <ScrollBar orientation="horizontal" className="z-50" />
-                                    <ScrollBar orientation="vertical" className="z-50" />
-                                </ScrollArea>
-
-                                {/* Footer */}
-                                <div className="p-4 border-t bg-white flex items-center justify-between shrink-0 z-30 shadow-[0_-5px_15px_-5px_rgba(0,0,0,0.05)]">
-                                    <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full">
-                                        <AlertCircle className="h-3.5 w-3.5" />
-                                        <span>Vérifiez les données avant confirmation.</span>
                                     </div>
-                                    <div className="flex gap-3">
-                                        <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Annuler</Button>
+                                    <div className="flex items-center gap-4">
+                                        <Button 
+                                            type="button" 
+                                            variant="ghost" 
+                                            className="text-slate-500 hover:text-slate-800" 
+                                            onClick={() => {
+                                                form.reset();
+                                                setPreviewUrl(null);
+                                                replace([]);
+                                                setIsOpen(false);
+                                            }}
+                                        >
+                                            Annuler
+                                        </Button>
                                         <Button 
                                             type="submit" 
-                                            className="bg-green-600 hover:bg-green-700 text-white gap-2 px-6"
+                                            size="lg"
+                                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-indigo-500/10 min-w-[180px] font-semibold"
                                             disabled={isSaving || fields.length === 0}
                                         >
-                                            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-                                            Confirmer l'Ajout
+                                            {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                                            {isSaving ? 'Enregistrement...' : 'Valider & Importer'}
                                         </Button>
                                     </div>
                                 </div>
                             </form>
                         </Form>
-                        </TooltipProvider>
-                    </div>
+                    </TooltipProvider>
                 </div>
-            </DialogContent>
-        </Dialog>
-    );
+            </div>
+            </>
+        )}
+        </DialogContent>
+    </Dialog>
+);
 }
 
 // --- Scanner Product Row Component (Inline for simplicity) ---
@@ -619,6 +857,7 @@ function ScannerProductRow({
     const nomProduit = useWatch({ control, name: `items.${index}.nomProduit` });
     const categorieId = useWatch({ control, name: `items.${index}.categorieId` });
     const marqueId = useWatch({ control, name: `items.${index}.marqueId` });
+    const isNameGenerated = useWatch({ control, name: `items.${index}.isNameGenerated` });
 
     const valPrixAchat = Number(prixAchat) || 0;
     const valPrixVente = Number(prixVente) || 0;
@@ -627,129 +866,185 @@ function ScannerProductRow({
     const marginPercent = valPrixVente > 0 ? (margin / valPrixVente) * 100 : 0;
     const isLowMargin = marginPercent < 20 && valPrixVente > 0;
     
-    const isIncomplete = !nomProduit || !marqueId || !categorieId;
+    // Ghost Input Class
+    const ghostInput = "h-auto py-1 px-2 text-sm border-transparent hover:border-slate-200 focus:border-indigo-400 bg-transparent hover:bg-white focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:shadow-sm transition-all rounded";
 
-    const rowLayout = "grid grid-cols-[50px_1fr_200px_300px_80px] items-start gap-4";
+    const key = `${(nomProduit || '').trim().toUpperCase()}-${(marqueId || '').trim().toUpperCase()}`;
+    const isDuplicate = duplicateMap.has(key) && (duplicateMap.get(key)?.length || 0) > 1;
 
     return (
         <TableRow className={cn(
-            rowLayout,
-            "group border-b border-slate-100 transition-colors",
+            "group hover:bg-slate-50/80 transition-colors border-b border-slate-50 last:border-0",
             index % 2 === 0 ? "bg-white" : "bg-slate-50/30",
-            isIncomplete && "bg-red-50/10 hover:bg-red-50/20",
-            !isIncomplete && "hover:bg-blue-50/20"
+            isDuplicate && "bg-amber-50/50"
         )}>
-            {/* Index */}
-            <TableCell className="text-center text-xs font-medium text-slate-400 py-4 h-full border-r border-slate-50">
+            {/* 1. Index */}
+            <TableCell className="text-center py-3 text-xs font-medium text-slate-300 group-hover:text-indigo-400">
                 {String(index + 1).padStart(2, '0')}
             </TableCell>
-            
-            {/* Identity & Technical */}
-            <TableCell className="py-3 px-1 h-full border-r border-slate-50">
-                <div className="flex flex-col gap-2.5">
-                    <div className="flex items-center gap-2">
+
+            {/* 2. Main Identity */}
+            <TableCell className="py-3 pl-4 align-top">
+                <div className="flex flex-col gap-2">
+                    <div className="flex gap-2">
+                         <FormField control={control} name={`items.${index}.reference`} render={({ field }) => (
+                            <FormControl>
+                                <Input 
+                                    placeholder="REF..." 
+                                    {...field} 
+                                    className="h-7 w-[90px] text-[11px] font-mono font-semibold uppercase tracking-tight bg-slate-100/50 border-slate-200 focus:bg-white" 
+                                />
+                            </FormControl>
+                        )} />
                         <FormField control={control} name={`items.${index}.nomProduit`} render={({ field }) => (
-                            <FormControl><Input placeholder="Désignation..." {...field} className={cn("h-10 text-sm font-medium border-slate-200 bg-white focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all shadow-sm w-full", !nomProduit && "border-red-200 bg-red-50/30")} /></FormControl>
-                        )} />
-                        <FormField control={control} name={`items.${index}.reference`} render={({ field }) => (
-                            <FormControl><Input placeholder="RÉF" {...field} className="h-10 w-[120px] text-xs font-mono border-slate-200 bg-white focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all shadow-sm uppercase shrink-0" /></FormControl>
-                        )} />
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <FormField control={control} name={`items.${index}.marqueId`} render={({ field }) => (
-                            <div className="flex-1">
-                                <SearchableSelect options={brands.map((b: any) => ({ label: b.name, value: b.id }))} value={field.value} onChange={field.onChange} placeholder="Marque..." className="h-10 text-xs font-medium border-slate-200 bg-white shadow-sm w-full" onCreateNew={(name) => handleQuickCreate('brands', name, setBrands, `items.${index}.marqueId`)} isCreating={isCreatingSetting} />
-                            </div>
-                        )} />
-                        <FormField control={control} name={`items.${index}.categorieId`} render={({ field }) => (
-                           <div className="flex-1">
-                                <SearchableSelect options={categories.map((c: any) => ({ label: c.name, value: c.id }))} value={field.value} onChange={field.onChange} placeholder="Catégorie..." className={cn("h-10 text-xs font-medium border-slate-200 bg-white shadow-sm w-full", !categorieId && "border-red-200 text-red-500")} onCreateNew={(name) => handleQuickCreate('categories', name, setCategories, `items.${index}.categorieId`)} isCreating={isCreatingSetting} />
-                           </div>
+                            <FormControl>
+                                <div className="relative group/name flex items-center">
+                                    <Input 
+                                        placeholder="Désignation du produit..." 
+                                        {...field} 
+                                        className={cn(
+                                            "h-7 text-sm font-semibold border-transparent hover:border-slate-200 focus:border-indigo-500 focus:bg-white focus:shadow-sm bg-transparent px-1 min-w-[200px] pr-6", 
+                                            !nomProduit && "bg-red-50 text-red-600 placeholder:text-red-300",
+                                            isNameGenerated && "text-indigo-600"
+                                        )} 
+                                    />
+                                    {isNameGenerated && (
+                                        <Sparkles className="h-3 w-3 text-indigo-400 absolute right-1 pointer-events-none" />
+                                    )}
+                                </div>
+                            </FormControl>
                         )} />
                     </div>
                 </div>
             </TableCell>
 
-             {/* Technical */}
-            <TableCell className="py-3 px-1 h-full border-r border-slate-50">
-                 <div className="flex flex-col gap-2.5 h-full">
-                     <FormField control={control} name={`items.${index}.matiereId`} render={({ field }) => (
-                        <SearchableSelect options={materials.map((m: any) => ({ label: m.name, value: m.id }))} value={field.value} onChange={field.onChange} placeholder="Matière..." className="h-10 text-xs border-slate-200 bg-slate-50/50 hover:bg-white shadow-none focus:bg-white transition-all w-full" onCreateNew={(name) => handleQuickCreate('materials', name, setMaterials, `items.${index}.matiereId`)} isCreating={isCreatingSetting} />
+            {/* 3. Classification (Category & Brand) */}
+            <TableCell className="py-3 align-top">
+                <div className="flex flex-col gap-2">
+                    <FormField control={control} name={`items.${index}.marqueId`} render={({ field }) => (
+                         <SearchableSelect 
+                            options={brands.map((b: any) => ({ label: b.name, value: b.id }))} 
+                            value={field.value} 
+                            onChange={field.onChange} 
+                            placeholder="Marque..." 
+                            className="h-7 text-xs border-transparent hover:border-slate-200 bg-transparent hover:bg-white"
+                            onCreateNew={(name) => handleQuickCreate('brands', name, setBrands, `items.${index}.marqueId`)} 
+                            isCreating={isCreatingSetting} 
+                        />
                     )} />
-                    <FormField control={control} name={`items.${index}.couleurId`} render={({ field }) => (
-                        <SearchableSelect options={colors.map((c: any) => ({ label: c.name, value: c.id }))} value={field.value} onChange={field.onChange} placeholder="Couleur..." className="h-10 text-xs border-slate-200 bg-slate-50/50 hover:bg-white shadow-none focus:bg-white transition-all w-full" onCreateNew={(name) => handleQuickCreate('colors', name, setColors, `items.${index}.couleurId`)} isCreating={isCreatingSetting} />
-                    )} />
+                    <FormField control={control} name={`items.${index}.categorieId`} render={({ field }) => (
+                        <SearchableSelect 
+                            options={categories.map((c: any) => ({ label: c.name, value: c.id }))} 
+                            value={field.value} 
+                            onChange={field.onChange} 
+                            placeholder="Catégorie..." 
+                            className={cn("h-7 text-xs border-transparent hover:border-slate-200 bg-transparent hover:bg-white", !categorieId && "text-red-500")}
+                            onCreateNew={(name) => handleQuickCreate('categories', name, setCategories, `items.${index}.categorieId`)} 
+                            isCreating={isCreatingSetting} 
+                        />
+                   )} />
                 </div>
             </TableCell>
 
-            {/* Financials */}
-            <TableCell className="py-3 px-1 h-full border-r border-slate-50">
-                <div className="flex flex-col gap-3">
-                    <div className="grid grid-cols-2 gap-2">
-                        <FormField control={control} name={`items.${index}.prixAchat`} render={({ field }) => (
-                            <div className="relative group/price flex flex-col">
-                                <div className="relative flex items-center">
-                                    <span className="absolute left-2 top-[3px] text-[10px] font-bold text-slate-400 uppercase tracking-wider z-10 pointer-events-none">Achat</span>
-                                    <Input type="number" step="0.01" {...field} className="h-11 pt-4 text-right pr-9 font-mono text-sm font-bold border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-primary/10 w-full" />
-                                    <FormField control={control} name={`items.${index}.isAchatTTC`} render={({ field }) => (
-                                        <div 
-                                            onClick={() => field.onChange(!field.value)} 
+            {/* 4. Financial & Stock */}
+            <TableCell className="py-3 px-6 align-top">
+                <div className="flex gap-4 items-start">
+                     <div className="flex-1 space-y-2">
+                          {/* Cost */}
+                          <div className="flex items-center justify-end gap-2">
+                                <FormField control={control} name={`items.${index}.isAchatTTC`} render={({ field }) => (
+                                    <button 
+                                        type="button" 
+                                        onClick={() => field.onChange(!field.value)}
+                                        className={cn(
+                                            "text-[9px] font-bold px-1.5 py-0.5 rounded transition-all transform active:scale-95 uppercase border",
+                                            field.value 
+                                                ? "bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm" 
+                                                : "bg-slate-50 border-slate-200 text-slate-400"
+                                        )}
+                                    >
+                                        {field.value ? 'TTC' : 'HT'}
+                                    </button>
+                                )} />
+                                <Label className="text-[10px] text-slate-400 uppercase">Achat</Label>
+                                <FormField control={control} name={`items.${index}.prixAchat`} render={({ field }) => (
+                                    <Input 
+                                        type="number" step="0.01" {...field} 
+                                        onFocus={(e) => e.target.select()}
+                                        className="h-7 w-[80px] text-right font-mono text-xs border-slate-100 bg-slate-50/50 focus:bg-white focus:border-indigo-400" 
+                                    />
+                                )} />
+                          </div>
+                          {/* Selling */}
+                           <div className="flex items-center justify-end gap-1">
+                                <Label className="text-[10px] text-slate-400 uppercase">Vente</Label>
+                                <FormField control={control} name={`items.${index}.prixVente`} render={({ field }) => (
+                                    <div className="relative flex items-center">
+                                        <Input 
+                                            type="number" step="0.01" {...field} 
+                                            onFocus={(e) => e.target.select()}
                                             className={cn(
-                                                "absolute right-1 top-[6px] h-8 w-6 rounded flex items-center justify-center cursor-pointer transition-all border text-[10px] font-bold z-20",
-                                                field.value ? "bg-green-50 border-green-200 text-green-600" : "bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100"
-                                            )}
-                                        >
-                                            {field.value ? "T" : "H"}
-                                        </div>
-                                    )} />
-                                </div>
-                                <div className="mt-1 flex justify-end px-1">
-                                    <span className="text-[10px] font-medium text-slate-400 tabular-nums">
-                                        Eq. {isAchatTTC ? (valPrixAchat / 1.2).toFixed(2) : (valPrixAchat * 1.2).toFixed(2)} {isAchatTTC ? 'HT' : 'TTC'}
-                                    </span>
-                                </div>
-                            </div>
-                        )} />
-                         <FormField control={control} name={`items.${index}.prixVente`} render={({ field }) => (
-                            <div className="relative">
-                                <span className="absolute left-2 top-[3px] text-[10px] font-bold text-slate-400 uppercase tracking-wider pointer-events-none">Vente</span>
-                                <Input type="number" step="0.01" {...field} className={cn("h-11 pt-4 text-right font-mono font-bold text-sm border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-emerald-500/20", isLowMargin ? "text-red-500" : "text-emerald-600")} />
-                            </div>
-                        )} />
-                    </div>
-                    
-                    <div className="grid grid-cols-[1fr_1fr_60px] items-center gap-1 p-1 bg-slate-50 rounded-lg border border-slate-100">
-                        <div className="flex items-center gap-1.5 pl-1.5">
-                            <span className="text-[10px] font-bold uppercase text-slate-400 shrink-0">Qté</span>
-                            <FormField control={control} name={`items.${index}.quantiteStock`} render={({ field }) => (
-                                <Input type="number" {...field} className="h-8 w-full text-center font-mono text-xs font-bold border-transparent bg-white shadow-sm p-0 rounded focus:ring-0" />
-                            )} />
-                        </div>
-                        <div className="flex items-center gap-1.5 border-l border-slate-200 pl-1.5">
-                            <span className="text-[10px] font-bold uppercase text-slate-400 shrink-0">Min</span>
-                            <FormField control={control} name={`items.${index}.stockMin`} render={({ field }) => (
-                                <Input type="number" {...field} className="h-8 w-full text-center font-mono text-xs font-bold border-transparent bg-white shadow-sm p-0 rounded focus:ring-0" />
-                            )} />
-                        </div>
-                        <div className="flex justify-center border-l border-slate-200">
-                            <span className={cn("text-xs font-bold tabular-nums", valPrixVente === 0 ? "text-slate-200" : isLowMargin ? "text-red-500" : "text-emerald-600")}>
+                                                "h-7 w-[80px] text-right font-mono text-xs font-bold border-slate-100 bg-white focus:border-indigo-400 shadow-sm pr-6",
+                                                isLowMargin && "text-red-600"
+                                            )} 
+                                        />
+                                        {valPrixAchat > 0 && valPrixVente === 0 && (
+                                            <button 
+                                                type="button"
+                                                onClick={() => field.onChange(Math.round(valPrixAchat * 1.4 * 10) / 10)}
+                                                className="absolute right-1 text-indigo-400 hover:text-indigo-600 transition-colors"
+                                                title="Suggérer +40%"
+                                            >
+                                                <Sparkles className="h-3 w-3" />
+                                            </button>
+                                        )}
+                                    </div>
+                                )} />
+                          </div>
+                     </div>
+
+                     <div className="w-px h-16 bg-slate-100" />
+
+                     <div className="flex-1 space-y-2">
+                        {/* Margin Indicator */}
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-slate-400 uppercase">Marge</span>
+                            <span className={cn(
+                                "text-xs font-bold tabular-nums px-1.5 py-0.5 rounded",
+                                isLowMargin ? "bg-red-100 text-red-600" : "bg-emerald-50 text-emerald-600"
+                            )}>
                                 {isFinite(marginPercent) ? `${marginPercent.toFixed(0)}%` : '-'}
                             </span>
                         </div>
-                    </div>
+
+                        {/* Stock Input */}
+                        <div className="flex items-center justify-end gap-2">
+                            <Label className="text-[10px] text-slate-400 uppercase">Qté</Label>
+                            <FormField control={control} name={`items.${index}.quantiteStock`} render={({ field }) => (
+                                <div className="flex items-center">
+                                    <Button type="button" variant="ghost" size="icon" className="h-5 w-5 rounded-l border border-r-0 border-slate-200" onClick={() => field.onChange(Math.max(0, Number(field.value) - 1))}>-</Button>
+                                    <Input 
+                                        type="number" {...field} 
+                                        onFocus={(e) => e.target.select()}
+                                        className="h-5 w-10 text-center font-mono text-xs border-y border-x-0 border-slate-200 rounded-none bg-white p-0" 
+                                    />
+                                    <Button type="button" variant="ghost" size="icon" className="h-5 w-5 rounded-r border border-l-0 border-slate-200" onClick={() => field.onChange(Number(field.value) + 1)}>+</Button>
+                                </div>
+                            )} />
+                        </div>
+                     </div>
                 </div>
             </TableCell>
 
-            {/* Actions */}
-            <TableCell className="text-center py-4 h-full">
-                <div className="flex flex-col items-center justify-center gap-1 h-full">
-                    <Tooltip><TooltipTrigger asChild>
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-blue-600 hover:bg-blue-50 transition-all rounded-full" onClick={() => duplicate(index)}><Copy className="h-3.5 w-3.5" /></Button>
-                    </TooltipTrigger><TooltipContent className="text-[10px]">Copier</TooltipContent></Tooltip>
-                    
-                    <Tooltip><TooltipTrigger asChild>
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-red-600 hover:bg-red-50 transition-all rounded-full" onClick={() => remove(index)}><Trash2 className="h-3.5 w-3.5" /></Button>
-                    </TooltipTrigger><TooltipContent className="text-[10px]">Supprimer</TooltipContent></Tooltip>
+            {/* 5. Actions */}
+            <TableCell className="text-center py-3">
+                <div className="flex flex-col gap-1 items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-indigo-600" onClick={() => duplicate(index)}>
+                        <Copy className="h-3 w-3" />
+                    </Button>
+                    <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-600" onClick={() => remove(index)}>
+                        <Trash2 className="h-3 w-3" />
+                    </Button>
                 </div>
             </TableCell>
         </TableRow>

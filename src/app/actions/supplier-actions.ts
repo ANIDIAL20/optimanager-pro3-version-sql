@@ -96,6 +96,7 @@ export const getSuppliersList = secureActionWithResponse(async (userId, user) =>
           contactTelephone: contactInfo.tel,
           contactEmail: contactInfo.email,
           defaultTaxMode: row.defaultTaxMode,
+          currentBalance: Number(row.currentBalance || 0),
         };
       });
 

@@ -6,7 +6,7 @@
 'use server';
 
 import { db } from '@/db';
-import { clients, prescriptionsLegacy as prescriptions, sales, lensOrders } from '@/db/schema';
+import { clients, prescriptionsLegacy as prescriptions, sales, lensOrders, clientInteractions } from '@/db/schema';
 import { eq, and, or, like, desc } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure, logAudit } from '@/lib/audit-log';
@@ -329,6 +329,48 @@ export const updateClient = secureAction(async (userId, user, clientId: string, 
 });
 
 /**
+ * Add a new interaction/note
+ */
+export const addClientInteraction = secureAction(async (userId, user, clientId: string, data: { type: string; content: string }) => {
+    try {
+        const clientIdNum = parseInt(clientId);
+        
+        const result = await db.insert(clientInteractions).values({
+            userId,
+            clientId: clientIdNum,
+            type: data.type,
+            content: data.content,
+            createdAt: new Date()
+        }).returning();
+
+        revalidatePath(`/dashboard/clients/${clientId}`);
+        return { success: true, data: result[0] };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * Get client interactions
+ */
+export const getClientInteractions = secureAction(async (userId, user, clientId: string) => {
+    try {
+        const clientIdNum = parseInt(clientId);
+        const results = await db.query.clientInteractions.findMany({
+            where: and(
+                eq(clientInteractions.clientId, clientIdNum),
+                eq(clientInteractions.userId, userId)
+            ),
+            orderBy: [desc(clientInteractions.createdAt)]
+        });
+
+        return { success: true, data: results };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+});
+
+/**
  * Add prescription to client
  * ✅ SECURED - Creates prescription in separate table
  */
@@ -520,6 +562,16 @@ export const getClientSnapshot = secureAction(async (userId, user, clientId: str
         // Get last prescription
         const lastPrescription = recentPrescriptions.length > 0 ? recentPrescriptions[0] : null;
 
+        // Get recent interactions
+        const recentInteractions = await db.query.clientInteractions.findMany({
+            where: and(
+                eq(clientInteractions.userId, userId),
+                eq(clientInteractions.clientId, clientIdNum)
+            ),
+            orderBy: [desc(clientInteractions.createdAt)],
+            limit: 10
+        });
+
         console.log(`✅ Snapshot fetched with ${recentSales.length} sales, ${recentPrescriptions.length} prescriptions`);
         await logSuccess(userId, 'READ', 'clients', clientId || 'unknown', { snapshot: true });
 
@@ -532,7 +584,8 @@ export const getClientSnapshot = secureAction(async (userId, user, clientId: str
                 lastPrescription,
                 recentSales,
                 recentPrescriptions,
-                pendingOrders
+                pendingOrders,
+                recentInteractions
             }
         };
     } catch (error: any) {

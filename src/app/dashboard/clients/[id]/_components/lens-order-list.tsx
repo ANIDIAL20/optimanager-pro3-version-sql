@@ -45,6 +45,7 @@ import { ReceiveOrderDialog } from './receive-order-dialog';
 interface LensOrderListProps {
   clientId: string;
   clientName?: string;
+  mode?: 'glasses' | 'contacts';
 }
 
 type LensOrderStatus = 'pending' | 'ordered' | 'received' | 'delivered';
@@ -89,7 +90,7 @@ const getStatusBadge = (status: string) => {
   return <Badge variant={config.variant} className={config.className}>{config.label}</Badge>;
 };
 
-export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
+export function LensOrderList({ clientId, clientName, mode = 'glasses' }: LensOrderListProps) {
   const { toast } = useToast();
   const [orders, setOrders] = React.useState<LensOrder[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -131,7 +132,15 @@ export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
       const result = await getClientLensOrders(clientId);
 
       if (result.success && result.data) {
-        setOrders(result.data as LensOrder[]);
+        const allOrders = result.data as LensOrder[];
+        
+        // Filter based on mode
+        const filtered = allOrders.filter(o => {
+            if (mode === 'contacts') return o.orderType === 'contact';
+            return o.orderType !== 'contact';
+        });
+
+        setOrders(filtered);
       } else {
         setError(result.error || 'Erreur de chargement');
       }
@@ -140,7 +149,7 @@ export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [clientId]);
+  }, [clientId, mode]);
 
   React.useEffect(() => {
     loadOrders();
@@ -173,8 +182,9 @@ export function LensOrderList({ clientId, clientName }: LensOrderListProps) {
 
   // Generate order text for sharing
   const generateOrderText = (order: LensOrder) => {
+    const title = mode === 'contacts' ? '📋 COMMANDE DE LENTILLES' : '📋 COMMANDE DE VERRES';
     const lines = [
-      '📋 COMMANDE DE VERRES',
+      title,
       '━━━━━━━━━━━━━━━━━━━━',
       '',
       `📅 Date: ${order.orderDate ? format(new Date(order.orderDate), 'dd/MM/yyyy') : '-'}`,
@@ -684,9 +694,13 @@ import { BrandLoader } from '@/components/ui/loader-brand';
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Historique des Commandes de Verres</CardTitle>
+          <CardTitle>
+              {mode === 'contacts' ? 'Historique des Commandes de Lentilles' : 'Historique des Commandes de Verres'}
+          </CardTitle>
           <CardDescription>
-            Liste de toutes les commandes de verres pour ce client.
+            {mode === 'contacts' 
+                ? 'Liste de toutes les commandes de lentilles pour ce client.' 
+                : 'Liste de toutes les commandes de verres pour ce client.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -708,7 +722,9 @@ import { BrandLoader } from '@/components/ui/loader-brand';
           )}
           {!isLoading && !error && orders && orders.length === 0 && (
             <div className="text-center text-muted-foreground py-6">
-              Aucune commande de verres trouvée pour ce client.
+              {mode === 'contacts' 
+                ? 'Aucune commande de lentilles trouvée pour ce client.'
+                : 'Aucune commande de verres trouvée pour ce client.'}
             </div>
           )}
           {!isLoading && orders && orders.length > 0 && (
@@ -716,7 +732,7 @@ import { BrandLoader } from '@/components/ui/loader-brand';
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
-                  <TableHead>Type Verre</TableHead>
+                  <TableHead>{mode === 'contacts' ? 'Modèle Lentille' : 'Type Verre'}</TableHead>
                   <TableHead>Fournisseur</TableHead>
                   <TableHead>Statut</TableHead>
                   <TableHead className="text-right">Prix Total</TableHead>

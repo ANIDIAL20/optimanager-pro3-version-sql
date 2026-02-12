@@ -8,6 +8,8 @@ export interface Product {
   prixAchat: number;
   prixVente: number;
   quantiteStock: number;
+  reservedQuantity?: number; // Quantity currently under reservation
+  availableQuantity?: number; // quantiteStock - reservedQuantity
   stockMin?: number; // Minimum stock threshold for alerts
   categorieId?: string;
   marqueId?: string;
@@ -281,6 +283,7 @@ export interface Supplier {
   statut: "Actif" | "Inactif";
   totalAchats?: number;
   defaultTaxMode?: "HT" | "TTC";
+  currentBalance?: number;
   dateCreation: any;
   dateModification: any;
 }
@@ -312,4 +315,40 @@ export interface Order {
   date_creation: string;
   total: number;
   statut: string;
+}
+
+// --- Reservation System Types ---
+
+export enum ReservationStatus {
+  PENDING = 'PENDING',
+  CONFIRMED = 'CONFIRMED',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+  EXPIRED = 'EXPIRED'
+}
+
+export interface ReservationItem {
+  productId: string;
+  productName: string;
+  reference: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+}
+
+export interface Reservation {
+  id: string;
+  userId: string;
+  clientId: string;
+  clientName: string;
+  items: ReservationItem[];
+  status: ReservationStatus;
+  totalAmount: number;
+  depositAmount: number;
+  remainingAmount: number;
+  expiryDate: any; // Date or Timestamp
+  invoiceId?: string; // Link to sale/invoice if converted
+  notes?: string;
+  createdAt: any;
+  updatedAt: any;
 }
