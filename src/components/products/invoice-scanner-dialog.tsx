@@ -788,6 +788,7 @@ export function InvoiceScannerDialog() {
                                                                 setCategories={setCategories}
                                                                 setMaterials={setMaterials}
                                                                 setColors={setColors}
+                                                                duplicateMap={duplicateMap}
                                                             />
                                                         ))}
                                                     </TableBody>
@@ -849,7 +850,7 @@ export function InvoiceScannerDialog() {
 // --- Scanner Product Row Component (Inline for simplicity) ---
 
 function ScannerProductRow({ 
-    index, control, remove, duplicate, brands, categories, materials, colors, handleQuickCreate, isCreatingSetting, setBrands, setCategories, setMaterials, setColors
+    index, control, remove, duplicate, brands, categories, materials, colors, handleQuickCreate, isCreatingSetting, setBrands, setCategories, setMaterials, setColors, duplicateMap
 }: any) {
     const prixAchat = useWatch({ control, name: `items.${index}.prixAchat` });
     const prixVente = useWatch({ control, name: `items.${index}.prixVente` });
