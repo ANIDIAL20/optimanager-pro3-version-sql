@@ -63,7 +63,7 @@ export default async function RootLayout({
           </ErrorBoundary>
         </SessionProvider>
         <Toaster />
-        <SonnerToaster />
+        <SonnerToaster duration={2000} />
         <Analytics />
       </body>
     </html>

@@ -6,7 +6,7 @@
 'use server';
 
 import { db } from '@/db';
-import { products, stockMovements } from '@/db/schema';
+import { products, stockMovements, invoiceImports } from '@/db/schema';
 import { eq, and, or, ilike, desc, lte, asc, sql } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure, logAudit } from '@/lib/audit-log';
@@ -69,7 +69,7 @@ export const getProducts = secureAction(async (userId, user, searchQuery?: strin
                 .orderBy(desc(products.createdAt));
 
             // Transform Drizzle results to frontend interface
-            const mappedProducts: Product[] = results.map((p) => ({
+            const mappedProducts: Product[] = results.map((p: any) => ({
                 id: p.id.toString(),
                 reference: p.reference || '',
                 nomProduit: p.nom,
@@ -334,7 +334,7 @@ export const updateStock = secureAction(async (userId, user, { productId, quanti
         if (isNaN(id)) return { success: false, error: 'ID produit invalide' };
 
         try {
-            return await db.transaction(async (tx) => {
+            return await db.transaction(async (tx: any) => {
                 // 1. Get current stock and lock row for update
                 // Drizzle doesn't support FOR UPDATE directly in query builder easily without raw SQL or custom extensions in some versions, 
                 // but we can use `sql` within select or valid transaction isolation.
@@ -434,7 +434,7 @@ export const getLowStockProducts = secureAction(async (userId, user, threshold?:
             ))
             .orderBy(asc(products.quantiteStock));
 
-        const mapped = results.map((p) => ({
+        const mapped = results.map((p: any) => ({
             id: p.id.toString(),
             name: p.nom,
             stock: p.quantiteStock,
@@ -464,7 +464,7 @@ export const getCategories = secureAction(async (userId, user) => {
             ))
             .orderBy(asc(products.categorie));
 
-        const categories = results.map((r) => ({ 
+        const categories = results.map((r: any) => ({ 
             id: r.category, 
             name: r.category 
         }));
@@ -490,7 +490,7 @@ export const getBrands = secureAction(async (userId, user) => {
             ))
             .orderBy(asc(products.marque));
 
-        const brands = results.map((r) => ({ 
+        const brands = results.map((r: any) => ({ 
             id: r.brand, 
             name: r.brand 
         }));
@@ -514,84 +514,181 @@ export const createBulkProducts = secureAction(async (userId, user, data: { item
          return { success: false, error: `L'ajout de ${data.items.length} produits dépasserait votre limite autorisée (${usage.products.limit}).` };
     }
 
+    const startTime = Date.now();
+
     try {
         const { invoiceData } = data;
+        const supplierId = String((invoiceData as any)?.fournisseurId || 'unknown').toLowerCase().trim();
+        const invoiceNum = invoiceData?.numFacture?.trim();
+        const invoiceDate = invoiceData?.dateAchat || new Date();
 
-        // 1. Prepare and Validate Data
-        const productsToInsert = data.items.map(item => {
-             // Validation: Ensure nom exists
-             if (!item.nomProduit) {
-                 throw new Error("Le nom du produit est obligatoire pour tous les articles.");
+        // 1. Idempotency Check
+        if (invoiceNum) {
+            const results = await db.select().from(invoiceImports)
+                .where(and(
+                    eq(invoiceImports.userId, userId),
+                    eq(invoiceImports.supplierId, supplierId),
+                    eq(invoiceImports.invoiceNumber, invoiceNum),
+                    invoiceData?.dateAchat ? eq(invoiceImports.invoiceDate, invoiceDate) : undefined
+                ))
+                .limit(1);
+
+            if (results.length > 0) {
+                const existingImport = results[0];
+                return { 
+                    success: false, 
+                    error: 'duplicate',
+                    message: `La facture ${invoiceNum} a déjà été importée le ${new Date(existingImport.createdAt!).toLocaleDateString()}.` 
+                };
+            }
+        }
+
+        // 2. Strict Validation & Preparation
+        const seenReferences = new Set<string>();
+        const validItems = data.items.filter(item => item.nomProduit && item.reference && Number(item.quantiteStock) > 0);
+        
+        if (validItems.length === 0) {
+            return { success: false, error: "Aucun produit valide trouvé dans la liste (référence et quantité obligatoire)." };
+        }
+
+        const productsToProcess = validItems.map((item) => {
+             const reference = item.reference!.trim();
+             if (seenReferences.has(reference)) {
+                 throw new Error(`Référence en double détectée dans la liste : ${reference}`);
              }
+             seenReferences.add(reference);
 
-             // Handle Reference
-             const reference = item.reference && item.reference.trim() !== '' 
-                ? item.reference 
-                : `REF-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+             const safeNum = (val: any) => {
+                 if (val === null || val === undefined || val === '') return '0';
+                 const parsed = typeof val === 'string' ? parseFloat(val.replace(',', '.')) : val;
+                 return isNaN(parsed) ? '0' : String(parsed);
+             };
 
              return {
                 userId,
-                nom: item.nomProduit,
+                nom: item.nomProduit!.trim(),
                 reference: reference,
                 categorie: item.categorie || item.categorieId || null,
                 marque: item.marque || item.marqueId || null,
-                fournisseur: item.fournisseur || (invoiceData as any)?.fournisseurId || null,
+                fournisseur: supplierId,
                 modele: item.modele || null,
                 couleur: item.couleur || null,
-                
-                // Ensure numeric values
-                prixAchat: item.prixAchat ? String(item.prixAchat) : '0',
-                prixVente: item.prixVente ? String(item.prixVente) : '0',
-                quantiteStock: item.quantiteStock || 0,
-                seuilAlerte: item.stockMin || 5,
-                
-                description: item.description || (invoiceData?.numFacture ? `Facture: ${invoiceData.numFacture}` : null),
-                details: item.details || null,
-                
-                matiereId: item.matiereId ? parseInt(item.matiereId) : null,
-                couleurId: item.couleurId ? parseInt(item.couleurId) : null,
-                
+                prixAchat: safeNum(item.prixAchat),
+                prixVente: safeNum(item.prixVente),
+                quantiteStock: Math.max(0, parseInt(String(item.quantiteStock || 0))),
+                seuilAlerte: Math.max(0, parseInt(String(item.stockMin || 0))),
+                description: item.description || (invoiceNum ? `Facture: ${invoiceNum}` : null),
                 isActive: true,
                 version: 0,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
+                deletedAt: null,
              };
         });
 
-        // 2. Execute Batch Insert with Transaction 🛡️
-        const results = await db.transaction(async (tx) => {
-             const inserted = await tx.insert(products)
-                .values(productsToInsert)
-                .returning({ id: products.id, nom: products.nom });
-             
-             return inserted;
+        // 3. ATOMIC PROCESS
+        let insertedCount = 0;
+        let updatedCount = 0;
+
+        await db.transaction(async (tx: any) => {
+            const movementsArray: any[] = [];
+
+            for (const item of productsToProcess) {
+                const existingResults = await tx.select().from(products)
+                    .where(and(
+                        eq(products.userId, userId),
+                        eq(products.reference, item.reference)
+                    ))
+                    .limit(1);
+
+                const existing = existingResults[0];
+                let productId: number;
+
+                if (existing) {
+                    const incomingQty = Number(item.quantiteStock);
+                    await tx.update(products)
+                        .set({
+                            quantiteStock: sql`${products.quantiteStock} + ${incomingQty}`,
+                            prixAchat: item.prixAchat,
+                            updatedAt: new Date().toISOString(),
+                            deletedAt: null
+                        })
+                        .where(eq(products.id, existing.id));
+                    
+                    productId = existing.id;
+                    updatedCount++;
+                } else {
+                    const [newProd] = await tx.insert(products).values(item).returning({ id: products.id });
+                    productId = newProd.id;
+                    insertedCount++;
+                }
+
+                movementsArray.push({
+                    userId,
+                    productId,
+                    type: 'IN',
+                    quantite: item.quantiteStock,
+                    notes: `Import Facture ${invoiceNum || ''}`,
+                    createdAt: new Date()
+                });
+            }
+
+            // ✅ BULK INSERT for movements
+            if (movementsArray.length > 0) {
+                await tx.insert(stockMovements).values(movementsArray);
+            }
+
+            if (invoiceNum) {
+                await tx.insert(invoiceImports).values({
+                    userId,
+                    supplierId,
+                    invoiceNumber: invoiceNum,
+                    invoiceDate,
+                    totalItems: productsToProcess.length,
+                    status: 'completed'
+                });
+            }
         });
 
-        // 3. Log Success
-        await logSuccess(userId, 'CREATE', 'products', `BULK-${results.length}`, { 
-            count: results.length, 
-            invoice: invoiceData?.numFacture
-        });
+        const duration = Date.now() - startTime;
         
+        // 4. Log Success with Metrics
+        await logSuccess(userId, 'CREATE', 'products', `BULK-PRO`, { 
+            inserted: insertedCount,
+            updated: updatedCount,
+            invoice: invoiceNum,
+            duration: `${duration}ms`
+        });
+
         revalidatePath('/dashboard/products');
         revalidatePath('/dashboard/stock');
+        revalidatePath('/produits');
         revalidateTag('products');
-        
+
         return { 
             success: true, 
-            count: results.length, 
-            message: `${results.length} produits ajoutés avec succès.` 
+            count: productsToProcess.length, 
+            message: `${insertedCount} nouveaux et ${updatedCount} mis à jour avec succès (${duration}ms).`
         };
 
     } catch (error: any) {
-        console.error('Bulk Create Error (Drizzle):', error);
+        const duration = Date.now() - startTime;
+        console.error(`Bulk Create Error after ${duration}ms:`, error);
         
-        // Enhance error message for end-users
-        let userMessage = "Erreur lors de l'ajout groupé.";
-        if (error.code === '23505') userMessage = "Une référence produit existe déjà."; // Unique constraint
-        if (error.message.includes("nom du produit")) userMessage = error.message;
+        let userMessage = "Erreur système lors de l'ajout groupé.";
+        let errCode = 'unknown';
 
-        await logFailure(userId, 'CREATE', 'products', error.message, 'BULK');
-        return { success: false, error: userMessage };
+        if (error.code === '23505') {
+            userMessage = "Cette facture ou une référence produit existe déjà.";
+            errCode = 'duplicate';
+        } else if (error.message?.includes('timeout')) {
+            userMessage = "L'opération a pris trop de temps.";
+            errCode = 'timeout';
+        } else if (error.message) {
+            userMessage = error.message;
+        }
+
+        await logFailure(userId, 'CREATE', 'products', userMessage, `BULK-PRO-${errCode}`);
+        return { success: false, error: userMessage, code: errCode };
     }
 });

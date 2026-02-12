@@ -1,40 +1,36 @@
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+// src/lib/gemini.ts
 
-const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-if (!apiKey) {
-  throw new Error('⚠️ GEMINI_API_KEY or GOOGLE_API_KEY is missing in .env.local');
+if (!process.env.GEMINI_API_KEY) {
+  throw new Error('❌ GEMINI_API_KEY is missing');
 }
 
-export const genAI = new GoogleGenerativeAI(apiKey);
+export const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Model للـ vision tasks (قراءة الصور)
-export const visionModel = genAI.getGenerativeModel({ 
-  model: "gemini-flash-latest",
+// ✅ For text (prescriptions text extraction)
+export const textModel = genAI.getGenerativeModel({ 
+  model: "models/gemini-2.5-flash",
   generationConfig: {
-    temperature: 0.1, // Low للدقة العالية
-    topP: 0.8,
-    topK: 20,
-    maxOutputTokens: 2048,
-  },
-  safetySettings: [
-    {
-      category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-      threshold: HarmBlockThreshold.BLOCK_NONE,
-    },
-    {
-      category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-      threshold: HarmBlockThreshold.BLOCK_NONE,
-    },
-    {
-      category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-      threshold: HarmBlockThreshold.BLOCK_NONE,
-    },
-    {
-      category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-      threshold: HarmBlockThreshold.BLOCK_NONE,
-    },
-  ],
+    temperature: 0.1,
+    maxOutputTokens: 2048
+  }
 });
 
-console.log('✅ Gemini API initialized with gemini-flash-latest');
+// ✅ For images (invoice scanning)
+export const visionModel = genAI.getGenerativeModel({ 
+  model: "models/gemini-2.5-flash", 
+  generationConfig: {
+    temperature: 0.1,
+    maxOutputTokens: 2048
+  }
+});
+
+// Aliases
+export const invoiceModel = visionModel;
+export const prescriptionModel = visionModel;
+
+console.log('✅ Gemini initialized:', {
+  text: 'gemini-pro',
+  vision: 'gemini-pro-vision'
+});

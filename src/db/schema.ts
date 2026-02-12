@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, boolean, decimal, integer, json, primaryKey, uuid, index, real } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, timestamp, boolean, decimal, integer, json, primaryKey, uuid, index, real, uniqueIndex } from 'drizzle-orm/pg-core';
 import type { AdapterAccount } from "next-auth/adapters";
 import { relations, sql } from 'drizzle-orm';
 
@@ -86,12 +86,40 @@ export const products = pgTable('products', {
   version: integer('version').default(0).notNull(), // 🆕 Optimistic Locking
   createdAt: timestamp('created_at', { mode: 'string' }).defaultNow(),
   updatedAt: timestamp('updated_at', { mode: 'string' }),
+  deletedAt: timestamp('deleted_at'), // 🆕 Soft Delete
 }, (table) => ({
   userIdIdx: index('products_user_id_idx').on(table.userId),
   referenceIdx: index('products_reference_idx').on(table.reference),
   nomIdx: index('products_nom_idx').on(table.nom),
   idx_products_user_marque: index('idx_products_user_marque').on(table.userId, table.marque), // ✅ Composite
   searchIdx: index('products_search_idx').on(table.marque, table.fournisseur),
+  unique_user_reference: uniqueIndex('idx_unique_user_reference').on(table.userId, table.reference),
+  idx_products_not_deleted: index('idx_products_not_deleted').on(table.userId, table.deletedAt), // ✅ Performance for soft delete
+}));
+
+// ========================================
+// 2b. INVOICE IMPORTS (Idempotency & Tracking)
+// ========================================
+export const invoiceImports = pgTable('invoice_imports', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  supplierId: text('supplier_id'), 
+  invoiceNumber: text('invoice_number').notNull(),
+  invoiceDate: timestamp('invoice_date'),
+  
+  status: text('status').default('completed'), // 'completed', 'reverted'
+  totalItems: integer('total_items'),
+  
+  revertedAt: timestamp('reverted_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  userInvoiceIdx: index('idx_user_invoice').on(table.userId, table.invoiceNumber),
+  uniqueImport: uniqueIndex('idx_unique_import').on(
+    table.userId, 
+    table.supplierId, 
+    table.invoiceNumber, 
+    table.invoiceDate
+  ),
 }));
 
 // ========================================
@@ -973,7 +1001,7 @@ export const prescriptions = pgTable('prescriptions', {
   // Ordonnance metadata
   prescriptionDate: timestamp('prescription_date'),
   doctorName: text('doctor_name'),
-  imageUrl: text('image_url').notNull(),
+  imageUrl: text('image_url'),
   
   // OD (Œil Droit / Right Eye)
   odSph: real('od_sph'),        // Sphere: -20.00 to +20.00

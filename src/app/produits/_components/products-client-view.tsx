@@ -54,32 +54,25 @@ export function ProductsClientView({ initialProducts, initialCategories, usageSt
 
   // Handle Search
   React.useEffect(() => {
-    // Skip first run if empty to avoid double fetch, but if search term exists, fetch.
+    // If search is empty, revert to initial products from server
     if (searchTerm === '') {
-         // If search cleared, revert to initial (or re-fetch if needed? Props are usually fresh enough unless we navigated)
-         // Actually, if we search then clear, we want ALL products. 
-         // initialProducts passed from server might be ALL.
          setProducts(initialProducts);
+         setIsLoading(false);
          return;
     }
 
     let isMounted = true;
     const timer = setTimeout(async () => {
+      // Prevent overlapping calls
+      if (isLoading) return; 
+
       setIsLoading(true);
       try {
         const result = await getProducts(searchTerm);
         
         if (isMounted) {
             if (result.success && result.data) {
-                // The action now returns mapped data matching Product interface
                 setProducts(result.data as ProductWithRelations[]);
-            } else {
-                console.error("Search failed:", result.error);
-                toast({
-                    title: "Erreur",
-                    description: "Impossible de rechercher les produits",
-                    variant: "destructive"
-                });
             }
         }
       } catch (err) {
@@ -87,13 +80,13 @@ export function ProductsClientView({ initialProducts, initialCategories, usageSt
       } finally {
         if (isMounted) setIsLoading(false);
       }
-    }, 300);
+    }, 400); // Slightly longer debounce for stability
 
     return () => {
         isMounted = false;
         clearTimeout(timer);
     };
-  }, [searchTerm, initialProducts]); // depend on initialProducts so if we clear search we reset
+  }, [searchTerm]); // Removed initialProducts from here to break potential loops
 
   // Filter products by Category Tab (Client-side filtering of current set)
   const filteredProducts = React.useMemo(() => {
