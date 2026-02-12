@@ -9,8 +9,7 @@ export default function LogoutButton() {
 
     const handleLogout = async () => {
         try {
-            await signOut({ callbackUrl: window.location.origin + '/login' });
-            router.refresh();
+            await signOut({ redirectTo: '/login' });
         } catch (error) {
             console.error("Erreur lors de la déconnexion:", error);
         }
