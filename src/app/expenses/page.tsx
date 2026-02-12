@@ -10,15 +10,16 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ExpenseFilters as ExpenseFiltersType, ExpenseType, ExpenseStatus } from '@/types/expense';
 
 interface ExpensesPageProps {
-    searchParams: { [key: string]: string | string[] | undefined };
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
 export default async function ExpensesPage({ searchParams }: ExpensesPageProps) {
+    const params = await searchParams;
     // Parse search params into filters
     const filters: ExpenseFiltersType = {
-        search: (searchParams.search as string) || undefined,
-        type: (searchParams.type as string) !== 'all' ? (searchParams.type as ExpenseType) : undefined,
-        status: (searchParams.status as string) !== 'all' ? (searchParams.status as ExpenseStatus) : undefined,
+        search: (params.search as string) || undefined,
+        type: (params.type as string) !== 'all' ? (params.type as ExpenseType) : undefined,
+        status: (params.status as string) !== 'all' ? (params.status as ExpenseStatus) : undefined,
         // month/year handling is a bit complex due to period logic, 
         // for now let's reuse 'period' if we construct it, or just pass start/end dates.
         // But the API might expect dates or period string. 
@@ -26,8 +27,8 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
         // It sets 'month' and 'year' params.
     };
 
-    const month = searchParams.month ? parseInt(searchParams.month as string) : undefined;
-    const year = searchParams.year ? parseInt(searchParams.year as string) : undefined;
+    const month = params.month ? parseInt(params.month as string) : undefined;
+    const year = params.year ? parseInt(params.year as string) : undefined;
 
     if (month && year) {
         const startDate = new Date(year, month - 1, 1);
@@ -61,7 +62,7 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <ExpenseFilters />
-                        <Suspense fallback={<TableSkeleton />} key={JSON.stringify(searchParams)}>
+                        <Suspense fallback={<TableSkeleton />} key={JSON.stringify(params)}>
                             <ExpenseListWrapper filters={filters} />
                         </Suspense>
                     </CardContent>
