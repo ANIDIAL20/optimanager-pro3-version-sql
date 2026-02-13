@@ -152,18 +152,26 @@ export function PrescriptionList({ clientId }: PrescriptionListProps) {
                   <TableCell>{p.data?.pd || '-'}</TableCell>
                   <TableCell>{p.data?.doctorName || '-'}</TableCell>
                   <TableCell>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={deletingId === p.id}
-                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                      {/* @ts-ignore */}
+                      <AlertDialog modal={false}>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={deletingId === p.id}
+                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent 
+                          onInteractOutside={(e) => e.preventDefault()}
+                          onOpenAutoFocus={(e) => e.preventDefault()}
+                          onCloseAutoFocus={(e) => {
+                            e.preventDefault();
+                            document.body.style.pointerEvents = 'auto';
+                          }}
                         >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
                         <AlertDialogHeader>
                           <AlertDialogTitle>Supprimer l'ordonnance ?</AlertDialogTitle>
                           <AlertDialogDescription>

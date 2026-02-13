@@ -44,8 +44,8 @@ import { createLensOrder, type LensOrderInput } from '@/app/actions/lens-orders-
 import { BrandLoader } from '@/components/ui/loader-brand';
 
 const LensOrderSchema = z.object({
-  prescriptionId: z.string().min(1, 'Veuillez sélectionner une prescription.'),
-  supplierId: z.string().min(1, 'Veuillez sélectionner un fournisseur.'),
+  prescriptionId: z.coerce.string().min(1, 'Veuillez sélectionner une prescription.'),
+  supplierId: z.coerce.string().min(1, 'Veuillez sélectionner un fournisseur.'),
   orderType: z.enum(['unifocal', 'bifocal', 'progressive', 'contact'], {
     required_error: "Le type de commande est requis.",
   }),
@@ -98,7 +98,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
       try {
         const [prescriptionsRes, suppliersRes, treatmentsRes] = await Promise.all([
           getPrescriptions(clientId),
-          getSuppliersList(undefined), // Assuming no args needed or userId injected
+          getSuppliersList(undefined), 
           getSettings('treatments'),
         ]);
 
@@ -106,17 +106,12 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
           setPrescriptions(prescriptionsRes.data || []);
         }
 
-        // Handle Suppliers (returns Array directly or via wrapper?)
-        // Based on read: getSuppliersList returns Array. secureAction usage might var.
-        // Safety check
         if (Array.isArray(suppliersRes)) {
              setSuppliers(suppliersRes);
         } else if ((suppliersRes as any).success && (suppliersRes as any).data) { // logic if wrapped
              setSuppliers((suppliersRes as any).data);
         } else {
-             // Fallback or empty
              setSuppliers([]); 
-             // Note: if getSuppliersList returns array, we are good.
         }
 
         // Handle Treatments (returns Array directly)
@@ -143,7 +138,8 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
   // Derived State
   const selectedPrescriptionId = form.watch('prescriptionId');
   const fullSelectedPrescription = React.useMemo(() => {
-    return prescriptions.find(p => p.id === selectedPrescriptionId) || null;
+    // Compare as strings to be safe
+    return prescriptions.find(p => p.id?.toString() === selectedPrescriptionId) || null;
   }, [prescriptions, selectedPrescriptionId]);
 
   // Auto-detect order type from lens type input (UX enhancement)
@@ -163,11 +159,28 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
   const onSubmit = async (data: LensOrderFormValues) => {
     setIsSubmitting(true);
     try {
-      const supplier = suppliers.find(s => s.id === data.supplierId);
+      // Validate conversions
+      const pId = parseInt(data.prescriptionId);
+      const sId = parseInt(data.supplierId);
+
+      if (isNaN(pId)) {
+        toast({ title: "Erreur", description: "Prescription invalide", variant: "destructive" });
+        setIsSubmitting(false);
+        return;
+      }
+      if (isNaN(sId)) {
+        toast({ title: "Erreur", description: "Fournisseur invalide", variant: "destructive" });
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Safe find using loose assumption (s.id could be number, data.supplierId is string)
+      const supplier = suppliers.find(s => s.id?.toString() === data.supplierId);
       
       const orderInput: LensOrderInput = {
         clientId: parseInt(clientId),
-        prescriptionId: parseInt(data.prescriptionId),
+        prescriptionId: pId,
+        supplierId: sId,
         orderType: data.orderType,
         lensType: data.lensType,
         treatment: data.treatments?.join(', ') || null,
@@ -191,7 +204,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
         
         // Professional Pricing
         sellingPrice: data.sellingPrice,
-        estimatedBuyingPrice: data.estimatedBuyingPrice,
+        estimatedBuyingPrice: data.estimatedBuyingPrice || 0,
         
         // Legacy (kept for compat)
         unitPrice: data.sellingPrice,
@@ -199,7 +212,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
         totalPrice: data.sellingPrice,
         
         status: 'pending',
-        notes: data.notes
+        notes: data.notes || '',
       };
 
       const result = await createLensOrder(orderInput);
@@ -216,6 +229,8 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
             lensType: '',
             treatments: [],
             notes: '',
+            sellingPrice: 0,
+            estimatedBuyingPrice: undefined
         });
         if (onSuccess) onSuccess();
       } else {
@@ -261,7 +276,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                     <SearchableSelect
                       options={prescriptions.map((p) => ({
                         label: `${new Date(p.date).toLocaleDateString()} - ${p.clientName || 'Client'}`,
-                        value: p.id,
+                        value: p.id?.toString(), // Ensure string
                       }))}
                       value={field.value}
                       onChange={field.onChange}
@@ -283,7 +298,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                     <SearchableSelect
                       options={suppliers.map((s) => ({
                         label: s.nomCommercial || s.name,
-                        value: s.id,
+                        value: s.id?.toString(), // Ensure string
                       }))}
                       value={field.value}
                       onChange={field.onChange}

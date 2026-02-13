@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { SensitiveData } from "@/components/ui/sensitive-data";
 import { cn } from "@/lib/utils";
 import type { Supplier as SupplierType } from "@/lib/types";
+import { SupplierActions } from "./supplier-actions";
 
 // Extend the Supplier type for table display
 export type Supplier = SupplierType;
@@ -138,36 +139,10 @@ export const columns: ColumnDef<Supplier>[] = [
             const supplier = row.original;
 
             return (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                            <span className="sr-only">Ouvrir menu</span>
-                            <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem asChild>
-                            <Link href={`/suppliers/${supplier.id}`}>
-                                Voir détails
-                            </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                            <Link href={`/suppliers/${supplier.id}/edit`}>
-                                Modifier
-                            </Link>
-                        </DropdownMenuItem>
-                        
-                        <DropdownMenuItem onClick={() => { /* This would open the payment dialog */ }}>
-                            Ajouter paiement
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-red-600">
-                            Supprimer
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                <SupplierActions 
+                    supplierId={supplier.id} 
+                    supplierName={supplier.nomCommercial} 
+                />
             );
         },
     },

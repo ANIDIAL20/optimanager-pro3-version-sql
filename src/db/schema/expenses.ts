@@ -1,5 +1,6 @@
 import { pgTable, serial, text, timestamp, real, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+// Schema re-evaluation trigger
 
 export const expenses = pgTable('expenses_v2', {
     id: serial('id').primaryKey(),

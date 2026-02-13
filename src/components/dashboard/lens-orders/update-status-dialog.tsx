@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { updateLensOrderStatus } from '@/app/actions/lens-orders-actions';
+import { updateLensOrder } from '@/app/actions/lens-orders-actions';
 import {
   Dialog,
   DialogContent,
@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
 
 interface UpdateStatusDialogProps {
   orderId: number;
@@ -25,6 +26,7 @@ interface UpdateStatusDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onStatusUpdated?: () => void;
+  selectedOrder?: any;
 }
 
 export function UpdateStatusDialog({
@@ -33,22 +35,20 @@ export function UpdateStatusDialog({
   open,
   onOpenChange,
   onStatusUpdated,
+  selectedOrder,
 }: UpdateStatusDialogProps) {
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
   const [status, setStatus] = useState(currentStatus);
 
   const handleSave = () => {
-    // No change, just close
     if (status === currentStatus) {
       onOpenChange(false);
       return;
     }
 
     startTransition(async () => {
-      // ✅ FIX: secureAction injects userId automatically
-      // Only pass orderId and status
-      const result = await updateLensOrderStatus(orderId, status);
+      const result = await updateLensOrder(orderId.toString(), { status }) as any;
 
       if (result.success) {
         toast({
@@ -56,7 +56,7 @@ export function UpdateStatusDialog({
           description: 'Statut mis à jour avec succès',
         });
         onOpenChange(false);
-        onStatusUpdated?.(); // Refresh parent list
+        onStatusUpdated?.();
       } else {
         toast({
           title: 'Erreur',
@@ -68,44 +68,56 @@ export function UpdateStatusDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Modifier le statut de la commande</DialogTitle>
-        </DialogHeader>
+    <>
+      {/* @ts-ignore */}
+      <Dialog modal={false} open={open} onOpenChange={onOpenChange}>
+        <DialogContent
+          onInteractOutside={(e) => e.preventDefault()}
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onCloseAutoFocus={(e) => {
+            e.preventDefault();
+            document.body.style.pointerEvents = 'auto';
+            document.documentElement.style.pointerEvents = 'auto';
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Modifier le statut de la commande</DialogTitle>
+          </DialogHeader>
 
-        <div className="py-4">
-          <Select value={status} onValueChange={setStatus} disabled={isPending}>
-            <SelectTrigger>
-              <SelectValue placeholder="Sélectionner un statut" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="pending">En attente</SelectItem>
-              <SelectItem value="ordered">Commandée</SelectItem>
-              <SelectItem value="received">Reçue</SelectItem>
-              <SelectItem value="ready">Prête</SelectItem>
-              <SelectItem value="delivered">Livrée</SelectItem>
-              <SelectItem value="cancelled">Annulée</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+          <div className="py-4">
+            {/* @ts-ignore */}
+            <Select modal={false} value={status} onValueChange={(val: any) => setStatus(val)} disabled={isPending}>
+              <SelectTrigger>
+                <SelectValue placeholder="Sélectionner un statut" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pending">En attente</SelectItem>
+                <SelectItem value="ordered">Commandée</SelectItem>
+                <SelectItem value="received">Reçue</SelectItem>
+                <SelectItem value="ready">Prête</SelectItem>
+                <SelectItem value="delivered">Livrée</SelectItem>
+                <SelectItem value="cancelled">Annulée</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isPending}
-          >
-            Annuler
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={isPending || status === currentStatus}
-          >
-            {isPending ? 'Enregistrement...' : 'Enregistrer'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isPending}
+            >
+              Annuler
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={isPending || status === currentStatus}
+            >
+              {isPending ? 'Enregistrement...' : 'Enregistrer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

@@ -33,95 +33,63 @@ import { ClientOverview } from '@/components/dashboard/clients/tabs/client-overv
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { InteractionHistory } from './_components/interaction-history';
 import { ArrowLeft, MessageSquare } from 'lucide-react';
+import { useBreadcrumbStore } from '@/hooks/use-breadcrumb-store';
+import { getClientReservationsAction } from '@/app/actions/reservation-actions';
+import { ClientReservationsTab } from '@/features/reservations/components/client-reservations-tab';
+import type { FrameReservation } from '@/features/reservations/types/reservation.types';
+import { Tag } from 'lucide-react';
 
-export default function ClientDetailView() {
+interface ClientDetailViewProps {
+    initialClient: Client;
+    initialReservations: FrameReservation[];
+}
+
+export default function ClientDetailView({ initialClient, initialReservations }: ClientDetailViewProps) {
     const params = useParams();
     const id = params.id as string;
 
     const searchParams = useSearchParams();
-    const activeTab = searchParams.get('tab') || 'overview';
+    const defaultTab = searchParams.get('tab') || 'overview';
+    const [activeTab, setActiveTab] = React.useState(defaultTab);
 
-    const [client, setClient] = React.useState<Client | null>(null);
-    const [isLoading, setIsLoading] = React.useState(true);
-    const [error, setError] = React.useState<string | null>(null);
-    const [refreshKey, setRefreshKey] = React.useState(0);
+    const client = initialClient;
+    const reservations = initialReservations;
     
+    // State to pass reservation to POS when clicking "Utiliser"
+    const [reservationToProcess, setReservationToProcess] = React.useState<number | null>(null);
+
+    // Refresh key for other tabs that might still need manual refresh triggers
+    const [refreshKey, setRefreshKey] = React.useState(0);
+    const { setLabel } = useBreadcrumbStore();
+    
+    // Update breadcrumb label with client name
     React.useEffect(() => {
-        async function fetchClient() {
-            try {
-                const result = await getClient(id);
-                if (result.success && result.client) {
-                    const c = result.client;
-                    // Adapter: Map Server Action Client (name, phone) to Legacy Client (nom, prenom, telephone1)
-                    const nameParts = c.name.split(' ');
-                    const prenom = nameParts.length > 1 ? nameParts[0] : '';
-                    const nom = nameParts.length > 1 ? nameParts.slice(1).join(' ') : c.name;
-
-                    const adaptedClient: Client = {
-                        ...c,
-                        id: c.id!, // ensure ID
-                        nom,
-                        prenom,
-                        telephone1: c.phone || '', // Map phone
-                        // Ensure other required legacy fields if missing
-                    } as unknown as Client; // Force cast for now to avoid extensive type rewrites
-
-                    setClient(adaptedClient);
-                } else {
-                    setError(result.error || "Impossible de charger le client");
-                }
-            } catch (err) {
-                console.error(err);
-                setError("Erreur de connexion");
-            } finally {
-                setIsLoading(false);
+        if (client) {
+            const name = `${client.prenom || ''} ${client.nom || ''}`.trim() || client.name;
+            if (name && id) {
+                setLabel(id, name);
             }
         }
-        if (id) fetchClient();
-    }, [id]);
+    }, [client, id, setLabel]);
 
-    if (isLoading) {
-        return (
-            <div className="flex items-center justify-center h-screen">
-                <BrandLoader size="md" className="text-primary" />
-            </div>
-        );
-    }
+    // Update active tab when URL param changes (e.g. back button)
+    React.useEffect(() => {
+        const tab = searchParams.get('tab');
+        if (tab) setActiveTab(tab);
+    }, [searchParams]);
 
-    if (error) {
-        return (
-            <Card>
-                <CardHeader>
-                    <CardTitle>Erreur</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-destructive">
-                        {error}
-                    </p>
-                </CardContent>
-            </Card>
-        );
-    }
+    const handleTabChange = (value: string) => {
+        setActiveTab(value);
+        // Optional: Update URL without navigation to keep state in sync
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', value);
+        window.history.replaceState({}, '', url);
+    };
 
-    if (!client) {
-        return (
-            <Card>
-                <CardHeader>
-                    <CardTitle>Client non trouvé</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <p>
-                        Le client avec l'ID {id} n'a pas été trouvé.
-                    </p>
-                    <Button asChild className="mt-4">
-                        <Link href="/clients">
-                            <ChevronLeft /> Retour à la liste des clients
-                        </Link>
-                    </Button>
-                </CardContent>
-            </Card>
-        );
-    }
+    const handleUseReservation = (res: FrameReservation) => {
+        setReservationToProcess(res.id);
+        setActiveTab('sales');
+    };
 
     return (
         <div className="space-y-6 p-6">
@@ -141,7 +109,7 @@ export default function ClientDetailView() {
             <ClientHeader client={client} clientId={id} />
 
             {/* Tabs Section */}
-            <Tabs defaultValue={activeTab} className="space-y-6">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
                 <TabsList className="bg-white border border-slate-200 p-1 rounded-lg shadow-sm">
                     <TabsTrigger value="overview" className="gap-2">
                         <User className="h-4 w-4" />
@@ -171,6 +139,10 @@ export default function ClientDetailView() {
                         <MessageSquare className="h-4 w-4" />
                         Journal de Bord
                     </TabsTrigger>
+                    <TabsTrigger value="reservations" className="gap-2 text-orange-600 data-[state=active]:bg-orange-50">
+                        <Tag className="h-4 w-4" />
+                        Réservations {reservations.length > 0 && `(${reservations.length})`}
+                    </TabsTrigger>
                 </TabsList>
 
                 {/* Overview Tab - Mini Bento Grid */}
@@ -180,7 +152,11 @@ export default function ClientDetailView() {
 
                 {/* Point de Vente Tab */}
                 <TabsContent value="sales" className="space-y-6">
-                    <ClientPOSTab client={client} clientId={id} />
+                    <ClientPOSTab 
+                        client={client} 
+                        clientId={id} 
+                        initialReservationId={reservationToProcess}
+                    />
                 </TabsContent>
 
                 {/* Prescriptions Tab */}
@@ -230,6 +206,15 @@ export default function ClientDetailView() {
 
                 <TabsContent value="purchase-history">
                     <PurchaseHistoryTable clientId={id} />
+                </TabsContent>
+
+                {/* Reservations Tab */}
+                <TabsContent value="reservations">
+                    <ClientReservationsTab 
+                        clientId={parseInt(id)} 
+                        reservations={reservations}
+                        onUseReservation={handleUseReservation}
+                    />
                 </TabsContent>
             </Tabs>
         </div>
