@@ -87,7 +87,8 @@ export const createClient = adminAction(async (user, formData: FormData) => {
 
     // Check existing
     const existingResult = await db.execute(sql`SELECT id FROM "users" WHERE "email" = ${email} LIMIT 1`);
-    const existingUser = existingResult[0];
+    const existingRows = Array.isArray(existingResult) ? existingResult : (existingResult.rows || []);
+    const existingUser = existingRows[0];
 
     if (existingUser) {
         return { success: false, error: "Un utilisateur avec cet email existe déjà." };
@@ -397,8 +398,12 @@ export async function getClientUsageStats(uid: string) {
 
 export async function dbCheck() {
     try {
-        const tables = await db.execute(sql`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`);
-        const columns = await db.execute(sql`SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' ORDER BY table_name, ordinal_position`);
+        const tablesResult = await db.execute(sql`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`);
+        const columnsResult = await db.execute(sql`SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' ORDER BY table_name, ordinal_position`);
+        
+        const tables = Array.isArray(tablesResult) ? tablesResult : (tablesResult.rows || []);
+        const columns = Array.isArray(columnsResult) ? columnsResult : (columnsResult.rows || []);
+        
         return { tables, columns };
     } catch (e: any) {
         return { error: e.message };
