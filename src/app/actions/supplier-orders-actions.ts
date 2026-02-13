@@ -96,7 +96,8 @@ export const createSupplierOrder = secureAction(async (userId, user, data: any) 
             AND "user_id" = ${userId}
             LIMIT 1
         `);
-        const supplier = supplierResult[0];
+        const supplierRows = Array.isArray(supplierResult) ? supplierResult : (supplierResult.rows || []);
+        const supplier = supplierRows[0];
 
         if (!supplier && !data.supplierName) {
              return { success: false, error: 'Fournisseur manquant' };
@@ -145,7 +146,8 @@ export const createSupplierOrder = secureAction(async (userId, user, data: any) 
                     ${new Date().toISOString()}
                 ) RETURNING id
             `);
-            const orderId = insertResult[0].id;
+            const insertRows = Array.isArray(insertResult) ? insertResult : (insertResult.rows || []);
+            const orderId = insertRows[0].id;
 
             const newOrder = { 
                 id: orderId, 
@@ -412,7 +414,7 @@ export const createSupplierPayment = secureAction(async (userId, user, data: { s
  */
 export const getSupplierStats = secureAction(async (userId, user, supplierId: string) => {
     try {
-        const stats = await db.execute(sql`
+        const queryResult = await db.execute(sql`
             SELECT 
                 COALESCE(SUM(montant_total), 0) as total_ordered,
                 COALESCE(SUM(montant_paye), 0) as total_paid,
@@ -421,8 +423,18 @@ export const getSupplierStats = secureAction(async (userId, user, supplierId: st
             FROM supplier_orders
             WHERE "user_id" = ${userId} AND "supplier_id" = ${supplierId}
         `);
+        
+        const statsRows = Array.isArray(queryResult) ? queryResult : (queryResult.rows || []);
+        const stats = statsRows[0];
+        
+        if (stats) {
+            stats.total_ordered = Number(stats.total_ordered || 0);
+            stats.total_paid = Number(stats.total_paid || 0);
+            stats.total_debt = Number(stats.total_debt || 0);
+            stats.orders_count = Number(stats.orders_count || 0);
+        }
 
-        return { success: true, stats: stats[0] };
+        return { success: true, stats };
     } catch (error: any) {
         return { success: false, error: error.message };
     }
@@ -440,7 +452,15 @@ export const getGlobalSupplierBalances = secureAction(async (userId) => {
             FROM supplier_orders
             WHERE "user_id" = ${userId}
         `);
-        return { success: true, data: results[0] };
+        const rows = Array.isArray(results) ? results : (results.rows || []);
+        const data = rows[0];
+
+        if (data) {
+            data.total_purchases = Number(data.total_purchases || 0);
+            data.total_debt = Number(data.total_debt || 0);
+        }
+
+        return { success: true, data };
     } catch (error: any) {
         return { success: false, error: error.message };
     }
