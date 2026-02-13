@@ -131,7 +131,8 @@ export function ProductSearch({ onProductSelect }: ProductSearchProps) {
                                 product.quantiteStock <= 0 && "opacity-60"
                             )}
                             onClick={() => {
-                                if (product.quantiteStock > 0) {
+                                const available = product.type === 'MONTURE' ? (product.availableQuantity ?? product.quantiteStock) : product.quantiteStock;
+                                if (available > 0) {
                                     onProductSelect(product);
                                 }
                             }}
@@ -139,13 +140,27 @@ export function ProductSearch({ onProductSelect }: ProductSearchProps) {
                             <CardContent className="p-3 flex justify-between items-center">
                                 <div>
                                     <div className="font-medium">{product.nomProduit}</div>
-                                    <div className="text-xs text-muted-foreground flex gap-2">
+                                    <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
                                         <span>Réf: {product.reference || '-'}</span>
-                                        <span className={cn(
-                                            product.quantiteStock > 0 ? "text-green-600" : "text-destructive"
-                                        )}>
-                                            Stock: {product.quantiteStock}
-                                        </span>
+                                        {product.type === 'MONTURE' ? (
+                                            <>
+                                                <span className="text-slate-500">Stock: {product.quantiteStock}</span>
+                                                {product.reservedQuantity && product.reservedQuantity > 0 ? (
+                                                    <span className="text-orange-600 font-medium">({product.reservedQuantity} réservé{product.reservedQuantity > 1 ? 's' : ''})</span>
+                                                ) : null}
+                                                <span className={cn(
+                                                    (product.availableQuantity ?? product.quantiteStock) > 0 ? "text-emerald-600 font-bold" : "text-destructive font-bold"
+                                                )}>
+                                                    Disp: {product.availableQuantity ?? product.quantiteStock}
+                                                </span>
+                                            </>
+                                        ) : (
+                                            <span className={cn(
+                                                product.quantiteStock > 0 ? "text-green-600" : "text-destructive"
+                                            )}>
+                                                Stock: {product.quantiteStock}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="text-right">

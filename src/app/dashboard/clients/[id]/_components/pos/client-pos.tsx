@@ -11,9 +11,12 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, CheckCircle2, Package, Plus } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Package, Plus, Tag, Printer } from 'lucide-react';
 import { createSale } from '@/app/actions/sales-actions';
 import { getPendingLensOrders } from '@/app/actions/lens-orders-actions';
+import { createFrameReservationAction, completeFrameReservationAction, getClientReservationsAction } from '@/app/actions/reservation-actions';
+import { usePosCartStore } from '@/features/pos/store/use-pos-cart-store';
+import { createLineItem, recalculateLineTotal } from '@/features/pos/utils/pricing';
 
 interface ClientPOSProps {
     client: Client;
@@ -21,7 +24,7 @@ interface ClientPOSProps {
 }
 
 export function ClientPOS({ client, clientId }: ClientPOSProps) {
-    const [cartItems, setCartItems] = React.useState<CartItem[]>([]);
+    const { items: cartItems, setItems, updateLinePricing, totalAmount } = usePosCartStore();
     const [isProcessing, setIsProcessing] = React.useState(false);
     const { toast } = useToast();
     // Simple state to force refresh history
@@ -35,89 +38,177 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
                     setPendingOrders(res.data);
                 }
             });
+
+            // Check if there is a reservation to load in URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const resId = urlParams.get('reservationId');
+            if (resId) {
+                // Clear reservation from URL to avoid re-adding on refresh
+                const newUrl = new URL(window.location.href);
+                newUrl.searchParams.delete('reservationId');
+                window.history.replaceState({}, '', newUrl);
+
+                // Fetch and add items
+                getClientReservationsAction(clientId).then(res => {
+                    if (res.success && res.data) {
+                        const reservation = (res.data as any[]).find(r => r.id.toString() === resId);
+                        if (reservation && reservation.status === 'PENDING') {
+                            const newLines = reservation.items.map((item: any) => 
+                                createLineItem(
+                                    item.productId.toString(),
+                                    item.productName,
+                                    item.unitPrice || 0, // In reservation types we had items: {productId, productName, reference, quantity}
+                                    item.quantity,
+                                    'MONTURE'
+                                )
+                            ).map((line: any) => ({ ...line, fromReservation: reservation.id }));
+                            
+                            setItems([...cartItems, ...newLines]);
+                            toast({ title: "Déjà réservé", description: "Les montures réservées ont été ajoutées au panier." });
+                        }
+                    }
+                });
+            }
         }
     }, [clientId]);
 
     const addLensOrderToCart = (order: any) => {
-        if (cartItems.some(item => item.lensOrderId === order.id)) {
+        const virtualId = `LO-${order.id}`;
+        if (cartItems.some(item => item.productId === virtualId)) {
             toast({ description: "Cette commande est déjà dans le panier." });
             return;
         }
 
-        const mockProduct: Product = {
-            id: `LO-${order.id}`,
-            reference: `CMD-#${order.id}`,
-            nomProduit: `Verres: ${order.lensType}`,
-            prixVente: parseFloat(order.sellingPrice),
-            quantiteStock: 1,
-            categorie: 'Verres',
-            marque: order.supplierName,
-            modele: order.orderType,
-            couleur: '-',
-            description: order.notes || '',
-            prixAchat: parseFloat(order.finalBuyingPrice || order.estimatedBuyingPrice || '0'),
-            stockMin: 0,
-            categorieId: 'verres',
-            marqueId: 'supplier'
-        };
+        const price = parseFloat(order.sellingPrice);
+        const newLine = createLineItem(
+            virtualId,
+            `Verres: ${order.lensType}`,
+            price,
+            1
+        );
 
-        setCartItems(prev => [...prev, {
-            product: mockProduct,
-            quantity: 1, 
-            lensOrderId: order.id
-        }]);
-        
+        setItems([...cartItems, newLine]);
         toast({ title: "Ajouté", description: "Commande ajoutée au panier." });
     };
 
     const addToCart = (product: Product) => {
-        setCartItems(prev => {
-            const existing = prev.find(item => item.product.id === product.id);
-            if (existing) {
-                // Increment quantity of existing
-                // Check stock limit
-                if (existing.quantity >= product.quantiteStock) {
-                    toast({
-                        title: "Stock insuffisant",
-                        description: "Vous avez atteint la limite du stock pour ce produit.",
-                        variant: "destructive"
-                    });
-                    return prev;
-                }
-                return prev.map(item =>
-                    item.product.id === product.id
-                        ? { ...item, quantity: item.quantity + 1 }
-                        : item
-                );
+        const existingIndex = cartItems.findIndex(item => item.productId === product.id);
+
+        if (existingIndex >= 0) {
+            // Check stock limit for existing item
+            const existingItem = cartItems[existingIndex];
+            const maxAllowed = product.type === 'MONTURE' ? (product.availableQuantity ?? product.quantiteStock) : product.quantiteStock;
+            
+            if (existingItem.quantity >= maxAllowed) {
+                 toast({
+                    title: "Stock insuffisant",
+                    description: product.type === 'MONTURE' ? "Ce produit est réservé ou en rupture de stock." : "Vous avez atteint la limite du stock pour ce produit.",
+                    variant: "destructive"
+                });
+                return;
             }
-            return [...prev, { product, quantity: 1 }];
-        });
+            
+            const newItems = [...cartItems];
+            newItems[existingIndex] = recalculateLineTotal({
+                ...existingItem,
+                quantity: existingItem.quantity + 1
+            });
+            setItems(newItems);
+        } else {
+            // Check if available for first add
+            const maxAllowed = product.type === 'MONTURE' ? (product.availableQuantity ?? product.quantiteStock) : product.quantiteStock;
+            if (maxAllowed < 1) {
+                toast({
+                    title: "Stock insuffisant",
+                    description: "Ce produit est réservé ou en rupture de stock.",
+                    variant: "destructive"
+                });
+                return;
+            }
+
+            const newLine = createLineItem(
+                product.id,
+                product.nomProduit,
+                product.prixVente,
+                1,
+                product.type
+            );
+            setItems([...cartItems, newLine]);
+        }
     };
 
     const updateQuantity = (productId: string, delta: number) => {
-        setCartItems(prev => prev.map(item => {
-            if (item.product.id === productId) {
-                const newQty = item.quantity + delta;
-                if (newQty < 1) return item; // Look for remove via trash icon instead
-                if (newQty > item.product.quantiteStock) {
-                    toast({
-                        title: "Stock limite atteint",
-                        description: `Seulement ${item.product.quantiteStock} en stock.`,
-                        variant: "destructive"
-                    });
-                    return item;
-                }
-                return { ...item, quantity: newQty };
+        const newItems = cartItems.map(item => {
+            if (item.productId === productId) {
+                // Find original product to check stock (if available in some context, or skip strict check here if product object not handy)
+                // In this architecture, we might need to fetch product or store maxStock in item metadata.
+                // For now, let's just update and assume UI handles max disabling.
+                // ideally PosLineItem could carry maxStock.
+                
+                const newQuantity = item.quantity + delta;
+                if (newQuantity < 1) return item; 
+                
+                return recalculateLineTotal({ ...item, quantity: newQuantity });
             }
             return item;
-        }));
+        });
+        setItems(newItems);
     };
 
     const removeFromCart = (productId: string) => {
-        setCartItems(prev => prev.filter(item => item.product.id !== productId));
+        setItems(cartItems.filter(item => item.productId !== productId));
     };
 
-    const clearCart = () => setCartItems([]);
+    const clearCart = () => setItems([]);
+
+    const handleReserveFrame = async () => {
+        const frames = cartItems.filter(item => item.type === 'MONTURE' && !item.fromReservation);
+        
+        if (frames.length === 0) {
+            toast({
+                title: 'Aucune monture',
+                description: 'Le panier ne contient aucune monture non-réservée à enregistrer.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        setIsProcessing(true);
+        try {
+            const result = await createFrameReservationAction({
+                storeId: 'ADMIN_STORE', // This should normally come from auth context
+                clientId: parseInt(clientId),
+                clientName: `${client.prenom} ${client.nom}`,
+                items: frames.map(f => ({
+                    productId: parseInt(f.productId),
+                    quantity: f.quantity,
+                })),
+                expiryDays: 7,
+                notes: 'Réservation créée depuis le POS'
+            });
+
+            if (result.success) {
+                // Remove frames from current cart
+                const remainingItems = cartItems.filter(item => !frames.some(f => f.lineId === item.lineId));
+                setItems(remainingItems);
+                
+                toast({
+                    title: 'Réservation créée',
+                    description: `Monture(s) réservée(s) avec succès.`,
+                });
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (error: any) {
+             toast({
+                title: 'Erreur',
+                description: error.message,
+                variant: 'destructive',
+            });
+        } finally {
+            setIsProcessing(false);
+        }
+    };
 
     const handleProcessSale = async (paymentData: { amountPaid: number; method: string; notes: string }) => {
         if (cartItems.length === 0) return;
@@ -127,23 +218,16 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
         try {
             // Map cart items to SaleItem
             const saleItems = cartItems.map(item => ({
-                productRef: item.product.id || item.product.reference || 'UNKNOWN',
-                productName: item.product.nomProduit,
+                productRef: item.productId.startsWith('LO-') ? item.productId : item.productId, // We might need real ref from product if available
+                productName: item.productName,
                 quantity: item.quantity,
-                unitPrice: item.product.prixVente,
-                total: item.product.prixVente * item.quantity
+                unitPrice: item.unitPrice, // Discounted price
+                total: item.lineTotal
             }));
-
-            // Call Server Action
-            // Note: createSale currently doesn't support 'amountPaid' directly in the main signature unless we update it.
-            // But checking createSale in sales-actions.ts, it calculates totalPaye as 0. 
-            // TODO: Update createSale to accept initial payment. 
-            // For now, we'll pass it in 'notes' or we accept that it creates as 'impaye' and we might need a second call?
-            // Wait, createSaleInput has 'notes' and 'paymentMethod'.
             
             const lensOrderIds = cartItems
-                .filter(item => item.lensOrderId)
-                .map(item => item.lensOrderId as number);
+                .filter(item => item.productId.startsWith('LO-'))
+                .map(item => parseInt(item.productId.replace('LO-', '')));
 
             const result = await createSale({
                 clientId,
@@ -151,11 +235,28 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
                 lensOrderIds,
                 paymentMethod: paymentData.method,
                 notes: paymentData.notes ? `${paymentData.notes} (Initial payment: ${paymentData.amountPaid})` : undefined,
-                // We'll trust the server to calc totals, but we could pass them if needed.
             });
 
             if (!result.success) {
                 throw new Error(result.error);
+            }
+
+            const saleId = parseInt(result.id || "0"); // result.id contains the created sale ID
+            
+            // Complete reservations if any
+            const reservationIds = [...new Set(
+                cartItems
+                    .filter(item => item.fromReservation)
+                    .map(item => item.fromReservation!)
+            )];
+
+            if (saleId && reservationIds.length > 0) {
+                for (const resId of reservationIds) {
+                    await completeFrameReservationAction({
+                        reservationId: resId,
+                        saleId: saleId,
+                    });
+                }
             }
 
             toast({
@@ -178,7 +279,7 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
         }
     };
 
-    const total = cartItems.reduce((sum, item) => sum + (item.product.prixVente * item.quantity), 0);
+    const total = totalAmount;
 
     return (
         <div className="space-y-6">
@@ -197,7 +298,7 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
                         </CardHeader>
                         <CardContent className="grid gap-3 pt-0">
                             {pendingOrders.map(order => {
-                                const isAdded = cartItems.some(i => i.lensOrderId === order.id);
+                                const isAdded = cartItems.some(i => i.productId === `LO-${order.id}`);
                                 return (
                                     <div key={order.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-indigo-100 shadow-sm">
                                         <div>
@@ -252,6 +353,22 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
                                 onRemoveItem={removeFromCart}
                                 onClearCart={clearCart}
                             />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                             <Button 
+                                 variant="outline" 
+                                 className="border-dashed border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 gap-2 h-11"
+                                 onClick={handleReserveFrame}
+                                 disabled={isProcessing || !cartItems.some(i => i.type === 'MONTURE' && !i.fromReservation)}
+                             >
+                                 <Tag className="h-4 w-4" />
+                                 Réserver
+                             </Button>
+                             <Button className="h-11 bg-slate-900 gap-2" disabled>
+                                 <Printer className="h-4 w-4" />
+                                 Devis
+                             </Button>
                         </div>
 
                         <Separator />

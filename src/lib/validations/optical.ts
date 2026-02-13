@@ -31,30 +31,42 @@ export const OptionalOpticalSpecSchema = z
   )
   .optional();
 
+// Helper for optional string/number fields that can be null
+const NullableString = z.string().nullable().optional().or(z.literal(''));
+
 export const LensOrderSchema = z.object({
   clientId: z.number().int(),
-  orderType: z.string().min(1),
+  prescriptionId: z.number().int().optional().nullable(),
+  supplierId: z.number().int(),
+  supplierName: z.string().optional().nullable(), // Allow optional if ID is provided
+  orderType: z.enum(['progressive', 'bifocal', 'unifocal', 'contact']),
   lensType: z.string().min(1),
-  supplierId: z.string().uuid(),
-  supplierName: z.string().min(1),
   
-  // Right Eye
-  sphereR: OpticalSpecSchema,
-  cylindreR: OpticalSpecSchema,
-  axeR: z.coerce.number().int().min(0).max(180).optional(),
-  additionR: OpticalSpecSchema,
-  hauteurR: z.coerce.number().optional(),
+  // Right Eye - Allow strings/nulls directly as they come from DB/Form
+  sphereR: NullableString,
+  cylindreR: NullableString,
+  axeR: NullableString,
+  additionR: NullableString,
+  hauteurR: NullableString,
   
   // Left Eye
-  sphereL: OpticalSpecSchema,
-  cylindreL: OpticalSpecSchema,
-  axeL: z.coerce.number().int().min(0).max(180).optional(),
-  additionL: OpticalSpecSchema,
-  hauteurL: z.coerce.number().optional(),
+  sphereL: NullableString,
+  cylindreL: NullableString,
+  axeL: NullableString,
+  additionL: NullableString,
+  hauteurL: NullableString,
+  
+  // Material
+  matiere: NullableString,
+  indice: NullableString,
   
   sellingPrice: z.coerce.number().min(0),
-  unitPrice: z.coerce.number().min(0),
+  estimatedBuyingPrice: z.coerce.number().optional().default(0),
+  unitPrice: z.coerce.number().min(0).optional(), // Legacy
   quantity: z.coerce.number().int().min(1).default(1),
-  treatment: z.string().optional(),
-  notes: z.string().optional(),
+  totalPrice: z.coerce.number().optional(), // Legacy
+
+  treatment: NullableString,
+  status: z.string().optional(),
+  notes: NullableString,
 });

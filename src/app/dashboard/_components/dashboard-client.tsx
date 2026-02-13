@@ -25,6 +25,7 @@ import {
     Briefcase
 } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
+import { ExpiringReservationsWidget } from '@/features/reservations/components/expiring-reservations-widget';
 
 interface DashboardData {
     globalRevenue: number;
@@ -46,6 +47,7 @@ interface DashboardData {
         status: string;
         resteAPayer?: number;
     }>;
+    pendingReservations: any[]; // Frame reservations
 }
 
 interface UsageStats {
@@ -171,6 +173,16 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                     </div>
                 </Link>
             </div>
+
+            {/* Expiring Reservations Section (Bonus) */}
+            {data?.pendingReservations && data.pendingReservations.length > 0 && (
+                <div className="animate-in fade-in slide-in-from-top-4 duration-500">
+                    <ExpiringReservationsWidget 
+                        reservations={data.pendingReservations} 
+                        totalPending={data.pendingReservations.length}
+                    />
+                </div>
+            )}
 
             {/* Middle Row: Stock + Recent Sales + Quick Access */}
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">

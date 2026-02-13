@@ -68,10 +68,16 @@ export const getClients = secureAction(async (userId, user, searchQuery?: string
 
     try {
         // Use relational query to automatically fetch prescriptions
+        // 🔒 RobustFetch: Only select necessary columns to avoid failures if DB schema has missing columns (like updatedAt)
         const userClientsWithPrescriptions = await db.query.clients.findMany({
             where: eq(clients.userId, userId), // ⚠️ CRITICAL: Filter by userId
             with: {
-                prescriptionsLegacy: true, // 👈 Auto-fetch prescriptions
+                prescriptionsLegacy: {
+                    columns: {
+                        id: true,
+                        prescriptionData: true,
+                    }
+                },
             },
             orderBy: desc(clients.createdAt),
         });
@@ -141,7 +147,12 @@ export const getClient = secureAction(async (userId, user, clientId: string) => 
             ),
             with: {
                 prescriptionsLegacy: {
-                    orderBy: (prescriptionsLegacy: any, { desc }: { desc: any }) => [desc(prescriptionsLegacy.createdAt)],
+                    columns: {
+                        id: true,
+                        prescriptionData: true,
+                        createdAt: true, // Needed for ordering
+                    },
+                    orderBy: (pl: any, { desc }: any) => [desc(pl.createdAt)],
                 },
             },
         });
@@ -532,11 +543,17 @@ export const getClientSnapshot = secureAction(async (userId, user, clientId: str
         });
 
         // Get recent prescriptions (last 3)
-        const recentPrescriptions = await db.query.prescriptions.findMany({
+        // 🔒 RobustFetch: Using prescriptionsLegacy + limited columns to avoid schema mismatch
+        const recentPrescriptions = await db.query.prescriptionsLegacy.findMany({
             where: and(
                 eq(prescriptions.userId, userId),
                 eq(prescriptions.clientId, clientIdNum)
             ),
+            columns: {
+                id: true,
+                prescriptionData: true,
+                createdAt: true,
+            },
             orderBy: [desc(prescriptions.createdAt)],
             limit: 3
         });

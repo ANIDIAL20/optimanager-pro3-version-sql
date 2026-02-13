@@ -7,16 +7,20 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Plus, Minus, Trash2, ShoppingCart, Package, Glasses, Eye, Box, Disc, SprayCan, Link as LinkIcon, Briefcase, Puzzle, Wrench } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, ShoppingCart, Package, Glasses, Eye, Box, Disc, SprayCan, Link as LinkIcon, Briefcase, Puzzle, Wrench, Tag, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { SensitiveData } from '@/components/ui/sensitive-data';
 import { cn } from '@/lib/utils';
+import { usePosCartStore } from '@/features/pos/store/use-pos-cart-store';
+import { createLineItem, recalculateLineTotal, calculateCartTotal } from '@/features/pos/utils/pricing';
+import { DiscountDialog } from './discount-dialog';
 
 // Server Actions
 import { getProducts, getCategories } from '@/app/actions/products-actions';
 import { createSale } from '@/app/actions/sales-actions';
 import { getPendingLensOrders, type LensOrder } from '@/app/actions/lens-orders-actions';
+import { createFrameReservationAction, completeFrameReservationAction, getClientReservationsAction } from '@/app/actions/reservation-actions';
 import { BrandLoader } from '@/components/ui/loader-brand';
 
 interface Client {
@@ -28,6 +32,7 @@ interface Client {
 interface ClientPOSTabProps {
     client: Client;
     clientId: string;
+    initialReservationId?: number | null;
 }
 
 interface Product {
@@ -45,11 +50,8 @@ interface Category {
     name: string;
 }
 
-interface CartItem {
-    product: Product;
-    quantity: number;
-    lensOrderId?: number;
-}
+// CartItem replaced by PosLineItem from store
+import { PosLineItem } from '@/features/pos/utils/pricing';
 
 // Helper to get icon based on name (fuzzy match)
 const getCategoryIconByName = (name: string = '') => {
@@ -68,8 +70,8 @@ const getCategoryIconByName = (name: string = '') => {
     return Package;
 };
 
-export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
-    const [cartItems, setCartItems] = React.useState<CartItem[]>([]);
+export function ClientPOSTab({ client, clientId, initialReservationId }: ClientPOSTabProps) {
+    const { items: cartItems, setItems, updateLinePricing, totalAmount } = usePosCartStore();
     const [products, setProducts] = React.useState<Product[]>([]);
     const [categories, setCategories] = React.useState<Category[]>([]);
     const [searchQuery, setSearchQuery] = React.useState('');
@@ -112,7 +114,7 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
 
         loadData();
     }, []);
-
+    
     // Load pending lens orders
     React.useEffect(() => {
         if (clientId) {
@@ -124,14 +126,63 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
         }
     }, [clientId]);
 
-    // Filter products
+    // Handle Reservation Loading (from prop or URL)
+    React.useEffect(() => {
+        const loadReservation = async (id: string) => {
+             getClientReservationsAction(clientId).then(res => {
+                 if (res.success && res.data) {
+                     const reservation = (res.data as any[]).find(r => r.id.toString() === id);
+                     if (reservation && reservation.status === 'PENDING') {
+                         
+                         // Avoid duplicates: Check if any item from this reservation is already in cart
+                         const alreadyInCart = cartItems.some(item => item.fromReservation === reservation.id);
+                         if (alreadyInCart) return;
+
+                         const newLines = reservation.items.map((item: any) => 
+                             createLineItem(
+                                 item.productId.toString(),
+                                 item.productName,
+                                 item.unitPrice || 0, // Fallback if no price
+                                 item.quantity
+                             )
+                         ).map((line: any) => ({ 
+                             ...line, 
+                             fromReservation: reservation.id 
+                         }));
+                         
+                         setItems([...cartItems, ...newLines]);
+                         toast({ title: "Déjà réservé", description: "Les articles réservés ont été ajoutés au panier." });
+                     }
+                 }
+             });
+        };
+
+        if (initialReservationId) {
+            loadReservation(initialReservationId.toString());
+        } else {
+             // Fallback to URL for direct links
+             const urlParams = new URLSearchParams(window.location.search);
+             const resId = urlParams.get('reservationId');
+             if (resId) {
+                 const newUrl = new URL(window.location.href);
+                 newUrl.searchParams.delete('reservationId');
+                 window.history.replaceState({}, '', newUrl);
+                 loadReservation(resId);
+             }
+        }
+    }, [initialReservationId, clientId]);
+
+    // Derived state for filtered products
     const filteredProducts = React.useMemo(() => {
         let filtered = products;
 
         // Filter by category
         if (activeCategory !== 'all') {
-            // ID match or fallback to name match
-            filtered = filtered.filter(p => p.categorieId === activeCategory || p.categorieId === parseInt(activeCategory) || p.categorie === activeCategory);
+            const catStr = activeCategory.toString();
+            filtered = filtered.filter(p => 
+                p.categorieId === catStr || 
+                p.categorie === catStr
+            );
         }
 
         // Filter by search
@@ -143,19 +194,20 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
             );
         }
 
-        return filtered;
+        return filtered.slice(0, 40);
     }, [products, activeCategory, searchQuery]);
 
-    // Calculate totals
-    const subtotal = cartItems.reduce((sum, item) => sum + (item.product.prixVente * item.quantity), 0);
-    const total = subtotal;
+    // Use total from store
+    const total = totalAmount;
+    const subtotal = calculateCartTotal(cartItems); // Or just use totalAmount if they are same
 
-    // Add to cart
+    // Add to cart using Store logic (createLineItem)
     const handleAddToCart = (product: Product) => {
-        const existingIndex = cartItems.findIndex(item => item.product.id === product.id);
+        const existingIndex = cartItems.findIndex(item => item.productId === product.id);
 
         if (existingIndex >= 0) {
-            if (cartItems[existingIndex].quantity >= product.quantiteStock) {
+            const existingItem = cartItems[existingIndex];
+            if (existingItem.quantity >= product.quantiteStock) {
                 toast({
                     variant: 'destructive',
                     title: 'Stock insuffisant',
@@ -164,63 +216,74 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
                 return;
             }
 
-            const newCart = [...cartItems];
-            newCart[existingIndex].quantity += 1;
-            setCartItems(newCart);
+            const newItems = [...cartItems];
+            newItems[existingIndex] = recalculateLineTotal({
+                ...existingItem,
+                quantity: existingItem.quantity + 1
+            });
+            setItems(newItems);
         } else {
-            setCartItems([...cartItems, { product, quantity: 1 }]);
+            // Create new line item
+            const newLine = createLineItem(
+                product.id,
+                product.nomProduit,
+                product.prixVente,
+                1
+            );
+            setItems([...cartItems, newLine]);
         }
     };
 
     // Update quantity
     const handleUpdateQuantity = (productId: string, delta: number) => {
-        setCartItems(cartItems.map(item => {
-            if (item.product.id === productId) {
+        const newItems = cartItems.map(item => {
+            if (item.productId === productId) {
+                const product = products.find(p => p.id === productId);
+                const maxStock = product?.quantiteStock || 999;
+                
                 const newQuantity = item.quantity + delta;
                 if (newQuantity < 1) return item;
-                if (newQuantity > item.product.quantiteStock) {
-                    toast({
+                
+                if (newQuantity > maxStock && !item.productId.startsWith('LO-')) {
+                     toast({
                         variant: 'destructive',
                         title: 'Stock insuffisant',
-                        description: `Seulement ${item.product.quantiteStock} en stock.`,
+                        description: `Seulement ${maxStock} en stock.`,
                     });
                     return item;
                 }
-                return { ...item, quantity: newQuantity };
+
+                return recalculateLineTotal({ ...item, quantity: newQuantity });
             }
             return item;
-        }));
+        });
+        setItems(newItems);
     };
 
     // Remove from cart
     const handleRemoveItem = (productId: string) => {
-        setCartItems(cartItems.filter(item => item.product.id !== productId));
+        setItems(cartItems.filter(item => item.productId !== productId));
     };
 
     // Add lens order to cart
     const handleAddLensOrder = (order: LensOrder) => {
-        if (cartItems.some(item => item.lensOrderId === order.id)) {
+        const virtualId = `LO-${order.id}`;
+        if (cartItems.some(item => item.productId === virtualId)) {
             toast({ description: "Cette commande est déjà dans le panier." });
             return;
         }
 
         const isContact = order.orderType === 'contact';
-        const virtualProduct: Product = {
-            id: `LO-${order.id}`,
-            nomProduit: `${isContact ? 'Lentilles' : 'Verres'}: ${order.lensType}`,
-            reference: `CMD-#${order.id}`,
-            categorie: isContact ? 'Lentilles' : 'Verres',
-            categorieId: isContact ? 'lentilles' : 'verres',
-            prixVente: parseFloat(order.sellingPrice),
-            quantiteStock: 1
-        };
+        const price = parseFloat(order.sellingPrice);
 
-        setCartItems([...cartItems, {
-            product: virtualProduct,
-            quantity: 1,
-            lensOrderId: order.id
-        }]);
+        const newLine = createLineItem(
+            virtualId,
+            `${isContact ? 'Lentilles' : 'Verres'}: ${order.lensType}`,
+            price,
+            1
+        );
         
+        setItems([...cartItems, newLine]);
         toast({ title: "Ajouté", description: "Commande ajoutée au panier." });
     };
 
@@ -238,19 +301,20 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
         setIsSubmitting(true);
 
         try {
+            // Check for lens orders (virtual IDs starting with LO-)
             const lensOrderIds = cartItems
-                .filter(item => item.lensOrderId)
-                .map(item => item.lensOrderId as number);
+                .filter(item => item.productId.startsWith('LO-'))
+                .map(item => parseInt(item.productId.replace('LO-', '')));
 
             const saleData = {
                 clientId: clientId,
                 lensOrderIds,
                 items: cartItems.map(item => ({
-                    productRef: item.product.id,
-                    productName: item.product.nomProduit,
+                    productRef: item.productId.startsWith('LO-') ? item.productId : item.productId,
+                    productName: item.productName,
                     quantity: item.quantity,
-                    unitPrice: item.product.prixVente,
-                    total: item.product.prixVente * item.quantity,
+                    unitPrice: item.unitPrice, // Use discounted price
+                    total: item.lineTotal,
                 })),
                 paymentMethod: 'cash',
                 notes: `Vente POS pour ${client.prenom} ${client.nom}`
@@ -259,27 +323,99 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
             const result = await createSale(saleData);
 
             if (result.success) {
-                toast({
-                    title: 'Vente enregistrée !',
-                    description: `Commande créée avec succès.`,
-                });
+                // Check if we need to complete reservations
+                const reservationIds = [...new Set(
+                    cartItems
+                        .filter(item => item.fromReservation)
+                        .map(item => item.fromReservation!)
+                )];
 
-                setCartItems([]);
+                if (reservationIds.length > 0 && result.id) {
+                     // We need to complete them. 
+                     // Since we don't have completeFrameReservationAction imported yet, we'll need to do that.
+                     // For now, let's assume the sale is created.
+                     // Actually, we should call the action.
+                     for (const resId of reservationIds) {
+                         await completeFrameReservationAction({
+                             reservationId: resId,
+                             saleId: parseInt(result.id),
+                         });
+                     }
+                }
+
+                toast({
+                    title: "Vente validée",
+                    description: "La vente a été enregistrée avec succès.",
+                    className: "bg-green-50 border-green-200 text-green-800",
+                });
+                setItems([]); // Clear store
                 router.refresh();
             } else {
                 toast({
                     variant: 'destructive',
-                    title: 'Erreur',
-                    description: result.error || 'Impossible de créer la commande.',
+                    title: "Erreur",
+                    description: result.error || "Une erreur est survenue lors de la validation.",
                 });
             }
-
-        } catch (error) {
-            console.error('Error:', error);
+        } catch (error: any) {
+            console.error(error);
             toast({
                 variant: 'destructive',
+                title: "Erreur critique",
+                description: "Impossible de valider la vente. " + (error?.message || ''),
+            });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleReserveFrame = async () => {
+        // Find items in cart that are not Lens Orders (LO-) and not already from a reservation
+        const reservables = cartItems.filter(item => !item.productId.startsWith('LO-') && !item.fromReservation);
+        
+        if (reservables.length === 0) {
+            toast({
+                title: 'Aucun article à réserver',
+                description: 'Le panier ne contient aucun article réservable (non-réservé).',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            // Note: storeId will be overridden by the server action with the actual user ID
+            const result = await createFrameReservationAction({
+                storeId: 'USE_SESSION_ID', 
+                clientId: parseInt(clientId),
+                clientName: `${client.prenom} ${client.nom}`,
+                items: reservables.map(f => ({
+                    productId: parseInt(f.productId),
+                    quantity: f.quantity,
+                })),
+                expiryDays: 7,
+                notes: 'Réservation créée depuis le POS'
+            });
+
+            if (result.success) {
+                // Remove reserved items from cart
+                const remainingItems = cartItems.filter(item => !reservables.some(r => r.lineId === item.lineId));
+                setItems(remainingItems);
+                
+                toast({
+                    title: 'Réservation créée',
+                    description: `Article(s) réservé(s) avec succès. Retrouvez-les dans l'onglet Réservations.`,
+                    className: "bg-blue-50 border-blue-200 text-blue-800",
+                });
+                router.refresh();
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (error: any) {
+             toast({
                 title: 'Erreur',
-                description: 'Impossible de créer la commande.',
+                description: error.message,
+                variant: 'destructive',
             });
         } finally {
             setIsSubmitting(false);
@@ -366,7 +502,7 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
                         {categories.map(cat => {
                             const Icon = getCategoryIconByName(cat.name);
                             return (
-                                <TabsTrigger key={cat.id} value={cat.id} className="gap-2">
+                                <TabsTrigger key={cat.id} value={cat.id.toString()} className="gap-2">
                                     <Icon className="h-4 w-4" />
                                     {cat.name}
                                 </TabsTrigger>
@@ -389,7 +525,7 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
                             <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
                                 {filteredProducts.map(product => {
                                     const Icon = getCategoryIconByName(product.categorie || '');
-                                    const inCart = cartItems.find(item => item.product.id === product.id);
+                                    const inCart = cartItems.find(item => item.productId === product.id);
                                     const isOutOfStock = product.quantiteStock <= 0;
 
                                     return (
@@ -447,11 +583,11 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
                     </TabsContent>
 
                     {categories.map(cat => (
-                        <TabsContent key={cat.id} value={cat.id} className="mt-4">
+                        <TabsContent key={cat.id} value={cat.id.toString()} className="mt-4">
                             <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
                                 {filteredProducts.map(product => {
                                     const Icon = getCategoryIconByName(product.categorie || '');
-                                    const inCart = cartItems.find(item => item.product.id === product.id);
+                                    const inCart = cartItems.find(item => item.productId === product.id);
                                     const isOutOfStock = product.quantiteStock <= 0;
 
                                     return (
@@ -510,21 +646,42 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
                         ) : (
                             <div className="space-y-3 max-h-[300px] overflow-y-auto">
                                 {cartItems.map((item) => (
-                                    <div key={item.product.id} className="flex gap-2 p-2 bg-slate-50 rounded-lg">
+                                    <div key={item.lineId} className="flex gap-2 p-2 bg-slate-50 rounded-lg">
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-medium text-slate-900 truncate">
-                                                {item.product.nomProduit}
+                                                {item.productName}
                                             </p>
-                                            <p className="text-xs text-slate-500">
-                                                {item.product.prixVente} DH × {item.quantity}
-                                            </p>
+                                            <div className="flex items-center gap-2">
+                                                <p className={cn("text-xs", item.priceMode !== 'STANDARD' ? "text-slate-400 line-through decoration-destructive/30" : "text-slate-500")}>
+                                                    {item.originalUnitPrice.toFixed(2)} DH × {item.quantity}
+                                                </p>
+                                                {item.priceMode !== 'STANDARD' && (
+                                                    <p className="text-xs font-bold text-emerald-600">
+                                                        {item.unitPrice.toFixed(2)} DH
+                                                    </p>
+                                                )}
+                                                <DiscountDialog 
+                                                    lineId={item.lineId}
+                                                    productName={item.productName}
+                                                    originalPrice={item.originalUnitPrice}
+                                                    currentPrice={item.unitPrice}
+                                                    priceMode={item.priceMode}
+                                                    discountPercent={item.discountPercent}
+                                                    quantity={item.quantity}
+                                                />
+                                            </div>
+                                            {item.priceMode !== 'STANDARD' && item.discountPercent && item.discountPercent > 0 && (
+                                                <p className="text-[9px] font-medium text-emerald-600 bg-emerald-50 self-start px-1.5 py-0.5 rounded border border-emerald-100 mt-0.5 w-fit">
+                                                    -{item.discountPercent.toFixed(0)}% OFF {item.overrideReason && `• ${item.overrideReason}`}
+                                                </p>
+                                            )}
                                         </div>
                                         <div className="flex items-center gap-1">
                                             <Button
                                                 size="icon"
                                                 variant="ghost"
                                                 className="h-6 w-6"
-                                                onClick={() => handleUpdateQuantity(item.product.id, -1)}
+                                                onClick={() => handleUpdateQuantity(item.productId, -1)}
                                             >
                                                 <Minus className="h-3 w-3" />
                                             </Button>
@@ -535,7 +692,7 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
                                                 size="icon"
                                                 variant="ghost"
                                                 className="h-6 w-6"
-                                                onClick={() => handleUpdateQuantity(item.product.id, 1)}
+                                                onClick={() => handleUpdateQuantity(item.productId, 1)}
                                             >
                                                 <Plus className="h-3 w-3" />
                                             </Button>
@@ -543,14 +700,14 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
                                                 size="icon"
                                                 variant="ghost"
                                                 className="h-6 w-6 text-red-600 hover:bg-red-50"
-                                                onClick={() => handleRemoveItem(item.product.id)}
+                                                onClick={() => handleRemoveItem(item.productId)}
                                             >
                                                 <Trash2 className="h-3 w-3" />
                                             </Button>
                                         </div>
                                         <div className="text-right">
                                             <p className="text-sm font-bold text-slate-900">
-                                                {(item.product.prixVente * item.quantity).toFixed(2)} DH
+                                                {item.lineTotal.toFixed(2)} DH
                                             </p>
                                         </div>
                                     </div>
@@ -578,14 +735,27 @@ export function ClientPOSTab({ client, clientId }: ClientPOSTabProps) {
                         </div>
 
                         {/* Validate Button */}
-                        <Button
-                            onClick={handleValidateOrder}
-                            disabled={cartItems.length === 0 || isSubmitting}
-                            className="w-full h-12 text-base font-semibold"
-                        >
-                            {isSubmitting && <BrandLoader size="sm" className="mr-2" />}
-                            Valider la Vente
-                        </Button>
+                        {/* Validation Actions */}
+                        <div className="flex gap-3">
+                             <Button
+                                 onClick={handleReserveFrame}
+                                 disabled={cartItems.length === 0 || isSubmitting || !cartItems.some(i => !i.productId.startsWith('LO-') && !i.fromReservation)}
+                                 variant="outline"
+                                 className="flex-1 h-12 text-sm font-semibold border-dashed border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50"
+                             >
+                                 <Clock className="h-4 w-4 mr-2" />
+                                 Réserver
+                             </Button>
+                             
+                            <Button
+                                onClick={handleValidateOrder}
+                                disabled={cartItems.length === 0 || isSubmitting}
+                                className="flex-[2] h-12 text-base font-semibold"
+                            >
+                                {isSubmitting && <BrandLoader size="sm" className="mr-2" />}
+                                Valider la Vente
+                            </Button>
+                        </div>
                     </CardContent>
                 </Card>
             </div>

@@ -26,18 +26,13 @@ import { getProducts, getCategories, type Product as ActionProduct } from '@/app
 import { createSale } from '@/features/sales/actions';
 import { getPendingLensOrders } from '@/app/actions/lens-orders-actions';
 import { BrandLoader } from '@/components/ui/loader-brand';
-
-// Use CartItem type definition
-interface CartItem {
-    product: Product;
-    quantity: number;
-    lensOrderId?: number;
-}
-
+import { usePosCartStore } from '@/features/pos/store/use-pos-cart-store';
+import { createLineItem, recalculateLineTotal } from '@/features/pos/utils/pricing';
+import { DiscountDialog } from '@/components/clients/discount-dialog';
 
 export default function NewSalePage() {
     const router = useRouter();
-    const [cartItems, setCartItems] = React.useState<CartItem[]>([]);
+    const { items: cartItems, setItems, updateLinePricing, totalAmount } = usePosCartStore();
     const [isProcessing, setIsProcessing] = React.useState(false);
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [products, setProducts] = React.useState<Product[]>([]);
@@ -199,10 +194,11 @@ export default function NewSalePage() {
     }, [products, activeCategory, searchQuery]);
 
     const handleAddToCart = (product: Product) => {
-        const existingIndex = cartItems.findIndex(item => item.product.id === product.id);
+        const existingIndex = cartItems.findIndex(item => item.productId === product.id);
 
         if (existingIndex >= 0) {
-            if (cartItems[existingIndex].quantity >= product.quantiteStock) {
+            const existingItem = cartItems[existingIndex];
+            if (existingItem.quantity >= product.quantiteStock) {
                 toast({
                     variant: 'destructive',
                     title: 'Stock insuffisant',
@@ -210,38 +206,51 @@ export default function NewSalePage() {
                 });
                 return;
             }
-            const newCart = [...cartItems];
-            newCart[existingIndex].quantity += 1;
-            setCartItems(newCart);
+            const newItems = [...cartItems];
+            newItems[existingIndex] = recalculateLineTotal({
+                ...existingItem,
+                quantity: existingItem.quantity + 1
+            });
+            setItems(newItems);
         } else {
-            setCartItems([...cartItems, { product, quantity: 1 }]);
+            const newItem = createLineItem(
+                product.id,
+                product.nomProduit,
+                product.prixVente,
+                1
+            );
+            setItems([...cartItems, newItem]);
         }
     };
 
     const handleUpdateQuantity = (productId: string, delta: number) => {
-        setCartItems(cartItems.map(item => {
-            if (item.product.id === productId) {
+        const newItems = cartItems.map(item => {
+            if (item.productId === productId) {
                 const newQuantity = item.quantity + delta;
                 if (newQuantity < 1) return item;
-                if (newQuantity > item.product.quantiteStock) {
+                
+                // Find original product to check stock
+                const product = products.find(p => p.id === productId);
+                if (product && newQuantity > product.quantiteStock && !productId.startsWith('LO-')) {
                     toast({
                         variant: 'destructive',
                         title: 'Stock insuffisant',
-                        description: `Seulement ${item.product.quantiteStock} en stock.`,
+                        description: `Seulement ${product.quantiteStock} en stock.`,
                     });
                     return item;
                 }
-                return { ...item, quantity: newQuantity };
+                return recalculateLineTotal({ ...item, quantity: newQuantity });
             }
             return item;
-        }));
+        });
+        setItems(newItems);
     };
 
     const handleRemoveItem = (productId: string) => {
-        setCartItems(cartItems.filter(item => item.product.id !== productId));
+        setItems(cartItems.filter(item => item.productId !== productId));
     };
 
-    const clearCart = () => setCartItems([]);
+    const clearCart = () => setItems([]);
 
     const handleProcessSale = async (paymentData: { amountPaid: number; method: string; notes: string }) => {
         if (cartItems.length === 0) {
@@ -252,40 +261,35 @@ export default function NewSalePage() {
         setIsProcessing(true);
 
         try {
-            // Prepare items for Server Action
             // Prepare items matching saleItemSchema
             const saleItems = cartItems.map(item => ({
-                productId: item.product.id,
-                name: item.product.nomProduit,
-                marque: item.product.marque,
-                modele: item.product.modele,
-                couleur: item.product.couleur,
+                productId: item.productId,
+                name: item.productName,
                 quantity: item.quantity,
-                price: item.product.prixVente,
-                total: item.product.prixVente * item.quantity
+                price: item.unitPrice,
+                total: item.lineTotal
             }));
 
             // Client ID handling (ensure number)
             const clientIdNum = selectedClient?.id ? parseInt(selectedClient.id) : undefined;
 
-            // Calculate Totals
-            const totalTTC = cartItems.reduce((sum, item) => sum + (item.product.prixVente * item.quantity), 0);
-            const totalHT = totalTTC / 1.2; // Assuming 20% TVA for simplicity as default
+            // Calculate Totals using store data
+            const totalTTC = totalAmount;
+            const totalHT = totalTTC / 1.2; 
             const totalTVA = totalTTC - totalHT;
             
             // Extract lensOrderIds
             const lensOrderIds = cartItems
-                .filter(item => item.lensOrderId !== undefined)
-                .map(item => item.lensOrderId as number);
+                .filter(item => item.productId.startsWith('LO-'))
+                .map(item => parseInt(item.productId.replace('LO-', '')));
 
             // Call New Feature Action
             const result = await createSale({
                 clientId: clientIdNum,
                 clientName: selectedClient?.name,
-                items: saleItems,
-                lensOrderIds, // Pass the IDs
+                items: saleItems as any,
+                lensOrderIds, 
                 
-                // Financials (Required by Zod Schema)
                 totalHT: parseFloat(totalHT.toFixed(2)),
                 totalTVA: parseFloat(totalTVA.toFixed(2)),
                 totalTTC: parseFloat(totalTTC.toFixed(2)),
@@ -299,10 +303,6 @@ export default function NewSalePage() {
             if (result && (result as any).id) {
                  toast({ title: "✅ Vente réussie !", description: "La vente a été enregistrée avec succès." });
                  clearCart();
-                 // New architecture returns object, legacy might have returned success bool. 
-                 // Our createSale returns the Sale object directly or throws? 
-                 // createAction wrapper returns the result of the handler.
-                 // Handler returns newSale.
                  router.push(`/dashboard/ventes/${(result as any).id}`);
             } else {
                  throw new Error("Réponse invalide du serveur");
@@ -316,7 +316,7 @@ export default function NewSalePage() {
         }
     };
 
-    const total = cartItems.reduce((sum, item) => sum + (item.product.prixVente * item.quantity), 0);
+    const total = totalAmount;
 
     return (
         <div className="space-y-6">
@@ -394,7 +394,7 @@ export default function NewSalePage() {
                         </CardHeader>
                         <CardContent className="grid gap-3 pt-0">
                             {pendingOrders.map(order => {
-                                const isAdded = cartItems.some(i => i.lensOrderId === order.id);
+                                const isAdded = cartItems.some(i => i.productId === `LO-${order.id}`);
                                 return (
                                     <div key={order.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-indigo-100 shadow-sm">
                                         <div>
@@ -512,7 +512,7 @@ export default function NewSalePage() {
 
                         <CardContent className="p-0">
                             {/* Mini Cart List */}
-                            <div className="max-h-[300px] overflow-y-auto p-4 space-y-3 bg-white">
+                            <div className="max-h-[350px] overflow-y-auto p-4 space-y-3 bg-white">
                                 {cartItems.length === 0 ? (
                                     <div className="text-center py-8 text-slate-400">
                                         <ShoppingCart className="h-10 w-10 mx-auto mb-2 opacity-50" />
@@ -520,31 +520,47 @@ export default function NewSalePage() {
                                     </div>
                                 ) : (
                                     cartItems.map(item => (
-                                        <div key={item.product.id} className="flex gap-2 p-2 bg-slate-50 rounded-lg border">
+                                        <div key={item.lineId} className="flex gap-2 p-2 bg-slate-50 rounded-lg border group">
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm font-medium text-slate-900 truncate">
-                                                    {item.product.nomProduit}
+                                                    {item.productName}
                                                 </p>
                                                 <div className="flex justify-between items-center mt-1">
-                                                    <p className="text-xs text-slate-500">
-                                                        {item.product.prixVente} × {item.quantity}
-                                                    </p>
-                                                    <p className="text-xs font-bold">
-                                                        {(item.product.prixVente * item.quantity).toFixed(2)} DH
+                                                    <div className="flex flex-col">
+                                                        <p className={cn("text-[11px]", item.priceMode !== 'STANDARD' ? "text-slate-400 line-through" : "text-slate-500")}>
+                                                            {item.originalUnitPrice.toFixed(2)} × {item.quantity}
+                                                        </p>
+                                                        {item.priceMode !== 'STANDARD' && (
+                                                            <p className="text-[11px] font-bold text-emerald-600">
+                                                                {item.unitPrice.toFixed(2)} DH
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-sm font-bold">
+                                                        {item.lineTotal.toFixed(2)} DH
                                                     </p>
                                                 </div>
                                             </div>
                                             <div className="flex flex-col gap-1 items-end pl-2">
                                                 <div className="flex items-center gap-1">
-                                                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleUpdateQuantity(item.product.id, -1)}>
+                                                    <DiscountDialog 
+                                                        lineId={item.lineId}
+                                                        productName={item.productName}
+                                                        originalPrice={item.originalUnitPrice}
+                                                        currentPrice={item.unitPrice}
+                                                        priceMode={item.priceMode}
+                                                        discountPercent={item.discountPercent}
+                                                        quantity={item.quantity}
+                                                    />
+                                                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleUpdateQuantity(item.productId, -1)}>
                                                         <Minus className="h-3 w-3" />
                                                     </Button>
-                                                    <span className="text-xs font-semibold w-4 text-center">{item.quantity}</span>
-                                                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleUpdateQuantity(item.product.id, 1)}>
+                                                    <span className="text-xs font-semibold w-4 text-center tabular-nums">{item.quantity}</span>
+                                                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleUpdateQuantity(item.productId, 1)}>
                                                         <Plus className="h-3 w-3" />
                                                     </Button>
                                                 </div>
-                                                <Button size="icon" variant="ghost" className="h-6 w-6 text-red-500" onClick={() => handleRemoveItem(item.product.id)}>
+                                                <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-400 hover:text-red-500" onClick={() => handleRemoveItem(item.productId)}>
                                                     <Trash2 className="h-3 w-3" />
                                                 </Button>
                                             </div>
@@ -571,7 +587,7 @@ export default function NewSalePage() {
 }
 
 // Helper component to reduce duplication logic
-function ProductList({ products, isLoading, cartItems, onAdd }: { products: Product[], isLoading: boolean, cartItems: CartItem[], onAdd: (p: Product) => void }) {
+function ProductList({ products, isLoading, cartItems, onAdd }: { products: Product[], isLoading: boolean, cartItems: any[], onAdd: (p: Product) => void }) {
     if (isLoading) {
         return (
             <div className="text-center py-12">
@@ -594,7 +610,7 @@ function ProductList({ products, isLoading, cartItems, onAdd }: { products: Prod
         <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
             {products.map(product => {
                 const Icon = getCategoryIcon(product.categorie || '');
-                const inCart = cartItems.find(item => item.product.id === product.id);
+                const inCart = cartItems.find(item => item.productId === product.id);
                 const isOutOfStock = product.quantiteStock <= 0;
 
                 return (

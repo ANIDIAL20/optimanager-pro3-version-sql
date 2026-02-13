@@ -19,7 +19,8 @@ export class ClientRepository extends BaseRepository<Client, typeof clients> {
   async findByUserId(userId: string, role: string = 'user'): Promise<Client[]> {
     
     // 🔑 1. Cache Key Differentiation
-    const cacheKey = role === 'admin' 
+    const isAdmin = role?.toUpperCase() === 'ADMIN';
+    const cacheKey = isAdmin 
         ? CACHE_TAGS.clients('__ADMIN_ALL__') 
         : CACHE_TAGS.clients(userId);
 
@@ -37,7 +38,7 @@ export class ClientRepository extends BaseRepository<Client, typeof clients> {
     try {
         let results: Client[];
         
-        if (role === 'admin') {
+        if (isAdmin) {
             results = await db
                 .select()
                 .from(clients)
@@ -66,10 +67,15 @@ export class ClientRepository extends BaseRepository<Client, typeof clients> {
         return results;
 
     } catch (err: any) {
-        console.error('❌ DB_QUERY_ERROR:', err);
-        // Log extra details if possible
-        if (err.code) console.error('SQL Code:', err.code);
-        if (err.detail) console.error('Error Detail:', err.detail);
+        console.error('❌ DB_QUERY_ERROR [findByUserId]:', {
+            message: err.message,
+            code: err.code,
+            detail: err.detail,
+            hint: err.hint,
+            userId,
+            role,
+            isAdmin
+        });
         throw err;
     }
   }

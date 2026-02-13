@@ -124,8 +124,19 @@ export function SupplierPaymentDialog({
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[425px]">
+        <>
+            {/* @ts-ignore */}
+            <Dialog modal={false} open={open} onOpenChange={onOpenChange}>
+            <DialogContent 
+                className="sm:max-w-[425px]"
+                onInteractOutside={(e) => e.preventDefault()}
+                onOpenAutoFocus={(e) => e.preventDefault()}
+                onCloseAutoFocus={(e) => {
+                    e.preventDefault();
+                    document.body.style.pointerEvents = 'auto';
+                    document.documentElement.style.pointerEvents = 'auto';
+                }}
+            >
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <Receipt className="h-5 w-5 text-primary" />
@@ -169,7 +180,7 @@ export function SupplierPaymentDialog({
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Mode</FormLabel>
-                                        <Select onValueChange={field.onChange} value={field.value}>
+                                        <Select modal={false} onValueChange={field.onChange} value={field.value}>
                                             <FormControl>
                                                 <SelectTrigger className="bg-slate-50 border-slate-200 h-11">
                                                     <SelectValue />
@@ -193,7 +204,7 @@ export function SupplierPaymentDialog({
                                 render={({ field }) => (
                                     <FormItem className="flex flex-col">
                                         <FormLabel>Date</FormLabel>
-                                        <Popover>
+                                        <Popover modal={false}>
                                             <PopoverTrigger asChild>
                                                 <FormControl>
                                                     <Button
@@ -267,5 +278,6 @@ export function SupplierPaymentDialog({
                 </Form>
             </DialogContent>
         </Dialog>
+    </>
     );
 }

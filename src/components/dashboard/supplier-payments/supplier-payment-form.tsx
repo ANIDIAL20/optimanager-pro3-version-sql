@@ -181,7 +181,7 @@ export function SupplierPaymentForm() {
                         render={({ field }) => (
                         <FormItem>
                             <FormLabel>Fournisseur</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select modal={false} onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                                 <SelectTrigger>
                                 <SelectValue placeholder="Choisir un fournisseur" />
@@ -225,7 +225,7 @@ export function SupplierPaymentForm() {
                             render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Mode</FormLabel>
-                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <Select modal={false} onValueChange={field.onChange} defaultValue={field.value}>
                                 <FormControl>
                                     <SelectTrigger>
                                         <SelectValue />
@@ -250,7 +250,7 @@ export function SupplierPaymentForm() {
                         render={({ field }) => (
                         <FormItem className="flex flex-col">
                             <FormLabel>Date</FormLabel>
-                            <Popover>
+                            <Popover modal={false}>
                             <PopoverTrigger asChild>
                                 <FormControl>
                                 <Button
