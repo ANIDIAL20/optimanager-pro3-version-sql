@@ -130,6 +130,11 @@ export function ReceiveOrderDialog({
       <DialogContent 
         className="sm:max-w-[480px] border-none shadow-2xl p-0 overflow-hidden bg-gradient-to-br from-orange-50 via-white to-amber-50"
         onInteractOutside={(e) => e.preventDefault()}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => {
+          e.preventDefault();
+          document.body.style.pointerEvents = 'auto';
+        }}
       >
         {/* Decorative Header Background */}
         <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 opacity-90" />

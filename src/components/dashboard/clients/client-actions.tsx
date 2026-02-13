@@ -70,7 +70,7 @@ export function ClientActions({ client }: ClientActionsProps) {
 
     return (
         <>
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="h-8 w-8 p-0">
                         <span className="sr-only">Ouvrir menu</span>
@@ -112,11 +112,16 @@ export function ClientActions({ client }: ClientActionsProps) {
                 </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* @ts-ignore - modal prop exists but not in types */}
+            {/* @ts-ignore */}
             <AlertDialog modal={false} open={open} onOpenChange={setOpen}>
                 <AlertDialogContent
+                    onInteractOutside={(e) => e.preventDefault()}
                     onOpenAutoFocus={(e) => e.preventDefault()}
-                    onCloseAutoFocus={(e) => e.preventDefault()}
+                    onCloseAutoFocus={(e) => {
+                        e.preventDefault();
+                        document.body.style.pointerEvents = 'auto';
+                        document.documentElement.style.pointerEvents = 'auto';
+                    }}
                 >
                     <AlertDialogHeader>
                         <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>

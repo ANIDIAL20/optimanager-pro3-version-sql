@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from '@/db';
-import { sales, products, devis } from '@/db/schema';
+import { sales, products, devis, frameReservations } from '@/db/schema';
 import { eq, gte, desc, and, lte, asc, sql } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
@@ -26,6 +26,7 @@ export interface DashboardStats {
         status: string;
         resteAPayer?: number;
     }>;
+    pendingReservations: any[]; // List of PENDING frame reservations
 }
 
 /**
@@ -41,7 +42,7 @@ export const getDashboardStats = secureAction(async (userId, user) => {
         const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
 
         // 2. Fetch Data (Drizzle ORM)
-        const [qSales, qLowStock, qDevis] = await Promise.all([
+        const [qSales, qLowStock, qDevis, qReservations] = await Promise.all([
             db.select().from(sales).where(eq(sales.userId, userId)).orderBy(desc(sales.createdAt)),
             db.select().from(products)
                 .where(and(
@@ -50,7 +51,8 @@ export const getDashboardStats = secureAction(async (userId, user) => {
                 ))
                 .orderBy(asc(products.quantiteStock))
                 .limit(10),
-            db.select().from(devis).where(eq(devis.userId, userId)).orderBy(desc(devis.createdAt)).limit(5)
+            db.select().from(devis).where(eq(devis.userId, userId)).orderBy(desc(devis.createdAt)).limit(5),
+            db.select().from(frameReservations).where(eq(frameReservations.status, 'PENDING'))
         ]);
 
         // 3. Process Revenue & Today's Counts
@@ -113,7 +115,8 @@ export const getDashboardStats = secureAction(async (userId, user) => {
             totalSalesCount,
             stockAlerts: qLowStock.length, // Rough estimate based on limit/results
             stockAlertItems,
-            recentActivity
+            recentActivity,
+            pendingReservations: qReservations as any || []
         };
 
         await logSuccess(userId, 'READ', 'dashboard_stats', 'REFRESH');

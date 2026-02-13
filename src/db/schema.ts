@@ -98,11 +98,14 @@ export const products = pgTable('products', {
   prixGros: decimal('prix_gros', { precision: 10, scale: 2 }),
   
   // Stock
-  quantiteStock: integer('quantite_stock').default(0),
-  reservedQuantity: integer('reserved_quantity').default(0), // 🆕 Reserved but not yet sold
-  availableQuantity: integer('available_quantity').default(0), // 🆕 Net available (Stock - Reserved)
+  quantiteStock: integer('quantite_stock').notNull().default(0),
+  reservedQuantity: integer('reserved_quantity').notNull().default(0),
+  availableQuantity: integer('available_quantity').notNull().default(0),
   seuilAlerte: integer('seuil_alerte').default(5),
   
+  // Type of product
+  type: text('type').$type<'MONTURE' | 'VERRE' | 'ACCESSOIRE' | 'AUTRE'>().notNull().default('AUTRE'),
+
   // Metadata
   description: text('description'),
   details: text('details'), // Simple string storage inherited from legacy structure
@@ -1103,7 +1106,82 @@ export const prescriptionsRelations = relations(prescriptions, ({ one }) => ({
   }),
 }));
 
+// ========================================
+// 13. FRAME RESERVATIONS TABLE
+// ========================================
+export const frameReservations = pgTable('frame_reservations', {
+  id: serial('id').primaryKey(),
+  
+  // Note: storeId references users.id as 'stores' table doesn't exist in this project
+  storeId: text('store_id').notNull().references(() => users.id),
+  clientId: integer('client_id').notNull().references(() => clients.id),
+  clientName: text('client_name').notNull(),
+  
+  status: text('status')
+    .$type<'PENDING' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED'>()
+    .notNull()
+    .default('PENDING'),
+  
+  items: json('items').$type<{
+    productId: number;
+    productName: string;
+    reference: string | null;
+    quantity: number;
+  }[]>().notNull(),
+  
+  reservationDate: timestamp('reservation_date', { mode: 'date' })
+    .notNull()
+    .defaultNow(),
+  
+  expiryDate: timestamp('expiry_date', { mode: 'date' }).notNull(),
+  
+  completedAt: timestamp('completed_at', { mode: 'date' }),
+  saleId: integer('sale_id').references(() => sales.id),
+  
+  notes: text('notes'),
+  
+  createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { mode: 'date' })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+export const frameReservationsRelations = relations(frameReservations, ({ one }) => ({
+  client: one(clients, {
+    fields: [frameReservations.clientId],
+    references: [clients.id],
+  }),
+  user: one(users, {
+    fields: [frameReservations.storeId],
+    references: [users.id],
+  }),
+  sale: one(sales, {
+    fields: [frameReservations.saleId],
+    references: [sales.id],
+  }),
+}));
+
+
+// ========================================
+// NOTIFICATIONS TABLE
+// ========================================
+export * from './schema/notifications';
+import { notifications } from './schema/notifications';
+
+// ========================================
+// NOTIFICATIONS RELATIONS
+// ========================================
+export const notificationRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+}));
+
 // Types
 export type Prescription = typeof prescriptions.$inferSelect;
 export type PrescriptionInsert = typeof prescriptions.$inferInsert;
+export type Notification = typeof notifications.$inferSelect;
+export type NewNotification = typeof notifications.$inferInsert;
 

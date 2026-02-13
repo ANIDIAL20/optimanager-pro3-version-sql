@@ -11,18 +11,9 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, Edit, Trash2, ArrowLeft, Truck, FileText, CreditCard, LayoutDashboard } from 'lucide-react';
+import { useBreadcrumbStore } from '@/hooks/use-breadcrumb-store';
+import { AlertCircle, ArrowLeft, Truck, FileText, LayoutDashboard } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -37,6 +28,7 @@ import {
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { SensitiveData } from '@/components/ui/sensitive-data';
+import { SupplierActions } from '@/components/dashboard/fournisseurs/supplier-actions';
 
 interface SupplierViewProps {
     supplier: any; 
@@ -48,13 +40,26 @@ interface SupplierViewProps {
 export default function SupplierView({ supplier, orders = [], payments = [], error }: SupplierViewProps) {
     const router = useRouter();
     const { toast } = useToast();
-    const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
-    const [isDeleting, setIsDeleting] = React.useState(false);
+    const { setLabel } = useBreadcrumbStore();
+
+    // Update Breadcrumb Label with Supplier Name
+    React.useEffect(() => {
+        if (supplier) {
+            const name = supplier.name || supplier.nomCommercial;
+            if (name && supplier.id) {
+                setLabel(supplier.id, name);
+            }
+        }
+    }, [supplier, setLabel]);
 
     if (error || !supplier) {
         return (
             <div className="flex flex-1 flex-col gap-4">
-                 <div className="w-fit"><BackButton /></div>
+                 <div className="w-fit">
+                    <Button variant="ghost" size="sm" onClick={() => router.back()}>
+                        <ArrowLeft className="mr-2 h-4 w-4" /> Retour
+                    </Button>
+                 </div>
                 <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Erreur</AlertTitle>
@@ -140,27 +145,6 @@ export default function SupplierView({ supplier, orders = [], payments = [], err
         }).reverse(); // Reverse for display (Newest first)
     }, [orders, payments]);
 
-
-    const handleDelete = async () => {
-        setIsDeleting(true);
-        try {
-            await deleteSupplier(s.id);
-            toast({
-                title: 'Fournisseur supprimé',
-                description: `Le fournisseur "${s.nomCommercial}" a été supprimé.`,
-            });
-            router.push('/suppliers');
-            router.refresh();
-        } catch (err) {
-            toast({
-                variant: 'destructive',
-                title: 'Erreur',
-                description: "Erreur lors de la suppression.",
-            });
-            setIsDeleting(false);
-        }
-    };
-
     return (
         <div className="flex flex-1 flex-col gap-6 p-6">
             {/* Header Area */}
@@ -180,18 +164,26 @@ export default function SupplierView({ supplier, orders = [], payments = [], err
                                 {s.nomCommercial}
                             </h1>
                         </div>
-                        <p className="text-slate-500 ml-1">{s.raisonSociale || 'Détails du fournisseur'}</p>
+                        <div className="flex items-center gap-2">
+                             <p className="text-slate-500 ml-1">{s.raisonSociale || 'Détails du fournisseur'}</p>
+                             {s.typeProduits && s.typeProduits.length > 0 && (
+                                <div className="flex flex-wrap gap-2 ml-4">
+                                    {s.typeProduits.map((type: string) => (
+                                        <Badge key={type} variant="outline" className="text-[10px] px-1.5 py-0 h-4 uppercase tracking-wider font-bold border-slate-200 text-slate-500">
+                                            {type}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 
-                <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => router.push(`/suppliers/${s.id}/edit`)}>
-                        <Edit className="mr-2 h-4 w-4" /> Modifier
-                    </Button>
-                    <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} disabled={isDeleting}>
-                        <Trash2 className="mr-2 h-4 w-4" /> Supprimer
-                    </Button>
-                </div>
+                <SupplierActions 
+                    supplierId={s.id} 
+                    supplierName={s.nomCommercial} 
+                    variant="header" 
+                />
             </div>
 
             {/* Financial Summary Cards */}
@@ -237,9 +229,6 @@ export default function SupplierView({ supplier, orders = [], payments = [], err
                     <TabsTrigger value="history" className="px-4 py-2 flex items-center gap-2">
                         <FileText className="h-4 w-4" /> Historique (Relevé)
                     </TabsTrigger>
-                    {/* <TabsTrigger value="payments" className="px-4 py-2 flex items-center gap-2">
-                        <CreditCard className="h-4 w-4" /> Paiements
-                    </TabsTrigger> */}
                 </TabsList>
 
                 {/* OVERVIEW TAB */}
@@ -276,21 +265,8 @@ export default function SupplierView({ supplier, orders = [], payments = [], err
                             </div>
                         </div>
 
-                        {/* Right Column: Status & Notes */}
+                        {/* Right Column: Notes */}
                         <div className="space-y-6">
-                             <Card>
-                                <CardHeader><CardTitle>Statut</CardTitle></CardHeader>
-                                <CardContent>
-                                    <Badge variant={s.statut === 'Actif' ? 'default' : 'secondary'} className={s.statut === 'Actif' ? 'bg-green-100 text-green-800' : ''}>
-                                        {s.statut}
-                                    </Badge>
-                                    {s.typeProduits && s.typeProduits.length > 0 && (
-                                        <div className="mt-4 flex flex-wrap gap-2">
-                                            {s.typeProduits.map((type: string) => <Badge key={type} variant="outline">{type}</Badge>)}
-                                        </div>
-                                    )}
-                                </CardContent>
-                             </Card>
                              {s.notes && (
                                 <Card>
                                     <CardHeader><CardTitle>Notes</CardTitle></CardHeader>
@@ -355,22 +331,6 @@ export default function SupplierView({ supplier, orders = [], payments = [], err
                 </TabsContent>
             </Tabs>
 
-            <AlertDialog modal={false} open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Cette action est irréversible. Le fournisseur "{s.nomCommercial}" sera définitivement supprimé.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Annuler</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
-                            {isDeleting ? 'Suppression...' : 'Supprimer'}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
         </div>
     );
 }

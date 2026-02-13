@@ -53,7 +53,10 @@ export const getSupplierOrders = secureAction(async (userId, user, supplierId?: 
             `;
         }
 
-        const results = await db.execute(query);
+        const queryResult = await db.execute(query);
+        
+        // Extract rows from the result (Neon returns { rows: [...] })
+        const results = Array.isArray(queryResult) ? queryResult : (queryResult.rows || []);
 
         // Map to UI friendly format
         const formattedOrders: SupplierOrder[] = results.map((order: any) => ({

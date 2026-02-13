@@ -10,6 +10,7 @@ export interface Product {
   quantiteStock: number;
   reservedQuantity?: number; // Quantity currently under reservation
   availableQuantity?: number; // quantiteStock - reservedQuantity
+  type?: 'MONTURE' | 'VERRE' | 'ACCESSOIRE' | 'AUTRE';
   stockMin?: number; // Minimum stock threshold for alerts
   categorieId?: string;
   marqueId?: string;

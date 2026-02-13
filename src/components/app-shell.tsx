@@ -7,14 +7,19 @@ import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/s
 import { AppSidebar } from "./app-sidebar";
 import { BrandLoader } from '@/components/ui/loader-brand';
 import { BreadcrumbCustom } from "@/components/ui/breadcrumb-custom";
+import { useBreadcrumbStore } from "@/hooks/use-breadcrumb-store";
 
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
+import { NotificationsWrapper } from "@/features/notifications/components/notifications-wrapper";
 
 export default function AppShell({ children, banner }: { children: React.ReactNode, banner?: any }) {
     const { data: session, status } = useSession();
     const router = useRouter();
     const pathname = usePathname();
     const [isBannerVisible, setIsBannerVisible] = useState(true);
+    
+    // Breadcrumb store - must be called before any early returns
+    const { labels } = useBreadcrumbStore();
 
     // Initialize global keyboard shortcuts (Power Users)
     useKeyboardShortcuts();
@@ -116,20 +121,30 @@ export default function AppShell({ children, banner }: { children: React.ReactNo
                                             let label = segment;
                                             const lowerSegment = segment.toLowerCase();
                                             
-                                            // Context-specific label overrides
-                                            if (BREADCRUMB_LABELS[lowerSegment]) {
+                                            // 1. Check Custom Store Labels (Highest Priority)
+                                            if (labels[segment]) {
+                                                label = labels[segment];
+                                            } 
+                                            // 2. Check Static Map
+                                            else if (BREADCRUMB_LABELS[lowerSegment]) {
                                                 label = BREADCRUMB_LABELS[lowerSegment];
                                                 
                                                 // Specific case: '/produits/new' -> 'Nouveau produit'
                                                 if (segment === 'new' && pathSegments[index - 1] === 'produits') {
                                                     label = 'Nouveau produit';
                                                 }
-                                            } else if (segment.length > 15 && /^[a-zA-Z0-9]{15,}$/.test(segment)) {
-                                                if (pathSegments[index - 1] === 'clients') label = 'Dossier Client';
-                                                else if (pathSegments[index - 1] === 'products' || pathSegments[index - 1] === 'produits') label = 'Fiche Produit';
-                                                else if (pathSegments[index - 1] === 'commandes' || pathSegments[index - 1] === 'ventes') label = 'Détails Commande';
+                                            } 
+                                            // 3. Check for ID patterns
+                                            else if (segment.length > 15 && /^[a-zA-Z0-9-]{15,}$/.test(segment)) {
+                                                const prevSegment = pathSegments[index - 1];
+                                                if (prevSegment === 'clients') label = 'Dossier Client';
+                                                else if (prevSegment === 'products' || prevSegment === 'produits') label = 'Fiche Produit';
+                                                else if (prevSegment === 'commandes' || prevSegment === 'ventes') label = 'Détails Commande';
+                                                else if (prevSegment === 'suppliers') label = 'Fiche Fournisseur';
                                                 else label = 'Détails';
-                                            } else {
+                                            } 
+                                            // 4. Fallback: Capitalize
+                                            else {
                                                 label = segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, ' ');
                                             }
 
@@ -149,6 +164,9 @@ export default function AppShell({ children, banner }: { children: React.ReactNo
                                         return items;
                                     })()}
                                 />
+                                <div className="ml-auto flex items-center gap-2">
+                                    <NotificationsWrapper />
+                                </div>
                             </header>
 
                             <main className="flex-1 overflow-y-auto bg-slate-50/50">

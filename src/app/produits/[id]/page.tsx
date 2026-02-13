@@ -14,6 +14,7 @@ import { StockUpdateDialog } from '@/components/dashboard/produits/stock-update-
 import { BackButton } from '@/components/ui/back-button';
 import { getProduct } from '@/app/actions/products-actions';
 import type { Product } from '@/lib/types';
+import { useBreadcrumbStore } from '@/hooks/use-breadcrumb-store';
 
 
 
@@ -27,6 +28,17 @@ export default function ProductDetailsPage() {
     const [isLoading, setIsLoading] = React.useState(true);
     const [error, setError] = React.useState<string | null>(null);
     const [showStockDialog, setShowStockDialog] = React.useState(false);
+    const { setLabel } = useBreadcrumbStore();
+
+    // Update breadcrumb label with product name
+    React.useEffect(() => {
+        if (product) {
+            const name = product.nomProduit || product.name;
+            if (name && productId) {
+                setLabel(productId, name);
+            }
+        }
+    }, [product, productId, setLabel]);
 
     // Check for auto-open stock dialog from query params
     React.useEffect(() => {

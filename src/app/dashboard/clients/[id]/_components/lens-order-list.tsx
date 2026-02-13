@@ -76,6 +76,11 @@ interface LensOrder {
   hauteurL: string | null;
   matiere: string | null;
   indice: string | null;
+  notes: string | null;
+  ecartPupillaireR: string | null;
+  ecartPupillaireL: string | null;
+  diameterR: string | null;
+  diameterL: string | null;
 }
 
 const getStatusBadge = (status: string) => {
@@ -240,14 +245,18 @@ export function LensOrderList({ clientId, clientName, mode = 'glasses' }: LensOr
       cylinder: selectedOrder.cylindreR,
       axis: selectedOrder.axeR,
       addition: selectedOrder.additionR,
-      hauteur: selectedOrder.hauteurR
+      hauteur: selectedOrder.hauteurR,
+      ecartPupillaire: selectedOrder.ecartPupillaireR,
+      diameter: selectedOrder.diameterR
     };
     const og = {
       sphere: selectedOrder.sphereL,
       cylinder: selectedOrder.cylindreL,
       axis: selectedOrder.axeL,
       addition: selectedOrder.additionL,
-      hauteur: selectedOrder.hauteurL
+      hauteur: selectedOrder.hauteurL,
+      ecartPupillaire: selectedOrder.ecartPupillaireL,
+      diameter: selectedOrder.diameterL
     };
 
     // Helper to generate SVG for an eye
@@ -752,7 +761,7 @@ import { BrandLoader } from '@/components/ui/loader-brand';
                       <SensitiveData value={parseFloat(order.totalPrice)} type="currency" />
                     </TableCell>
                     <TableCell className="text-right">
-                      <DropdownMenu>
+                      <DropdownMenu modal={false}>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon">
                             <MoreHorizontal className="h-4 w-4" />
@@ -804,11 +813,14 @@ import { BrandLoader } from '@/components/ui/loader-brand';
         </CardContent>
       </Card>
 
-      {/* Update Status Dialog */}
+      {/* @ts-ignore */}
       <Dialog modal={false} open={isUpdateDialogOpen} onOpenChange={setIsUpdateDialogOpen}>
         <DialogContent 
-          onInteractOutside={(e) => {
+          onInteractOutside={(e) => e.preventDefault()}
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onCloseAutoFocus={(e) => {
             e.preventDefault();
+            document.body.style.pointerEvents = 'auto';
           }}
         >
           <DialogHeader>
@@ -824,6 +836,7 @@ import { BrandLoader } from '@/components/ui/loader-brand';
           <div className="py-4">
             {/* ✅ FIX: Add modal={false} to prevent Select overlay from blocking UI */}
             <Select
+              modal={false}
               value={newStatus}
               onValueChange={(val) => setNewStatus(val as LensOrderStatus)}
             >
@@ -861,8 +874,16 @@ import { BrandLoader } from '@/components/ui/loader-brand';
         }}
       />
 
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent>
+      {/* @ts-ignore */}
+      <AlertDialog modal={false} open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent 
+          onInteractOutside={(e) => e.preventDefault()}
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onCloseAutoFocus={(e) => {
+            e.preventDefault();
+            document.body.style.pointerEvents = 'auto';
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>Supprimer la commande ?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -886,12 +907,15 @@ import { BrandLoader } from '@/components/ui/loader-brand';
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* View Details Dialog */}
+      {/* @ts-ignore */}
       <Dialog modal={false} open={isViewDetailsOpen} onOpenChange={setIsViewDetailsOpen}>
         <DialogContent 
           className="max-w-3xl"
-          onInteractOutside={(e) => {
+          onInteractOutside={(e) => e.preventDefault()}
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onCloseAutoFocus={(e) => {
             e.preventDefault();
+            document.body.style.pointerEvents = 'auto';
           }}
         >
           <DialogHeader>
@@ -1005,11 +1029,16 @@ import { BrandLoader } from '@/components/ui/loader-brand';
         </DialogContent>
       </Dialog>
 
-      {/* Share Dialog */}
+      {/* @ts-ignore */}
       <Dialog modal={false} open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
         <DialogContent
           className="max-w-md"
           onInteractOutside={(e) => e.preventDefault()}
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onCloseAutoFocus={(e) => {
+            e.preventDefault();
+            document.body.style.pointerEvents = 'auto';
+          }}
         >
           <DialogHeader>
             <DialogTitle>Partager la commande</DialogTitle>
