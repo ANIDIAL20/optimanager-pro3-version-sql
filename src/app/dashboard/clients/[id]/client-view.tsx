@@ -57,6 +57,7 @@ export default function ClientDetailView({ initialClient, initialReservations }:
     
     // State to pass reservation to POS when clicking "Utiliser"
     const [reservationToProcess, setReservationToProcess] = React.useState<number | null>(null);
+    const [orderToProcess, setOrderToProcess] = React.useState<number | null>(null);
 
     // Refresh key for other tabs that might still need manual refresh triggers
     const [refreshKey, setRefreshKey] = React.useState(0);
@@ -88,6 +89,11 @@ export default function ClientDetailView({ initialClient, initialReservations }:
 
     const handleUseReservation = (res: FrameReservation) => {
         setReservationToProcess(res.id);
+        setActiveTab('sales');
+    };
+
+    const handleUseOrder = (orderId: number) => {
+        setOrderToProcess(orderId);
         setActiveTab('sales');
     };
 
@@ -147,7 +153,7 @@ export default function ClientDetailView({ initialClient, initialReservations }:
 
                 {/* Overview Tab - Mini Bento Grid */}
                 <TabsContent value="overview">
-                    <ClientOverview client={client} clientId={id} />
+                    <ClientOverview client={client} clientId={id} onTabChange={handleTabChange} />
                 </TabsContent>
 
                 {/* Point de Vente Tab */}
@@ -156,6 +162,7 @@ export default function ClientDetailView({ initialClient, initialReservations }:
                         client={client} 
                         clientId={id} 
                         initialReservationId={reservationToProcess}
+                        initialOrderId={orderToProcess}
                     />
                 </TabsContent>
 
@@ -185,18 +192,29 @@ export default function ClientDetailView({ initialClient, initialReservations }:
                     </Tabs>
                 </TabsContent>
 
-                {/* Lens Orders Tab */}
                 <TabsContent value="lens-orders" className="space-y-6">
                     <LensOrderForm clientId={id} mode="glasses" onSuccess={() => setRefreshKey(prev => prev + 1)} />
                     <Separator />
-                    <LensOrderList key={`lens-orders-${refreshKey}`} mode="glasses" clientId={id} clientName={`${client?.prenom || ''} ${client?.nom || ''}`} />
+                    <LensOrderList 
+                        key={`lens-orders-${refreshKey}`} 
+                        mode="glasses" 
+                        clientId={id} 
+                        clientName={`${client?.prenom || ''} ${client?.nom || ''}`}
+                        onUseOrder={handleUseOrder}
+                    />
                 </TabsContent>
 
                 {/* Contact Lens Orders Tab */}
                 <TabsContent value="contact-orders" className="space-y-6">
                     <LensOrderForm clientId={id} mode="contacts" onSuccess={() => setRefreshKey(prev => prev + 1)} />
                     <Separator />
-                    <LensOrderList key={`contact-orders-${refreshKey}`} mode="contacts" clientId={id} clientName={`${client?.prenom || ''} ${client?.nom || ''}`} />
+                    <LensOrderList 
+                        key={`contact-orders-${refreshKey}`} 
+                        mode="contacts" 
+                        clientId={id} 
+                        clientName={`${client?.prenom || ''} ${client?.nom || ''}`}
+                        onUseOrder={handleUseOrder}
+                    />
                 </TabsContent>
 
                 {/* Purchase History Tab */}

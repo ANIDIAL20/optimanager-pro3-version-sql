@@ -16,12 +16,12 @@ export async function measurePerformance<T>(
     const result = await fn();
     const duration = Date.now() - start;
     
-    // ✅ Log performance metrics
+    // ✅ Log performance metrics (Fire-and-forget)
     if (duration > 500) {
       console.warn(`⚠️ Slow operation: ${name} took ${duration}ms`);
       
-      // ✅ Store in audit_logs for the dashboard
-      await logAudit({
+      // Don't await - let it run in background
+      logAudit({
         userId,
         entityType: 'performance',
         entityId: 'slow-query',
@@ -34,21 +34,21 @@ export async function measurePerformance<T>(
           context,
           timestamp: new Date().toISOString()
         }
-      });
+      }).catch(err => console.warn('Failed to log slow query', err));
     } else if (process.env.NODE_ENV === 'development') {
       console.log(`✅ ${name} completed in ${duration}ms`);
     }
     
-    // ✅ Track all operations (for aggregation/metrics)
-    await trackPerformanceMetric(name, duration);
+    // ✅ Track all operations
+    trackPerformanceMetric(name, duration).catch(() => {});
     
     return result;
   } catch (error: any) {
     const duration = Date.now() - start;
     console.error(`❌ ${name} failed after ${duration}ms`, error);
     
-    // ✅ Log failures
-    await logAudit({
+    // Log failure in background
+    logAudit({
       userId,
       entityType: 'performance',
       entityId: 'operation-failure',
@@ -61,7 +61,7 @@ export async function measurePerformance<T>(
         error: error.message,
         context
       }
-    });
+    }).catch(err => console.warn('Failed to log failure', err));
     
     throw error;
   }

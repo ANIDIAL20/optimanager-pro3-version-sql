@@ -247,7 +247,11 @@ export function ReceiveOrderDialog({
                           type="number" 
                           step="0.01"
                           {...field}
-                          onChange={e => field.onChange(parseFloat(e.target.value))}
+                          value={isNaN(field.value) ? '' : field.value}
+                          onChange={e => {
+                            const val = parseFloat(e.target.value);
+                            field.onChange(isNaN(val) ? 0 : val);
+                          }}
                           className="h-12 pl-4 pr-16 text-lg font-semibold border-2 border-amber-200 bg-amber-50/30 focus:border-amber-400 focus:ring-2 focus:ring-amber-200 transition-all group-hover:border-amber-300"
                         />
                         <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-amber-700 bg-amber-200 px-2.5 py-1 rounded-md shadow-sm">DH</span>

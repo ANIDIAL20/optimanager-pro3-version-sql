@@ -27,7 +27,7 @@ export const createSale = createAction(
         
         const newSale = await saleService.processSale(userId, input);
 
-        revalidatePath('/dashboard/sales');
+        revalidatePath('/dashboard/ventes');
         revalidatePath('/dashboard/produits'); // Stock updated
         
         return newSale;

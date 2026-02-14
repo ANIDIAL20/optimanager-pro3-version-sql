@@ -1,8 +1,3 @@
-/**
- * Products Actions - Neon/Drizzle Version
- * Secure, multi-tenant product management
- */
-
 'use server';
 
 import { db } from '@/db';
@@ -92,7 +87,8 @@ export const getProducts = secureAction(async (userId, user, searchQuery?: strin
                 matiereId: p.matiereId?.toString(),
                 couleurId: p.couleurId?.toString(),
                 categorieId: p.categorie,
-                marqueId: p.marque
+                marqueId: p.marque,
+                type: p.type
             }));
 
             console.log(`✅ Found ${mappedProducts.length} products (Drizzle)`);
@@ -106,6 +102,88 @@ export const getProducts = secureAction(async (userId, user, searchQuery?: strin
             return { success: false, error: 'Erreur lors de la récupération des produits' };
         }
     }, { userId });
+});
+
+/**
+ * Optimized Search for POS (Pagination + Filtering)
+ */
+export const searchProducts = secureAction(async (userId, user, params: { 
+    query?: string; 
+    type?: string; 
+    category?: string; 
+    limit?: number;
+    offset?: number; 
+}) => {
+    try {
+        const limit = params.limit || 50;
+        const offset = params.offset || 0;
+        
+        const filters = [
+            eq(products.userId, userId),
+            sql`${products.deletedAt} IS NULL`
+        ];
+
+        // Type filter
+        if (params.type && params.type !== 'ALL') {
+             // Handle 'SOLAIRE' specially if it's not a native type but a category convention
+             // Assuming user uses standard types: MONTURE, VERRE, ACCESSOIRE
+             if (params.type === 'SOLAIRE') {
+                 // Solaire is tricky, usually a category or type. 
+                 // If schema has no SOLAIRE type, check category or name
+                 filters.push(or(
+                     ilike(products.categorie, '%solaire%'),
+                     ilike(products.nom, '%solaire%')
+                 )!);
+             } else {
+                 filters.push(eq(products.type, params.type as any));
+             }
+        }
+
+        // Category filter
+        if (params.category && params.category !== 'all') {
+            filters.push(eq(products.categorie, params.category));
+        }
+
+        // Text search
+        if (params.query) {
+            const search = `%${params.query}%`;
+            filters.push(or(
+                ilike(products.nom, search),
+                ilike(products.reference, search),
+                ilike(products.marque, search)
+            )!);
+        }
+
+        const results = await db.select().from(products)
+            .where(and(...filters))
+            .limit(limit)
+            .offset(offset)
+            .orderBy(desc(products.createdAt));
+
+        const mappedProducts = results.map((p: any) => ({
+            id: p.id.toString(),
+            reference: p.reference || '',
+            nomProduit: p.nom,
+            prixAchat: Number(p.prixAchat || 0),
+            prixVente: Number(p.prixVente || 0),
+            quantiteStock: p.quantiteStock || 0,
+            reservedQuantity: p.reservedQuantity || 0,
+            availableQuantity: p.availableQuantity || 0,
+            seuilAlerte: p.seuilAlerte || 5,
+            categorie: p.categorie || '',
+            marque: p.marque || '',
+            modele: p.modele || '',
+            couleur: p.couleur || '',
+            type: p.type,
+            createdAt: p.createdAt ? (typeof p.createdAt === 'string' ? p.createdAt : p.createdAt.toISOString()) : new Date().toISOString(),
+        }));
+
+        return { success: true, data: mappedProducts };
+
+    } catch (error: any) {
+        console.error('Error searching products:', error);
+        return { success: false, error: error.message };
+    }
 });
 
 /**

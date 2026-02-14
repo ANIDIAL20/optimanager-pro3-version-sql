@@ -6,7 +6,7 @@
 'use server';
 
 import { db } from '@/db';
-import { sales, clients, products, lensOrders, clientTransactions, devis } from '@/db/schema';
+import { sales, clients, products, lensOrders, clientTransactions, devis, stockMovements } from '@/db/schema';
 import { eq, and, desc, sql, inArray, or } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure, logAudit } from '@/lib/audit-log';
@@ -110,7 +110,16 @@ export const getSales = secureAction(async (userId, user) => {
             where: eq(sales.userId, userId),
             orderBy: [desc(sales.createdAt)],
             with: {
-                client: true
+                client: {
+                    columns: {
+                        id: true,
+                        fullName: true,
+                        phone: true,
+                        email: true,
+                        mutuelle: true,
+                        address: true
+                    }
+                }
             }
         });
 
@@ -139,7 +148,16 @@ export const getSale = secureAction(async (userId, user, saleId: string) => {
         const sale = await db.query.sales.findFirst({
             where: and(eq(sales.id, id), eq(sales.userId, userId)),
             with: {
-                client: true
+                client: {
+                    columns: {
+                        id: true,
+                        fullName: true,
+                        phone: true,
+                        email: true,
+                        mutuelle: true,
+                        address: true
+                    }
+                }
             }
         });
 
@@ -186,6 +204,14 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
 
                 const client = await tx.query.clients.findFirst({
                     where: and(eq(clients.id, clientIdNum), eq(clients.userId, userId)),
+                    columns: {
+                        id: true,
+                        fullName: true,
+                        phone: true,
+                        address: true,
+                        balance: true,
+                        creditLimit: true,
+                    },
                     with: {
                         prescriptionsLegacy: {
                             orderBy: (prescriptionsLegacy: any, { desc }: any) => [desc(prescriptionsLegacy.createdAt)],
@@ -330,11 +356,46 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                         inArray(lensOrders.id, data.lensOrderIds),
                         eq(lensOrders.userId, userId)
                     ));
+
+                // 5b. Decrement Stock for these Lens Orders (Global Stock Integration)
+                // We find the product with reference VERRE-{id} and decrement it
+                for (const loId of data.lensOrderIds) {
+                    const productRef = `VERRE-${loId}`;
+                    const product = await tx.query.products.findFirst({
+                        where: and(eq(products.userId, userId), eq(products.reference, productRef))
+                    });
+
+                    if (product) {
+                        try {
+                             await tx.update(products)
+                                .set({ 
+                                    quantiteStock: sql`${products.quantiteStock} - 1`,
+                                    updatedAt: new Date()
+                                })
+                                .where(eq(products.id, product.id));
+
+                             await tx.insert(stockMovements).values({
+                                userId,
+                                productId: product.id,
+                                type: 'OUT',
+                                quantite: 1,
+                                notes: `Vente LensOrder #${loId} (Sale #${createdSaleId})`,
+                                createdAt: new Date()
+                            });
+                        } catch (err) {
+                            console.error(`Failed to decrement stock for lens order ${loId}`, err);
+                            // Don't fail the sale for this, but log it
+                        }
+                    }
+                }
             }
 
             // 6. CLIENT LEDGER
             if (clientIdNum) {
-                const client = await tx.query.clients.findFirst({ where: eq(clients.id, clientIdNum) });
+                const client = await tx.query.clients.findFirst({ 
+                    where: eq(clients.id, clientIdNum),
+                    columns: { id: true, balance: true, creditLimit: true, fullName: true }
+                });
                 if (client) {
                     const currentBalance = Number(client.balance || 0);
                     const saleAmount = calcTotalTTC;
@@ -379,7 +440,7 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                 itemsCount: enrichedItems.length
             });
 
-            revalidatePath('/dashboard/sales');
+            revalidatePath('/dashboard/ventes');
             revalidatePath('/dashboard/stock');
             if (clientIdNum) revalidatePath(`/dashboard/clients/${clientIdNum}`);
             revalidateTag('sales');
@@ -409,7 +470,12 @@ export const deleteSale = secureAction(async (userId, user, saleId: string) => {
         await db.transaction(async (tx: any) => {
             // 1. Fetch sale to get items for stock reversion
             const saleDoc = await tx.query.sales.findFirst({
-                where: and(eq(sales.id, id), eq(sales.userId, userId))
+                where: and(eq(sales.id, id), eq(sales.userId, userId)),
+                with: {
+                    client: {
+                        columns: { id: true, balance: true }
+                    }
+                }
             });
 
             if (!saleDoc) throw new Error("Vente introuvable");
@@ -453,7 +519,7 @@ export const deleteSale = secureAction(async (userId, user, saleId: string) => {
         });
 
         await logSuccess(userId, 'DELETE', 'sales', saleId, { action: 'delete_sale' });
-        revalidatePath('/dashboard/sales');
+        revalidatePath('/dashboard/ventes');
         revalidatePath('/dashboard/stock');
         return { success: true, message: 'Vente supprimée et stock restauré avec succès' };
 
@@ -471,7 +537,12 @@ export const processReturn = secureAction(async (userId, user, saleId: string, r
 
         await db.transaction(async (tx: any) => {
             const sale = await tx.query.sales.findFirst({
-                where: and(eq(sales.id, id), eq(sales.userId, userId))
+                where: and(eq(sales.id, id), eq(sales.userId, userId)),
+                with: {
+                    client: {
+                        columns: { id: true, balance: true }
+                    }
+                }
             });
 
             if (!sale) throw new Error("Vente introuvable");
@@ -578,8 +649,8 @@ export const processReturn = secureAction(async (userId, user, saleId: string, r
             await logSuccess(userId, 'RETURN', 'sales', saleId, { action: 'process_return', totalRefund: returnedTTC, actualRefund: refundAmount }, sale, { ...sale, items: updatedItems, totalTTC: newTotalTTC.toFixed(2), status: newStatus });
         });
 
-        revalidatePath('/dashboard/sales');
-        revalidatePath(`/dashboard/sales/${saleId}`);
+        revalidatePath('/dashboard/ventes');
+        revalidatePath(`/dashboard/ventes/${saleId}`);
         revalidatePath('/dashboard/stock');
         return { success: true, message: 'Retour effectué avec succès' };
 
@@ -599,7 +670,12 @@ export const getClientSales = secureAction(async (userId, user, clientId: string
             where: and(eq(sales.clientId, id), eq(sales.userId, userId)),
             orderBy: [desc(sales.createdAt)],
             with: {
-                client: true
+                client: {
+                    columns: {
+                        id: true,
+                        fullName: true,
+                    }
+                }
             }
         });
 
@@ -620,7 +696,12 @@ export const addPayment = secureAction(async (userId, user, saleId: string, paym
         
         await db.transaction(async (tx: any) => {
             const saleDoc = await tx.query.sales.findFirst({
-                where: and(eq(sales.id, id), eq(sales.userId, userId))
+                where: and(eq(sales.id, id), eq(sales.userId, userId)),
+                with: {
+                    client: {
+                        columns: { id: true, balance: true, fullName: true, phone: true }
+                    }
+                }
             });
 
             if (!saleDoc) throw new Error("Vente introuvable");
@@ -661,7 +742,10 @@ export const addPayment = secureAction(async (userId, user, saleId: string, paym
 
             // Ledger Update
             if (saleDoc.clientId) {
-                const client = await tx.query.clients.findFirst({ where: eq(clients.id, saleDoc.clientId) });
+                const client = await tx.query.clients.findFirst({ 
+                    where: eq(clients.id, saleDoc.clientId),
+                    columns: { id: true, balance: true }
+                });
                 if (client) {
                    const amountPaid = payment.amount;
                    const currentBalance = Number(client.balance || 0);
@@ -694,8 +778,8 @@ export const addPayment = secureAction(async (userId, user, saleId: string, paym
                 saleNumber: saleDoc?.saleNumber
             });
 
-            revalidatePath('/dashboard/sales');
-            revalidatePath(`/dashboard/sales/${saleId}`);
+            revalidatePath('/dashboard/ventes');
+            revalidatePath(`/dashboard/ventes/${saleId}`);
             if (saleDoc.clientId) revalidatePath(`/dashboard/clients/${saleDoc.clientId}`);
         });
 

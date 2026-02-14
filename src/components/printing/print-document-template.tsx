@@ -77,9 +77,12 @@ export function PrintDocumentTemplate({ type, data }: PrintDocumentTemplateProps
                                 <p>{settings?.phone ? `Tél: ${settings.phone}` : ''}</p>
                                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[9px] text-slate-500">
                                     {settings?.ice && <span>ICE: {settings.ice}</span>}
-                                    {settings?.rc && <span>RC: {settings.rc}</span>}
                                     {settings?.if && <span>IF: {settings.if}</span>}
-                                    {settings?.patente && <span>Patente: {settings.patente}</span>}
+                                    {settings?.rc && <span>RC: {settings.rc}</span>}
+                                    {settings?.tp && <span>TP: {settings.tp}</span>}
+                                    {settings?.inpe && <span>INPE: {settings.inpe}</span>}
+                                    {/* Fallback for legacy Patente if TP not set */}
+                                    {!settings?.tp && settings?.patente && <span>Patente: {settings.patente}</span>}
                                 </div>
                             </div>
                         </div>

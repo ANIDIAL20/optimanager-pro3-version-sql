@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertCircle, MoreHorizontal, Eye, Trash2, Edit, Share2, Mail, Printer, PackageCheck } from 'lucide-react';
+import { AlertCircle, MoreHorizontal, Eye, Trash2, Edit, Share2, Mail, Printer, PackageCheck, ShoppingBag } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { format } from 'date-fns';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
@@ -44,8 +44,9 @@ import { ReceiveOrderDialog } from './receive-order-dialog';
 
 interface LensOrderListProps {
   clientId: string;
-  clientName?: string;
-  mode?: 'glasses' | 'contacts';
+  clientName: string;
+  mode: 'glasses' | 'contacts';
+  onUseOrder?: (orderId: number) => void;
 }
 
 type LensOrderStatus = 'pending' | 'ordered' | 'received' | 'delivered';
@@ -95,7 +96,7 @@ const getStatusBadge = (status: string) => {
   return <Badge variant={config.variant} className={config.className}>{config.label}</Badge>;
 };
 
-export function LensOrderList({ clientId, clientName, mode = 'glasses' }: LensOrderListProps) {
+export function LensOrderList({ clientId, clientName, mode = 'glasses', onUseOrder }: LensOrderListProps) {
   const { toast } = useToast();
   const [orders, setOrders] = React.useState<LensOrder[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -239,7 +240,6 @@ export function LensOrderList({ clientId, clientName, mode = 'glasses' }: LensOr
   const handlePrint = () => {
     if (!selectedOrder) return;
     
-    // Map explicit columns to objects for the SVG helper
     const od = {
       sphere: selectedOrder.sphereR,
       cylinder: selectedOrder.cylindreR,
@@ -782,6 +782,25 @@ import { BrandLoader } from '@/components/ui/loader-brand';
                               Réceptionner
                             </DropdownMenuItem>
                           )}
+                          {order.status === 'received' && (
+                            <DropdownMenuItem 
+                              onClick={() => {
+                                if (onUseOrder) {
+                                  onUseOrder(order.id);
+                                } else {
+                                  const url = new URL(window.location.href);
+                                  url.searchParams.set('tab', 'sales');
+                                  url.searchParams.set('orderId', order.id.toString());
+                                  window.history.replaceState({}, '', url);
+                                  window.location.reload();
+                                }
+                              }} 
+                              className="text-emerald-600 focus:text-emerald-600 font-bold"
+                            >
+                              <ShoppingBag className="mr-2 h-4 w-4" />
+                              Vendre au POS
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem onClick={() => handleOpenShareDialog(order)} className="text-blue-600 focus:text-blue-600">
                             <Share2 className="mr-2 h-4 w-4" />
                             Partager avec fournisseur
@@ -971,8 +990,14 @@ import { BrandLoader } from '@/components/ui/loader-brand';
                       <span>Axe:</span> <span className="font-semibold text-slate-900">{selectedOrder.axeL ? `${selectedOrder.axeL}°` : '-'}</span>
                       <span>Addition:</span> <span className="font-semibold text-slate-900">{selectedOrder.additionL || '-'}</span>
                       <span>Hauteur:</span> <span className="font-semibold text-slate-900">{selectedOrder.hauteurL || '-'}</span>
+                      <span>EP / Diamètre:</span> <span className="font-semibold text-slate-900">{selectedOrder.ecartPupillaireL || '-'}/{selectedOrder.diameterL || '-'}</span>
                     </div>
                   </div>
+                </div>
+                <div className="mt-4 pt-4 border-t grid grid-cols-2 gap-4 text-sm">
+                   <div className="space-y-1">
+                      <p><span className="text-slate-500">EP / Diamètre OD:</span> <span className="font-medium">{selectedOrder.ecartPupillaireR || '-'}/{selectedOrder.diameterR || '-'}</span></p>
+                   </div>
                 </div>
                 {(selectedOrder.matiere || selectedOrder.indice) && (
                   <div className="mt-4 pt-4 border-t grid grid-cols-2 gap-4 text-sm">

@@ -46,8 +46,13 @@ export async function logAudit(entry: AuditLogEntry): Promise<void> {
     }
   } catch (error: any) {
     // Don't fail the business operation if logging fails
-    console.error('CRITICAL: Failed to save audit log:', error);
-    await trackTransactionFailure('AUDIT_LOG_SAVE', error.message);
+    // Use warn instead of error to avoid triggering Next.js Error Overlay in dev
+    if (error.message?.includes('relation "audit_logs" does not exist')) {
+        console.warn('⚠️ Audit Logging skipped: Table "audit_logs" missing. Please run migrations.');
+    } else {
+        console.warn('⚠️ Failed to save audit log:', error.message);
+        await trackTransactionFailure('AUDIT_LOG_SAVE', error.message);
+    }
   }
 }
 

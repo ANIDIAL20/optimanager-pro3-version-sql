@@ -21,6 +21,10 @@ const shopFormSchema = z.object({
     phone: z.string().optional(),
     ice: z.string().optional(),
     rib: z.string().optional(),
+    if: z.string().optional(),
+    rc: z.string().optional(),
+    tp: z.string().optional(),
+    inpe: z.string().optional().refine(v => !v || /^\d{9}$/.test(v), { message: "INPE invalide (doit contenir 9 chiffres)" }),
     logoUrl: z.string().optional(),
 });
 
@@ -41,6 +45,10 @@ export function ShopProfileForm() {
             phone: '',
             ice: '',
             rib: '',
+            if: '',
+            rc: '',
+            tp: '',
+            inpe: '',
             logoUrl: '',
         },
     });
@@ -59,6 +67,10 @@ export function ShopProfileForm() {
                         phone: profile.phone || '',
                         ice: profile.ice || '',
                         rib: profile.rib || '',
+                        if: profile.if || '',
+                        rc: profile.rc || '',
+                        tp: profile.tp || '',
+                        inpe: profile.inpe || '',
                         logoUrl: profile.logoUrl || '',
                     });
                     if (profile.logoUrl) {
@@ -376,6 +388,72 @@ export function ShopProfileForm() {
                                 </FormItem>
                             )}
                         />
+
+                        {/* NEW LEGAL FIELDS */}
+                        <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-lg border border-slate-100">
+                             <div className="md:col-span-2">
+                                <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                                    <Building2 className="h-4 w-4" />
+                                    Informations Légales (Maroc)
+                                </h4>
+                             </div>
+
+                             <FormField
+                                control={form.control}
+                                name="if"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Identifiant Fiscal (IF)</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="12345678" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="rc"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Registre Commerce (RC)</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="12345" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="tp"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Taxe Pro (TP/Patente)</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="12345678" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="inpe"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>INPE (9 chiffres)</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="123456789" {...field} maxLength={9} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
 
                         <FormField
                             control={form.control}

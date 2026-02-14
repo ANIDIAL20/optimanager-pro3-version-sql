@@ -55,8 +55,10 @@ const PrescriptionSchema = z.object({
   ogBc: z.string().optional(),
   ogDia: z.string().optional(),
 
-  ecartPupillaire: z.string().optional(),
-  hauteurMontage: z.string().optional(),
+  odEcartPupillaire: z.string().optional(),
+  ogEcartPupillaire: z.string().optional(),
+  odHauteurMontage: z.string().optional(),
+  ogHauteurMontage: z.string().optional(),
   pontage: z.string().optional(),
   branches: z.string().optional(),
   diametre: z.string().optional(),
@@ -74,6 +76,8 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
   const form = useForm<PrescriptionFormValues>({
     resolver: zodResolver(PrescriptionSchema),
     defaultValues: {
+      date: new Date(),
+      type: 'Vision de loin',
       odSphere: '',
       odCylindre: '',
       odAxe: '',
@@ -86,8 +90,10 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
       ogAddition: '',
       ogBc: '',
       ogDia: '',
-      ecartPupillaire: '',
-      hauteurMontage: '',
+      odEcartPupillaire: '',
+      ogEcartPupillaire: '',
+      odHauteurMontage: '',
+      ogHauteurMontage: '',
       pontage: '',
       branches: '',
       diametre: '',
@@ -103,20 +109,26 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
     setIsSubmitting(true);
 
     try {
-      const prescriptionData = {
+      const prescriptionData: PrescriptionData = {
         od: {
           sphere: data.odSphere || '',
           cylinder: data.odCylindre || '',
           axis: data.odAxe || '',
-          addition: data.odAddition || ''
+          addition: data.odAddition || '',
+          pd: data.odEcartPupillaire || '',
+          height: data.odHauteurMontage || ''
         },
         og: {
           sphere: data.ogSphere || '',
           cylinder: data.ogCylindre || '',
           axis: data.ogAxe || '',
-          addition: data.ogAddition || ''
+          addition: data.ogAddition || '',
+          pd: data.ogEcartPupillaire || '',
+          height: data.ogHauteurMontage || ''
         },
-        pd: data.ecartPupillaire || '',
+        pd: data.odEcartPupillaire && data.ogEcartPupillaire 
+          ? (parseFloat(data.odEcartPupillaire) + parseFloat(data.ogEcartPupillaire)).toString() 
+          : '',
         doctorName: data.prescripteur
       };
 
@@ -239,7 +251,7 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
                   <FormItem>
                     <FormLabel>Prescripteur</FormLabel>
                     <FormControl>
-                      <Input placeholder="ex. Dr. Martin" {...field} />
+                      <Input placeholder="ex. Dr. Martin" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -255,22 +267,28 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
                   <h4 className="font-semibold text-center">Œil Droit (OD)</h4>
                   <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                     <FormField control={form.control} name="odSphere" render={({ field }) => (
-                      <FormItem><FormLabel>Sphère</FormLabel><FormControl><Input placeholder="+0.00" {...field} /></FormControl></FormItem>
+                      <FormItem><FormLabel>Sphère</FormLabel><FormControl><Input placeholder="+0.00" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                     )} />
                     <FormField control={form.control} name="odCylindre" render={({ field }) => (
-                      <FormItem><FormLabel>Cylindre</FormLabel><FormControl><Input placeholder="-0.00" {...field} /></FormControl></FormItem>
+                      <FormItem><FormLabel>Cylindre</FormLabel><FormControl><Input placeholder="-0.00" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                     )} />
                     <FormField control={form.control} name="odAxe" render={({ field }) => (
-                      <FormItem><FormLabel>Axe</FormLabel><FormControl><Input placeholder="0°" {...field} /></FormControl></FormItem>
+                      <FormItem><FormLabel>Axe</FormLabel><FormControl><Input placeholder="0°" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                     )} />
                     <FormField control={form.control} name="odAddition" render={({ field }) => (
-                      <FormItem><FormLabel>Addition</FormLabel><FormControl><Input placeholder="+0.00" {...field} /></FormControl></FormItem>
+                      <FormItem><FormLabel>Addition</FormLabel><FormControl><Input placeholder="+0.00" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                     )} />
                     <FormField control={form.control} name="odBc" render={({ field }) => (
-                      <FormItem><FormLabel>BC (Lentilles)</FormLabel><FormControl><Input placeholder="8.6" {...field} /></FormControl></FormItem>
+                      <FormItem><FormLabel>BC (Lentilles)</FormLabel><FormControl><Input placeholder="8.6" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                     )} />
                     <FormField control={form.control} name="odDia" render={({ field }) => (
-                      <FormItem><FormLabel>DIA (Lentilles)</FormLabel><FormControl><Input placeholder="14.2" {...field} /></FormControl></FormItem>
+                      <FormItem><FormLabel>DIA (Lentilles)</FormLabel><FormControl><Input placeholder="14.2" {...field} value={field.value ?? ''} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="odEcartPupillaire" render={({ field }) => (
+                      <FormItem className="border-t pt-2"><FormLabel className="text-primary font-bold">Écart Pup. (OD)</FormLabel><FormControl><Input placeholder="32" {...field} value={field.value ?? ''} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="odHauteurMontage" render={({ field }) => (
+                      <FormItem className="border-t pt-2"><FormLabel className="text-primary font-bold">Hauteur (OD)</FormLabel><FormControl><Input placeholder="18" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                     )} />
                   </div>
                 </div>
@@ -279,22 +297,28 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
                   <h4 className="font-semibold text-center">Œil Gauche (OG)</h4>
                   <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                     <FormField control={form.control} name="ogSphere" render={({ field }) => (
-                      <FormItem><FormLabel>Sphère</FormLabel><FormControl><Input placeholder="+0.00" {...field} /></FormControl></FormItem>
+                      <FormItem><FormLabel>Sphère</FormLabel><FormControl><Input placeholder="+0.00" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                     )} />
                     <FormField control={form.control} name="ogCylindre" render={({ field }) => (
-                      <FormItem><FormLabel>Cylindre</FormLabel><FormControl><Input placeholder="-0.00" {...field} /></FormControl></FormItem>
+                      <FormItem><FormLabel>Cylindre</FormLabel><FormControl><Input placeholder="-0.00" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                     )} />
                     <FormField control={form.control} name="ogAxe" render={({ field }) => (
-                      <FormItem><FormLabel>Axe</FormLabel><FormControl><Input placeholder="0°" {...field} /></FormControl></FormItem>
+                      <FormItem><FormLabel>Axe</FormLabel><FormControl><Input placeholder="0°" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                     )} />
                     <FormField control={form.control} name="ogAddition" render={({ field }) => (
-                      <FormItem><FormLabel>Addition</FormLabel><FormControl><Input placeholder="+0.00" {...field} /></FormControl></FormItem>
+                      <FormItem><FormLabel>Addition</FormLabel><FormControl><Input placeholder="+0.00" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                     )} />
                     <FormField control={form.control} name="ogBc" render={({ field }) => (
-                      <FormItem><FormLabel>BC (Lentilles)</FormLabel><FormControl><Input placeholder="8.6" {...field} /></FormControl></FormItem>
+                      <FormItem><FormLabel>BC (Lentilles)</FormLabel><FormControl><Input placeholder="8.6" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                     )} />
                     <FormField control={form.control} name="ogDia" render={({ field }) => (
-                      <FormItem><FormLabel>DIA (Lentilles)</FormLabel><FormControl><Input placeholder="14.2" {...field} /></FormControl></FormItem>
+                      <FormItem><FormLabel>DIA (Lentilles)</FormLabel><FormControl><Input placeholder="14.2" {...field} value={field.value ?? ''} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="ogEcartPupillaire" render={({ field }) => (
+                      <FormItem className="border-t pt-2"><FormLabel className="text-primary font-bold">Écart Pup. (OG)</FormLabel><FormControl><Input placeholder="32" {...field} value={field.value ?? ''} /></FormControl></FormItem>
+                    )} />
+                    <FormField control={form.control} name="ogHauteurMontage" render={({ field }) => (
+                      <FormItem className="border-t pt-2"><FormLabel className="text-primary font-bold">Hauteur (OG)</FormLabel><FormControl><Input placeholder="18" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                     )} />
                   </div>
                 </div>
@@ -303,20 +327,14 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
             <div className="space-y-4">
               <h3 className="font-headline text-lg">Mesures de Montage</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                <FormField control={form.control} name="ecartPupillaire" render={({ field }) => (
-                  <FormItem><FormLabel>Écart Pupillaire</FormLabel><FormControl><Input placeholder="e.g., 62" {...field} /></FormControl></FormItem>
-                )} />
-                <FormField control={form.control} name="hauteurMontage" render={({ field }) => (
-                  <FormItem><FormLabel>Hauteur Montage</FormLabel><FormControl><Input placeholder="e.g., 18" {...field} /></FormControl></FormItem>
-                )} />
                 <FormField control={form.control} name="pontage" render={({ field }) => (
-                  <FormItem><FormLabel>Pontage</FormLabel><FormControl><Input placeholder="e.g., 17" {...field} /></FormControl></FormItem>
+                  <FormItem><FormLabel>Pontage</FormLabel><FormControl><Input placeholder="e.g., 17" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                 )} />
                 <FormField control={form.control} name="branches" render={({ field }) => (
-                  <FormItem><FormLabel>Branches</FormLabel><FormControl><Input placeholder="e.g., 145" {...field} /></FormControl></FormItem>
+                  <FormItem><FormLabel>Branches</FormLabel><FormControl><Input placeholder="e.g., 145" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                 )} />
                 <FormField control={form.control} name="diametre" render={({ field }) => (
-                  <FormItem><FormLabel>Diamètre Verre</FormLabel><FormControl><Input placeholder="e.g., 70" {...field} /></FormControl></FormItem>
+                  <FormItem><FormLabel>Diamètre Verre</FormLabel><FormControl><Input placeholder="e.g., 70" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                 )} />
               </div>
             </div>
