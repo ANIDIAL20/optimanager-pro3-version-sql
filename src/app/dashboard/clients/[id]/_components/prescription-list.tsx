@@ -127,7 +127,8 @@ export function PrescriptionList({ clientId }: PrescriptionListProps) {
                 <TableHead>OD Sphère/Cyl/Axe</TableHead>
                 <TableHead>OG Sphère/Cyl/Axe</TableHead>
                 <TableHead>Addition</TableHead>
-                <TableHead>EP</TableHead>
+                <TableHead>EP (OD/OG)</TableHead>
+                <TableHead>Hauteur (OD/OG)</TableHead>
                 <TableHead>Docteur</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
@@ -149,7 +150,16 @@ export function PrescriptionList({ clientId }: PrescriptionListProps) {
                       ? `OD:${p.data.od?.addition || '-'} | OG:${p.data.og?.addition || '-'}`
                       : '-'}
                   </TableCell>
-                  <TableCell>{p.data?.pd || '-'}</TableCell>
+                  <TableCell>
+                    {p.data?.od?.pd || p.data?.og?.pd 
+                      ? `${p.data.od?.pd || '-'} | ${p.data.og?.pd || '-'}`
+                      : p.data?.pd || '-'}
+                  </TableCell>
+                  <TableCell>
+                    {p.data?.od?.height || p.data?.og?.height 
+                      ? `${p.data.od?.height || '-'} | ${p.data.og?.height || '-'}`
+                      : '-'}
+                  </TableCell>
                   <TableCell>{p.data?.doctorName || '-'}</TableCell>
                   <TableCell>
                       {/* @ts-ignore */}

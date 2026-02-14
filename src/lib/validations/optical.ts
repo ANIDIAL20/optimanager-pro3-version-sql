@@ -56,6 +56,11 @@ export const LensOrderSchema = z.object({
   additionL: NullableString,
   hauteurL: NullableString,
   
+  ecartPupillaireR: NullableString,
+  ecartPupillaireL: NullableString,
+  diameterR: NullableString,
+  diameterL: NullableString,
+  
   // Material
   matiere: NullableString,
   indice: NullableString,

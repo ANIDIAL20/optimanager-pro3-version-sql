@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Receipt, Search, Package, Plus, ShoppingCart, Minus, Trash2, UserPlus } from 'lucide-react';
+import { ArrowLeft, Receipt, Search, Package, Plus, ShoppingCart, Minus, Trash2, UserPlus, Sparkles, CheckCircle2, Tag } from 'lucide-react';
 import Link from 'next/link';
 import { ClientSelector } from '@/components/sales/client-selector';
 import { QuickClientDialog } from '@/components/clients/quick-client-dialog';
@@ -147,30 +147,28 @@ export default function NewSalePage() {
             return;
         }
 
-        const mockProduct: Product = {
-            id: `LO-${order.id}`,
-            reference: `CMD-#${order.id}`,
-            nomProduit: `Verres: ${order.lensType}`,
-            prixVente: parseFloat(order.sellingPrice),
-            quantiteStock: 1, // unlimited effectively
-            categorie: 'Verres',
-            marque: order.supplierName,
-            modele: order.orderType,
-            couleur: '-',
-            description: order.notes || '',
-            prixAchat: parseFloat(order.finalBuyingPrice || order.estimatedBuyingPrice || '0'),
-            stockMin: 0,
-            categorieId: 'verres',
-            marqueId: 'supplier'
-        };
+        const isReceived = order.status === 'received';
+        const isContact = order.orderType === 'contact';
+        const price = parseFloat(order.sellingPrice || '0');
 
-        setCartItems(prev => [...prev, {
-            product: mockProduct,
-            quantity: 1, 
+        const newLine = {
+            ...createLineItem(
+                `LO-${order.id}`,
+                `${isReceived ? '✓' : '⚡'} ${isContact ? 'Lentilles' : 'Verres'}: ${order.lensType}`,
+                price,
+                1,
+                'VERRE'
+            ),
             lensOrderId: order.id
-        }]);
+        };
         
-        toast({ title: "Ajouté", description: "Commande ajoutée au panier." });
+        // Add to store
+        setItems([...cartItems, newLine]);
+        
+        toast({ 
+            title: isReceived ? "Commande ajoutée" : "Commande liée", 
+            description: `${order.lensType} est prêt pour la facturation.` 
+        });
     };
 
     // Filter Logic from ClientPOSTab
@@ -381,56 +379,74 @@ export default function NewSalePage() {
 
             {/* Step 1.5: Pending Orders (Smart Pro Logic) */}
             {pendingOrders.length > 0 && (
-                <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
-                     <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-lg text-indigo-900">Commandes en attente ({pendingOrders.length})</h3>
+                <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-top-4 duration-700">
+                     <div className="flex items-center justify-between px-1">
+                        <div className="flex items-center gap-2">
+                            <div className="h-6 w-12 bg-indigo-500 rounded-full flex items-center justify-center text-[10px] text-white font-black">PRO</div>
+                            <h3 className="font-extrabold text-lg text-slate-800 tracking-tight">Commandes Détectées <span className="text-indigo-600">({pendingOrders.length})</span></h3>
+                        </div>
+                        <Badge variant="outline" className="bg-white text-indigo-700 border-indigo-200 shadow-sm font-semibold px-2 py-0.5 flex gap-1.5 items-center rounded-full">
+                            <Sparkles className="h-3 w-3 text-indigo-500" />
+                            Auto-Sync
+                        </Badge>
                     </div>
-                    <Card className="border-indigo-100 bg-indigo-50/30 shadow-sm">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-base font-medium flex items-center gap-2">
-                                <Package className="h-4 w-4 text-indigo-600" />
-                                Ce client a des commandes de verres prêtes à être facturées.
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="grid gap-3 pt-0">
-                            {pendingOrders.map(order => {
-                                const isAdded = cartItems.some(i => i.productId === `LO-${order.id}`);
-                                return (
-                                    <div key={order.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-indigo-100 shadow-sm">
-                                        <div>
-                                            <p className="font-semibold text-slate-800">{order.lensType} <span className="text-slate-400 font-normal">({order.orderType})</span></p>
-                                            <p className="text-xs text-slate-500">
-                                                Commandée le {new Date(order.createdAt).toLocaleDateString()} • {parseFloat(order.sellingPrice).toFixed(2)} DH
-                                            </p>
-                                            <Badge variant="outline" className={cn("mt-1 text-[10px]", 
-                                                order.status === 'received' ? "bg-indigo-100 text-indigo-700 border-indigo-200" : "bg-yellow-100 text-yellow-700 border-yellow-200")}>
-                                                {order.status === 'received' ? 'Reçue (En Stock)' : 'Commandée (En cours)'}
-                                            </Badge>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {pendingOrders.map(order => {
+                            const isAdded = cartItems.some(i => i.productId === `LO-${order.id}`);
+                            const isReceived = order.status === 'received';
+                            return (
+                                <Card key={order.id} className={cn(
+                                    "overflow-hidden border-2 transition-all duration-300 group hover:shadow-lg relative",
+                                    isReceived 
+                                        ? "border-emerald-100 bg-emerald-50/30 hover:border-emerald-400" 
+                                        : "border-indigo-50 bg-indigo-50/20 hover:border-indigo-300",
+                                    isAdded && "opacity-40 border-slate-100 pointer-events-none"
+                                )}>
+                                    <CardContent className="p-3 flex items-center justify-between gap-3">
+                                        <div className="flex gap-3 items-center flex-1 min-w-0">
+                                            <div className={cn(
+                                                "h-10 w-10 rounded-lg flex items-center justify-center shadow-sm shrink-0",
+                                                isReceived ? "bg-emerald-100 text-emerald-600" : "bg-indigo-100 text-indigo-600"
+                                            )}>
+                                                {isReceived ? <CheckCircle2 className="h-5 w-5" /> : <Package className="h-5 w-5" />}
+                                            </div>
+                                            <div className="space-y-0.5 overflow-hidden">
+                                                <div className="flex items-center gap-1.5">
+                                                    <p className="font-bold text-slate-900 text-sm truncate uppercase tracking-tight">
+                                                        {order.lensType}
+                                                    </p>
+                                                    <Badge className={cn(
+                                                        "text-[8px] h-3.5 px-1 rounded",
+                                                        isReceived ? "bg-emerald-600 text-white" : "bg-slate-400 text-white"
+                                                    )}>
+                                                        {isReceived ? 'Prêt' : 'Fil'}
+                                                    </Badge>
+                                                </div>
+                                                <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
+                                                    <span className="text-indigo-600">{order.orderType}</span>
+                                                    <span>•</span>
+                                                    <span className="text-slate-800">{parseFloat(order.sellingPrice).toLocaleString('fr-MA')} DH</span>
+                                                </div>
+                                            </div>
                                         </div>
                                         <Button 
                                             size="sm" 
-                                            variant={isAdded ? "secondary" : "default"}
-                                            className={cn("gap-2", isAdded ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-indigo-600 hover:bg-indigo-700")}
+                                            variant={isAdded ? "ghost" : (isReceived ? "default" : "outline")}
+                                            className={cn(
+                                                "font-black text-[10px] h-8 px-3 rounded-lg border-2",
+                                                !isAdded && isReceived && "bg-slate-900 border-slate-900 hover:bg-slate-800 text-white shadow-sm"
+                                            )}
                                             onClick={() => handleAddLensOrder(order)}
                                             disabled={isAdded}
                                         >
-                                            {isAdded ? (
-                                                <>
-                                                    <Package className="h-4 w-4" />
-                                                    Ajouté
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Plus className="h-4 w-4" />
-                                                    Ajouter
-                                                </>
-                                            )}
+                                            {isAdded ? "OK" : (isReceived ? "AJOUTER" : "LIER")}
                                         </Button>
-                                    </div>
-                                );
-                            })}
-                        </CardContent>
-                    </Card>
+                                    </CardContent>
+                                </Card>
+                            );
+                        })}
+                    </div>
                 </div>
             )}
 

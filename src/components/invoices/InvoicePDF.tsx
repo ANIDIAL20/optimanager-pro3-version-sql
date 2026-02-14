@@ -18,6 +18,10 @@ interface ShopSettings {
     phone?: string;
     ice?: string;
     rib?: string;
+    if?: string;
+    rc?: string;
+    tp?: string;
+    inpe?: string;
 }
 
 interface InvoicePDFProps {
@@ -65,10 +69,17 @@ export const InvoicePDF: React.FC<InvoicePDFProps> = ({ sale, client, shopSettin
                             <Text style={pdfStyles.shopName}>{shopSettings.shopName}</Text>
                             <Text style={pdfStyles.shopDetail}>{shopSettings.address || 'Adresse non renseignée'}</Text>
                             {shopSettings.phone && <Text style={pdfStyles.shopDetail}>Tél: {shopSettings.phone}</Text>}
-                            <View style={pdfStyles.legalRow}>
-                                {shopSettings.ice && <Text style={pdfStyles.legalText}>ICE: {shopSettings.ice}</Text>}
-                                {shopSettings.rib && <Text style={pdfStyles.legalText}>RIB: {shopSettings.rib}</Text>}
-                            </View>
+    // Legal Info
+    <View style={pdfStyles.legalRow}>
+        {shopSettings.ice && <Text style={pdfStyles.legalText}>ICE: {shopSettings.ice}</Text>}
+        {shopSettings.if && <Text style={pdfStyles.legalText}> • IF: {shopSettings.if}</Text>}
+        {shopSettings.rc && <Text style={pdfStyles.legalText}> • RC: {shopSettings.rc}</Text>}
+    </View>
+    <View style={pdfStyles.legalRow}>
+        {shopSettings.tp && <Text style={pdfStyles.legalText}>TP: {shopSettings.tp}</Text>}
+        {shopSettings.inpe && <Text style={pdfStyles.legalText}> • INPE: {shopSettings.inpe}</Text>}
+    </View>
+    {shopSettings.rib && <Text style={[pdfStyles.legalText, { marginTop: 2 }]}>RIB: {shopSettings.rib}</Text>}
                         </View>
                     </View>
 

@@ -22,6 +22,13 @@ const shopProfileSchema = z.object({
   phone: z.string().optional(),
   ice: z.string().optional(),
   rib: z.string().optional(),
+  
+  // Mandatory Legal Info (Morocco)
+  if: z.string().optional(),
+  rc: z.string().optional(),
+  tp: z.string().optional(),
+  inpe: z.string().optional().refine(v => !v || /^\d{9}$/.test(v), { message: "INPE invalide (doit contenir 9 chiffres)" }),
+  
   logoUrl: z.string().optional(),
 });
 

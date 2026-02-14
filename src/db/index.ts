@@ -15,7 +15,7 @@ if (!process.env.DATABASE_URL) {
 
 // Singleton cache implementation for Next.js hot-reloading
 declare global {
-  var __db_v2: any;
+  var __db_v3: any;
 }
 
 function createDbConnection() {
@@ -29,9 +29,9 @@ function createDbConnection() {
 }
 
 // ✅ Use global cache in development, fresh instance in production
-const globalForDb = globalThis as unknown as { __db_v2: any };
+const globalForDb = globalThis as unknown as { __db_v3: any };
 
 export const db =
   process.env.NODE_ENV === 'production'
     ? createDbConnection()
-    : (globalForDb.__db_v2 = globalForDb.__db_v2 ?? createDbConnection());
+    : (globalForDb.__db_v3 = globalForDb.__db_v3 ?? createDbConnection());

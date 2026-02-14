@@ -40,9 +40,9 @@ interface VentesClientPageProps {
 }
 
 export function VentesClientPage({ initialSales, initialClients, initialError }: VentesClientPageProps) {
-    const [sales] = React.useState<Sale[]>(initialSales);
-    const [clients] = React.useState<Client[]>(initialClients);
-    const [error] = React.useState<string | null>(initialError);
+    const sales = initialSales;
+    const clients = initialClients;
+    const error = initialError;
 
     const clientsMap = React.useMemo(() => {
         if (!clients) return new Map();

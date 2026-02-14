@@ -320,6 +320,8 @@ export const shopProfiles = pgTable('shop_profiles', {
   rc: text('rc'),
   if: text('if'),
   patente: text('patente'),
+  tp: text('tp'),
+  inpe: text('inpe'),
   tvaRate: text('tva_rate'),
   paymentTerms: text('payment_terms'),
   
@@ -405,6 +407,11 @@ export const lensOrders = pgTable('lens_orders', {
   additionL: text('addition_l'),
   hauteurL: text('hauteur_l'),
   
+  ecartPupillaireR: text('ecart_pupillaire_r'),
+  ecartPupillaireL: text('ecart_pupillaire_l'),
+  diameterR: text('diameter_r'),
+  diameterL: text('diameter_l'),
+  
   // Keep legacy JSON fields to prevent data loss 🛡️
   rightEye: json('right_eye'),
   leftEye: json('left_eye'),
@@ -459,6 +466,10 @@ export const lensOrders = pgTable('lens_orders', {
   idx_lens_orders_pending: index('idx_lens_orders_pending')
     .on(table.userId, table.createdAt)
     .where(sql`status = 'pending'`),
+  // ⚡ Optimization: Dedicated index for Dashboard Ready Lenses widget
+  idx_lens_orders_ready_for_delivery: index('idx_lens_orders_ready_for_delivery')
+    .on(table.userId, table.updatedAt)
+    .where(sql`status = 'received' AND sale_id IS NULL`),
 }));
 
 // ========================================
@@ -1081,14 +1092,18 @@ export const prescriptions = pgTable('prescriptions', {
   odCyl: real('od_cyl'),        // Cylinder: -6.00 to +6.00
   odAxis: integer('od_axis'),   // Axis: 0 to 180
   odAdd: real('od_add'),        // Addition: 0 to +4.00
+  odPd: real('od_pd'),          // Monocular PD Right
+  odHeight: real('od_height'),  // Fitting Height Right
   
   // OS (Œil Gauche / Left Eye)
   osSph: real('os_sph'),
   osCyl: real('os_cyl'),
   osAxis: integer('os_axis'),
   osAdd: real('os_add'),
+  osPd: real('os_pd'),          // Monocular PD Left
+  osHeight: real('os_height'), // Fitting Height Left
   
-  // Pupillary Distance
+  // Pupillary Distance (Legacy/Combined)
   pd: real('pd'),               // 50-80 mm typical
   
   // Notes & Status

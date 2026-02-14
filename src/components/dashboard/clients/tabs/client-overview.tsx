@@ -16,10 +16,12 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { BrandLoader } from '@/components/ui/loader-brand';
+import { AvailableItemsCard } from './available-items-card';
 
 interface ClientOverviewProps {
     client: Client;
     clientId: string;
+    onTabChange?: (tab: string) => void;
 }
 
 // Updated type to match CamelCase from PrescriptionForm
@@ -35,7 +37,7 @@ type PrescriptionDisplay = {
     ogAxe?: string;
 };
 
-export function ClientOverview({ client, clientId }: ClientOverviewProps) {
+export function ClientOverview({ client, clientId, onTabChange }: ClientOverviewProps) {
     const { toast } = useToast();
 
     // Temporary: Disabled Firebase-dependent features
@@ -285,7 +287,12 @@ export function ClientOverview({ client, clientId }: ClientOverviewProps) {
                 </div>
             </SpotlightCard>
 
-            {/* Block 4: Notes (Editable) */}
+            {/* Block 4: Available Items (NEW) */}
+            <div className="md:col-span-2 lg:col-span-1">
+                <AvailableItemsCard clientId={clientId} onAction={onTabChange} />
+            </div>
+
+            {/* Block 5: Notes (Editable) */}
             <SpotlightCard className="p-6 md:col-span-2 lg:col-span-1" spotlightColor="rgba(249, 115, 22, 0.15)">
                 <div className="space-y-4 h-full flex flex-col">
                     <div className="flex items-center justify-between">

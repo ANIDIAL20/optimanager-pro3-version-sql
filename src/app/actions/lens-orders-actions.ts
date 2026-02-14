@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from '@/db';
-import { lensOrders, clients, prescriptionsLegacy as prescriptions, supplierOrders, suppliers, supplierOrderItems, reminders } from '@/db/schema';
+import { lensOrders, clients, prescriptionsLegacy as prescriptions, supplierOrders, suppliers, supplierOrderItems, reminders, products } from '@/db/schema';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
 import { eq, and, desc, lt, gt } from 'drizzle-orm';
@@ -33,6 +33,10 @@ export interface LensOrderInput {
   axeL?: string | null;
   additionL?: string | null;
   hauteurL?: string | null;
+  ecartPupillaireR?: string | null;
+  ecartPupillaireL?: string | null;
+  diameterR?: string | null;
+  diameterL?: string | null;
 
   matiere?: string | null;
   indice?: string | null;
@@ -71,6 +75,10 @@ export interface LensOrder {
   axeL: string | null;
   additionL: string | null;
   hauteurL: string | null;
+  ecartPupillaireR: string | null;
+  ecartPupillaireL: string | null;
+  diameterR: string | null;
+  diameterL: string | null;
 
   matiere: string | null;
   indice: string | null;
@@ -120,7 +128,14 @@ export const getLensOrders = secureAction(async (userId, user) => {
       where: eq(lensOrders.userId, userId),
       orderBy: [desc(lensOrders.createdAt)],
       with: {
-        client: true,
+        client: {
+          columns: {
+            id: true,
+            fullName: true,
+            phone: true,
+            email: true,
+          }
+        },
         prescriptionLegacy: true
       }
     });
@@ -218,7 +233,8 @@ export const createLensOrder = secureAction(async (userId, user, rawInput: LensO
         // ... (transaction code unchanged) ...
         // Verify client ownership
         const clientExists = await tx.query.clients.findFirst({
-            where: and(eq(clients.id, input.clientId), eq(clients.userId, userId))
+            where: and(eq(clients.id, input.clientId), eq(clients.userId, userId)),
+            columns: { id: true }
         });
         
         if (!clientExists) {
@@ -244,7 +260,9 @@ export const createLensOrder = secureAction(async (userId, user, rawInput: LensO
                         cylindre: input.cylindreR,
                         axe: input.axeR,
                         addition: input.additionR,
-                        hauteur: input.hauteurR
+                        hauteur: input.hauteurR,
+                        ecartPupillaire: input.ecartPupillaireR,
+                        diameter: input.diameterR
                     });
                 }
                 if (input.sphereL || input.cylindreL || input.axeL) {
@@ -255,7 +273,9 @@ export const createLensOrder = secureAction(async (userId, user, rawInput: LensO
                         cylindre: input.cylindreL,
                         axe: input.axeL,
                         addition: input.additionL,
-                        hauteur: input.hauteurL
+                        hauteur: input.hauteurL,
+                        ecartPupillaire: input.ecartPupillaireL,
+                        diameter: input.diameterL
                     });
                 }
 
@@ -295,6 +315,10 @@ export const createLensOrder = secureAction(async (userId, user, rawInput: LensO
                 axeL: input.axeL?.toString() || null,
                 additionL: input.additionL?.toString() || null,
                 hauteurL: input.hauteurL?.toString() || null,
+                ecartPupillaireR: input.ecartPupillaireR?.toString() || null,
+                ecartPupillaireL: input.ecartPupillaireL?.toString() || null,
+                diameterR: input.diameterR?.toString() || null,
+                diameterL: input.diameterL?.toString() || null,
                 
                 sellingPrice: input.sellingPrice.toString(),
                 unitPrice: input.unitPrice.toString(),
@@ -416,28 +440,52 @@ import { isNull } from 'drizzle-orm';
  * Get billable lens orders for a client (pending/ordered/received AND not billed)
  */
 export const getPendingLensOrders = secureAction(async (userId, user, clientId: string) => {
+  console.log('🔍 [START] getPendingLensOrders');
+  console.log('📌 Client ID:', clientId);
+  console.log('👤 User Session ID:', userId);
+
   try {
     const clientIdNum = parseInt(clientId);
+    if (isNaN(clientIdNum)) {
+        console.error('❌ Invalid Client ID:', clientId);
+        return { success: false, error: 'ID Client invalide' };
+    }
+
+    // A. Check for any orders for this client regardless of status (Deep Diagnostic)
+    const allClientOrders = await db.query.lensOrders.findMany({
+        where: and(eq(lensOrders.userId, userId), eq(lensOrders.clientId, clientIdNum))
+    });
+    console.log(`📊 Total orders for client ${clientId} in DB:`, allClientOrders.length);
+    console.log(`📄 Status breakdown:`, allClientOrders.map(o => ({ id: o.id, status: o.status, saleId: o.saleId })));
+
+    // B. Main query: Not yet billed (saleId is NULL)
     const results = await db.query.lensOrders.findMany({
       where: and(
         eq(lensOrders.userId, userId),
         eq(lensOrders.clientId, clientIdNum),
-        isNull(lensOrders.saleId), // Not yet billed
-        // Optional: filter by status if we only want 'received' orders to be billable?
-        // For now, let's allow billing even if just ordered.
+        isNull(lensOrders.saleId),
       ),
       orderBy: [desc(lensOrders.createdAt)],
       with: {
         prescription: true
       }
     });
+
+    console.log(`🔗 ORM pending results:`, results.length, 'orders found');
+    if (results.length > 0) {
+        console.log('✅ Found:', results.map(r => `[ID:${r.id}, Stat:${r.status}]`).join(', '));
+    } else {
+        console.warn('⚠️ No pending orders found for this client.');
+    }
     
+    console.log('✅ [END] getPendingLensOrders');
     return { success: true, data: results };
 
   } catch (error: any) {
+    console.error('❌ [ERROR] getPendingLensOrders:', error);
     return { 
       success: false, 
-      error: 'Erreur lors de la récupération des commandes à facturer' 
+      error: 'Erreur lors de la récupération des commandes à facturer: ' + error.message 
     };
   }
 });
@@ -449,86 +497,131 @@ export const receiveLensOrder = secureAction(async (userId, user, orderId: strin
   try {
     const orderIdNum = parseInt(orderId);
 
-    // 1. Fetch current order to check existence and get details
-    const existingOrder = await db.query.lensOrders.findFirst({
-        where: and(eq(lensOrders.id, orderIdNum), eq(lensOrders.userId, userId)),
-    });
-
-    if (!existingOrder) {
-        return { success: false, error: 'Commande de verres introuvable' };
-    }
-
-    // 2. Prepare Update Data
-    const updateData: any = {
-        status: 'received',
-        receivedDate: new Date(),
-        updatedAt: new Date()
-    };
-
-    // If Smart Reception data provided
-    if (data) {
-        updateData.supplierInvoiceRef = data.blRef;
-        updateData.finalBuyingPrice = data.finalCost.toString();
-        
-        // Calculate realized margin
-        const sellingPrice = parseFloat(existingOrder.sellingPrice);
-        const finalMargin = sellingPrice - data.finalCost;
-        updateData.finalMargin = finalMargin.toString();
-    }
-
-    // 3. Update Lens Order
-    const [updated] = await db.update(lensOrders)
-      .set(updateData)
-      .where(and(
-        eq(lensOrders.id, orderIdNum),
-        eq(lensOrders.userId, userId)
-      ))
-      .returning();
-    
-    // 4. Auto-Create Purchase Record (Debt)
-    if (data && updated) {
-        // Find supplier ID by name (best effort)
-        const supplier = await db.query.suppliers.findFirst({
-            where: and(eq(suppliers.name, existingOrder.supplierName), eq(suppliers.userId, userId))
+    // 1. Transaction Wrapper for Atomicity
+    const result = await db.transaction(async (tx: any) => {
+        // 1.1 Fetch current order within transaction to ensure data integrity
+        const existingOrder = await tx.query.lensOrders.findFirst({
+            where: and(eq(lensOrders.id, orderIdNum), eq(lensOrders.userId, userId)),
+            with: {
+                client: {
+                    columns: { id: true, fullName: true }
+                }
+            }
         });
 
-        // Calculate Due Date based on supplier terms
-        let dueDate: Date | null = null;
-        if (supplier?.paymentTerms) {
-            const days = typeof supplier.paymentTerms === 'number' ? supplier.paymentTerms : parseInt(supplier.paymentTerms as string);
-            if (!isNaN(days)) {
-                dueDate = new Date();
-                dueDate.setDate(dueDate.getDate() + days);
-            }
+        if (!existingOrder) {
+            throw new Error('Commande de verres introuvable');
         }
 
-        // Consolidate into Supplier Order
-        await db.insert(supplierOrders).values({
-            userId,
-            supplierId: supplier?.id || null,
-            fournisseur: existingOrder.supplierName,
-            orderReference: data.blRef,
-            // Use date.finalCost for total amount. Assuming paid amount = 0 initially (debt).
-            montantTotal: data.finalCost.toString(),
-            montantPaye: '0',
-            resteAPayer: data.finalCost.toString(),
-            statut: 'received', 
+        // 1.2 Prepare Update Data
+        const updateData: any = {
+            status: 'received',
+            receivedDate: new Date(),
+            updatedAt: new Date()
+        };
+
+        if (data) {
+            updateData.supplierInvoiceRef = data.blRef;
+            updateData.finalBuyingPrice = data.finalCost.toString();
             
-            dateCommande: new Date(),
-            dueDate: dueDate,
-            notes: `Auto-created from Lens Order #${orderIdNum}`
-        });
-    }
+            const sellingPrice = parseFloat(existingOrder.sellingPrice);
+            const finalMargin = sellingPrice - data.finalCost;
+            updateData.finalMargin = finalMargin.toString();
+        }
+
+        // 1.3 Update Lens Order
+        const [updated] = await tx.update(lensOrders)
+          .set(updateData)
+          .where(and(
+            eq(lensOrders.id, orderIdNum),
+            eq(lensOrders.userId, userId)
+          ))
+          .returning();
+        
+        // 1.4 Auto-Create Purchase Record (Supplier Order)
+        if (data && updated) {
+            const supplier = await tx.query.suppliers.findFirst({
+                where: and(eq(suppliers.name, existingOrder.supplierName), eq(suppliers.userId, userId))
+            });
+
+            let dueDate: Date | null = null;
+            if (supplier?.paymentTerms) {
+                const days = typeof supplier.paymentTerms === 'number' ? supplier.paymentTerms : parseInt(supplier.paymentTerms as string);
+                if (!isNaN(days)) {
+                    dueDate = new Date();
+                    dueDate.setDate(dueDate.getDate() + days);
+                }
+            }
+
+            await tx.insert(supplierOrders).values({
+                userId,
+                supplierId: supplier?.id || null,
+                fournisseur: existingOrder.supplierName,
+                orderReference: data.blRef,
+                montantTotal: data.finalCost.toString(),
+                montantPaye: '0',
+                resteAPayer: data.finalCost.toString(),
+                statut: 'received', 
+                dateCommande: new Date(),
+                dueDate: dueDate,
+                notes: `Auto-created from Lens Order #${orderIdNum}`
+            });
+        }
+
+        // 1.5 Auto-Create Product for Global Stock (Robust Inventory)
+        if (updated) {
+           const productName = `Verres ${updated.lensType} - ${existingOrder.client.fullName}`;
+           const description = `
+             Client: ${existingOrder.client.fullName}
+             Type: ${updated.orderType}
+             OD: ${updated.sphereR || ''} ${updated.cylindreR ? `(${updated.cylindreR})` : ''} ${updated.axeR ? `à ${updated.axeR}°` : ''} ${updated.additionR ? `Add ${updated.additionR}` : ''}
+             OG: ${updated.sphereL || ''} ${updated.cylindreL ? `(${updated.cylindreL})` : ''} ${updated.axeL ? `à ${updated.axeL}°` : ''} ${updated.additionL ? `Add ${updated.additionL}` : ''}
+             EP: OD ${updated.ecartPupillaireR || '-'} / OG ${updated.ecartPupillaireL || '-'}
+           `.trim();
+
+           // Check if product already exists (unlikely given unique ID usage, but good practice)
+           // Actually, using Order ID makes it unique by definition.
+           
+           await tx.insert(products).values({
+             userId,
+             nom: productName,
+             type: 'VERRE',
+             categorie: 'Verres',
+             reference: `VERRE-${updated.id}`,
+             designation: description.substring(0, 255),
+             description: description,
+             prixVente: updated.sellingPrice,
+             prixAchat: data?.finalCost ? data.finalCost.toString() : '0',
+             quantiteStock: updated.quantity,
+             availableQuantity: updated.quantity,
+             fournisseur: updated.supplierName,
+             // Store Robust Details for Search/Matching
+             details: JSON.stringify({
+                lensOrderId: updated.id,
+                clientId: updated.clientId,
+                clientName: existingOrder.client.fullName,
+                prescription: {
+                    od: { sph: updated.sphereR, cyl: updated.cylindreR, axe: updated.axeR, add: updated.additionR, ep: updated.ecartPupillaireR },
+                    og: { sph: updated.sphereL, cyl: updated.cylindreL, axe: updated.axeL, add: updated.additionL, ep: updated.ecartPupillaireL }
+                },
+                supplierRef: data?.blRef
+             })
+           });
+        }
+
+        return updated;
+    });
 
     await logSuccess(userId, 'UPDATE', 'lens_orders', orderId, { action: 'received', smart: !!data });
 
     revalidatePath('/dashboard/clients');
-    revalidatePath(`/dashboard/clients/${updated.clientId}`);
+    revalidatePath(`/dashboard/clients/${result.clientId}`);
+    revalidatePath('/dashboard/stock'); 
     
     return { 
       success: true, 
-      message: 'Commande reçue et achat enregistré',
-      data: updated 
+      message: 'Commande reçue, achat enregistré et stock mis à jour (Global)',
+      data: result 
     };
 
   } catch (error: any) {
@@ -536,7 +629,7 @@ export const receiveLensOrder = secureAction(async (userId, user, orderId: strin
     await logFailure(userId, 'UPDATE', 'lens_orders', error.message, orderId);
     return { 
       success: false, 
-      error: 'Erreur lors de la réception de la commande' 
+      error: 'Erreur lors de la réception de la commande: ' + error.message 
     };
   }
 });
@@ -673,7 +766,42 @@ export const checkSupplierReminders = secureAction(async (userId, user) => {
 
         return { success: true, count: ordersToWarn.length };
     } catch (error: any) {
-        console.error("💥 Error checking supplier reminders:", error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * Get all available (received but not delivered/billed) lens orders across all clients
+ */
+export const getGlobalAvailableLenses = secureAction(async (userId, user) => {
+    try {
+        const results = await db.query.lensOrders.findMany({
+            where: and(
+                eq(lensOrders.userId, userId),
+                eq(lensOrders.status, 'received'),
+                isNull(lensOrders.saleId)
+            ),
+            columns: {
+                id: true,
+                lensType: true,
+                sellingPrice: true,
+                updatedAt: true
+            },
+            with: {
+                client: {
+                    columns: {
+                        id: true,
+                        fullName: true,
+                        phone: true
+                    }
+                }
+            },
+            orderBy: [desc(lensOrders.updatedAt)]
+        });
+
+        return { success: true, data: results };
+    } catch (error: any) {
+        console.error("💥 Error fetching global available lenses:", error);
         return { success: false, error: error.message };
     }
 });

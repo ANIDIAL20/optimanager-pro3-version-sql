@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
 import { ExpiringReservationsWidget } from '@/features/reservations/components/expiring-reservations-widget';
+import { ReadyLensesDashboardWidget } from '@/features/lens-orders/components/ready-lenses-widget';
 
 interface DashboardData {
     globalRevenue: number;
@@ -183,6 +184,11 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                     />
                 </div>
             )}
+
+            {/* Ready Lenses Section (NEW) */}
+            <div className="animate-in fade-in slide-in-from-top-4 duration-500 delay-75">
+                <ReadyLensesDashboardWidget />
+            </div>
 
             {/* Middle Row: Stock + Recent Sales + Quick Access */}
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">

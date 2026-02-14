@@ -190,14 +190,19 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
         sphereR: fullSelectedPrescription?.data?.od?.sphere?.toString() || null,
         cylindreR: fullSelectedPrescription?.data?.od?.cylinder?.toString() || null,
         axeR: fullSelectedPrescription?.data?.od?.axis?.toString() || null,
-        additionR: fullSelectedPrescription?.data?.od?.add?.toString() || null,
-        hauteurR: fullSelectedPrescription?.data?.od?.hauteur?.toString() || null,
+        additionR: (fullSelectedPrescription?.data?.od?.addition || fullSelectedPrescription?.data?.od?.add)?.toString() || null,
+        hauteurR: (fullSelectedPrescription?.data?.od?.height || fullSelectedPrescription?.data?.od?.hauteur)?.toString() || null,
         
         sphereL: fullSelectedPrescription?.data?.og?.sphere?.toString() || null,
         cylindreL: fullSelectedPrescription?.data?.og?.cylinder?.toString() || null,
         axeL: fullSelectedPrescription?.data?.og?.axis?.toString() || null,
-        additionL: fullSelectedPrescription?.data?.og?.add?.toString() || null,
-        hauteurL: fullSelectedPrescription?.data?.og?.hauteur?.toString() || null,
+        additionL: (fullSelectedPrescription?.data?.og?.addition || fullSelectedPrescription?.data?.og?.add)?.toString() || null,
+        hauteurL: (fullSelectedPrescription?.data?.og?.height || fullSelectedPrescription?.data?.og?.hauteur)?.toString() || null,
+        
+        ecartPupillaireR: fullSelectedPrescription?.data?.od?.pd?.toString() || null,
+        ecartPupillaireL: fullSelectedPrescription?.data?.og?.pd?.toString() || null,
+        diameterR: fullSelectedPrescription?.data?.od?.diameter?.toString() || null,
+        diameterL: fullSelectedPrescription?.data?.og?.diameter?.toString() || null,
 
         matiere: fullSelectedPrescription?.data?.matiere || null,
         indice: fullSelectedPrescription?.data?.indice || null,
@@ -318,21 +323,27 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                     <Eye className="h-4 w-4 text-blue-600" />
                     <h4 className="text-sm font-semibold text-slate-900">Détails de la correction</h4>
                 </div>
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
                     <div>
-                        <span className="font-semibold text-blue-700 block mb-1">Œil Droit (OD)</span>
-                        <div className="grid grid-cols-3 gap-x-2 text-slate-600">
-                            <div>Sph: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.od?.sphere || '-'}</span></div>
-                            <div>Cyl: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.od?.cylinder || '-'}</span></div>
-                            <div>Axe: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.od?.axis || '-'}</span></div>
+                        <span className="font-semibold text-blue-700 block mb-2 border-b border-blue-100 pb-1">Œil Droit (OD)</span>
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-2 gap-x-4 text-slate-600">
+                            <div>Sph: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.od?.sphere || '-'}</span></div>
+                            <div>Cyl: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.od?.cylinder || '-'}</span></div>
+                            <div>Axe: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.od?.axis || '-'}</span>°</div>
+                            <div>Add: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.od?.addition || fullSelectedPrescription.data?.od?.add || '-'}</span></div>
+                            <div>EP: <span className="font-bold text-blue-700">{fullSelectedPrescription.data?.od?.pd || '-'}</span></div>
+                            <div>H: <span className="font-bold text-blue-700">{fullSelectedPrescription.data?.od?.height || fullSelectedPrescription.data?.od?.hauteur || '-'}</span></div>
                         </div>
                     </div>
                     <div>
-                        <span className="font-semibold text-blue-700 block mb-1">Œil Gauche (OG)</span>
-                        <div className="grid grid-cols-3 gap-x-2 text-slate-600">
-                            <div>Sph: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.sphere || '-'}</span></div>
-                            <div>Cyl: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.cylinder || '-'}</span></div>
-                            <div>Axe: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.axis || '-'}</span></div>
+                        <span className="font-semibold text-blue-700 block mb-2 border-b border-blue-100 pb-1">Œil Gauche (OG)</span>
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-2 gap-x-4 text-slate-600">
+                            <div>Sph: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.og?.sphere || '-'}</span></div>
+                            <div>Cyl: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.og?.cylinder || '-'}</span></div>
+                            <div>Axe: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.og?.axis || '-'}</span>°</div>
+                            <div>Add: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.og?.addition || fullSelectedPrescription.data?.og?.add || '-'}</span></div>
+                            <div>EP: <span className="font-bold text-blue-700">{fullSelectedPrescription.data?.og?.pd || '-'}</span></div>
+                            <div>H: <span className="font-bold text-blue-700">{fullSelectedPrescription.data?.og?.height || fullSelectedPrescription.data?.og?.hauteur || '-'}</span></div>
                         </div>
                     </div>
                 </div>
@@ -370,7 +381,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                     <FormItem>
                       <FormLabel>Type de verre (Marque/Modèle)</FormLabel>
                       <FormControl>
-                        <Input placeholder="Ex: Essilor Varilux, Nikon Presio..." {...field} />
+                        <Input placeholder="Ex: Essilor Varilux, Nikon Presio..." {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -387,7 +398,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                     <FormItem>
                       <FormLabel>Marque de Lentilles / Modèle</FormLabel>
                       <FormControl>
-                        <Input placeholder="Ex: Acuvue Oasys, Biofinity..." {...field} />
+                        <Input placeholder="Ex: Acuvue Oasys, Biofinity..." {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -642,6 +653,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                     <Textarea
                       placeholder="Ajoutez des notes ou des instructions spécifiques pour la commande..."
                       {...field}
+                      value={field.value ?? ''}
                     />
                   </FormControl>
                   <FormMessage />
