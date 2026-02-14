@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Plus, Minus, Trash2, ShoppingCart, Package, Glasses, Eye, Box, Disc, SprayCan, Link as LinkIcon, Briefcase, Puzzle, Wrench, Tag, Clock } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, ShoppingCart, Package, Glasses, Eye, Box, Disc, SprayCan, Link as LinkIcon, Briefcase, Puzzle, Wrench, Tag, Clock, Sparkles, CheckCircle2, ShoppingBag } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { SensitiveData } from '@/components/ui/sensitive-data';
@@ -33,6 +33,7 @@ interface ClientPOSTabProps {
     client: Client;
     clientId: string;
     initialReservationId?: number | null;
+    initialOrderId?: number | null;
 }
 
 interface Product {
@@ -70,7 +71,7 @@ const getCategoryIconByName = (name: string = '') => {
     return Package;
 };
 
-export function ClientPOSTab({ client, clientId, initialReservationId }: ClientPOSTabProps) {
+export function ClientPOSTab({ client, clientId, initialReservationId, initialOrderId }: ClientPOSTabProps) {
     const { items: cartItems, setItems, updateLinePricing, totalAmount } = usePosCartStore();
     const [products, setProducts] = React.useState<Product[]>([]);
     const [categories, setCategories] = React.useState<Category[]>([]);
@@ -169,8 +170,43 @@ export function ClientPOSTab({ client, clientId, initialReservationId }: ClientP
                  window.history.replaceState({}, '', newUrl);
                  loadReservation(resId);
              }
+
+             // New: Auto-add lens order by ID from URL
+             const orderId = urlParams.get('orderId');
+             if (orderId && clientId) {
+                 // Remove from URL to avoid re-adding
+                 const newUrl = new URL(window.location.href);
+                 newUrl.searchParams.delete('orderId');
+                 window.history.replaceState({}, '', newUrl);
+
+                 // Fetch single order or find in pending (finding in pending is safer since we just loaded them)
+                 getPendingLensOrders(clientId).then(res => {
+                    if (res.success && res.data) {
+                        const order = (res.data as LensOrder[]).find(o => o.id.toString() === orderId);
+                        if (order) {
+                            handleAddLensOrder(order);
+                            toast({ title: "Commande chargée", description: `${order.lensType} ajouté au panier.` });
+                        }
+                    }
+                 });
+             }
         }
     }, [initialReservationId, clientId]);
+
+    // Handle incoming Order ID from prop
+    React.useEffect(() => {
+        if (initialOrderId && clientId) {
+            getPendingLensOrders(clientId).then(res => {
+                if (res.success && res.data) {
+                    const order = (res.data as LensOrder[]).find(o => o.id === initialOrderId);
+                    if (order) {
+                        handleAddLensOrder(order);
+                        toast({ title: "Commande prête", description: `${order.lensType} ajouté au panier.` });
+                    }
+                }
+            });
+        }
+    }, [initialOrderId, clientId]);
 
     // Derived state for filtered products
     const filteredProducts = React.useMemo(() => {
@@ -349,7 +385,7 @@ export function ClientPOSTab({ client, clientId, initialReservationId }: ClientP
                     className: "bg-green-50 border-green-200 text-green-800",
                 });
                 setItems([]); // Clear store
-                router.refresh();
+                router.push(`/dashboard/ventes/${result.id}`);
             } else {
                 toast({
                     variant: 'destructive',
@@ -432,50 +468,101 @@ export function ClientPOSTab({ client, clientId, initialReservationId }: ClientP
             {/* LEFT: Product Catalog (66%) */}
             <div className="lg:col-span-2 space-y-4">
                 {/* Search Bar */}
-                {/* Pending Orders Block */}
+                {/* Pending Orders Block (Detection Automatique Premium) */}
                 {pendingOrders.length > 0 && (
-                    <div className="mb-6 animate-in fade-in slide-in-from-top-4 duration-500">
-                         <div className="flex items-center gap-2 mb-3">
-                            <h3 className="font-semibold text-lg text-indigo-900">Commandes en attente (Verres & Lentilles) ({pendingOrders.length})</h3>
+                    <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
+                        <div className="flex items-center justify-between px-1 mb-4">
+                            <div className="flex items-center gap-2">
+                                <div className="h-6 w-12 bg-indigo-500 rounded-full flex items-center justify-center text-[10px] text-white font-black">ACTIF</div>
+                                <h3 className="font-extrabold text-xl text-slate-800 tracking-tight">
+                                    Commandes Verres/Lentilles Détectées <span className="text-indigo-600">({pendingOrders.length})</span>
+                                </h3>
+                            </div>
+                            <Badge variant="outline" className="bg-white text-indigo-700 border-indigo-200 shadow-sm font-semibold px-3 py-1 flex gap-2 items-center rounded-full animate-pulse">
+                                <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+                                Synchronisation Pro
+                            </Badge>
                         </div>
-                        <Card className="border-indigo-100 bg-indigo-50/30 shadow-sm">
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-base font-medium flex items-center gap-2">
-                                    <Package className="h-4 w-4 text-indigo-600" />
-                                    Ce client a des commandes prêtes à être facturées.
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="grid gap-3 pt-0">
-                                {pendingOrders.map(order => {
-                                    const isAdded = cartItems.some(i => i.lensOrderId === order.id);
-                                    return (
-                                        <div key={order.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-indigo-100 shadow-sm">
-                                            <div>
-                                                <p className="font-semibold text-slate-800">{order.lensType} <span className="text-slate-400 font-normal">({order.orderType})</span></p>
-                                                <p className="text-xs text-slate-500">
-                                                    Commandée le {new Date(order.createdAt || new Date()).toLocaleDateString()} • {parseFloat(order.sellingPrice).toFixed(2)} DH
-                                                </p>
-                                                <Badge variant="outline" className="mt-1 text-[10px] bg-indigo-100 text-indigo-700 border-indigo-200">
-                                                    {order.status === 'received' ? 'Reçue' : 'En cours'}
-                                                </Badge>
+                        
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                            {pendingOrders.map(order => {
+                                const isAdded = cartItems.some(i => i.productId === `LO-${order.id}`);
+                                const isReceived = order.status === 'received';
+                                return (
+                                    <Card key={order.id} className={cn(
+                                        "overflow-hidden border-2 transition-all duration-300 group hover:shadow-xl hover:-translate-y-1 relative",
+                                        isReceived 
+                                            ? "border-emerald-100 bg-gradient-to-br from-emerald-50/80 via-white to-white hover:border-emerald-400" 
+                                            : "border-indigo-50 bg-gradient-to-br from-indigo-50/40 via-white to-white hover:border-indigo-300",
+                                        isAdded && "opacity-50 border-slate-100 grayscale-[0.3] pointer-events-none"
+                                    )}>
+                                        <div className={cn(
+                                            "h-1.5 w-full",
+                                            isReceived ? "bg-emerald-500" : "bg-indigo-400"
+                                        )} />
+                                        <CardContent className="p-4 flex items-center justify-between gap-4">
+                                            <div className="flex gap-4 items-center flex-1 min-w-0">
+                                                <div className={cn(
+                                                    "h-12 w-12 rounded-xl flex items-center justify-center transition-all duration-500 group-hover:rotate-6 shadow-sm ring-4 shrink-0",
+                                                    isReceived 
+                                                        ? "bg-emerald-100 text-emerald-600 ring-emerald-50" 
+                                                        : "bg-indigo-100 text-indigo-600 ring-indigo-50"
+                                                )}>
+                                                    {isReceived ? <CheckCircle2 className="h-6 w-6" /> : <Package className="h-6 w-6" />}
+                                                </div>
+                                                <div className="space-y-1 overflow-hidden">
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="font-black text-slate-900 text-base leading-none tracking-tight truncate">
+                                                            {order.lensType}
+                                                        </p>
+                                                        <Badge className={cn(
+                                                            "text-[9px] font-black uppercase tracking-wider h-4 px-1.5 rounded",
+                                                            isReceived ? "bg-emerald-600 text-white" : "bg-slate-400 text-white"
+                                                        )}>
+                                                            {isReceived ? 'Prêt' : 'En cours'}
+                                                        </Badge>
+                                                    </div>
+                                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-bold text-slate-500">
+                                                        <span className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                                                            <Tag className="h-2.5 w-2.5" />
+                                                            {order.orderType}
+                                                        </span>
+                                                        <span className="flex items-center gap-1">
+                                                            EP: <span className="text-slate-800 font-black">{order.ecartPupillaireR || '-'}/{order.ecartPupillaireL || '-'}</span>
+                                                        </span>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-bold text-sm">{parseFloat(order.sellingPrice).toFixed(2)} DH</span>
+                                            
+                                            <div className="flex flex-col items-end gap-2 shrink-0">
+                                                <div className="text-right flex flex-col">
+                                                    <span className="text-lg font-black text-slate-950 tracking-tighter leading-none">
+                                                        {parseFloat(order.sellingPrice || '0').toLocaleString('fr-MA', { minimumFractionDigits: 2 })} <small className="text-[9px] font-medium opacity-60">DH</small>
+                                                    </span>
+                                                </div>
+                                                
                                                 <Button 
                                                     size="sm" 
-                                                    variant={isAdded ? "secondary" : "default"}
-                                                    className={cn(isAdded ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-indigo-600 hover:bg-indigo-700")}
+                                                    variant={isAdded ? "ghost" : (isReceived ? "default" : "outline")}
+                                                    className={cn(
+                                                        "font-black text-[9px] transition-all duration-300 h-8 px-4 rounded-lg border-2",
+                                                        isAdded 
+                                                            ? "text-slate-300 border-transparent" 
+                                                            : isReceived 
+                                                                ? "bg-slate-900 border-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-200" 
+                                                                : "border-indigo-200 text-indigo-600 hover:bg-indigo-600 hover:text-white hover:border-indigo-600"
+                                                    )}
                                                     onClick={() => handleAddLensOrder(order)}
                                                     disabled={isAdded}
                                                 >
-                                                    {isAdded ? "Ajouté" : "Ajouter"}
+                                                    {isAdded ? "DÉJÀ AJOUTÉ" : (isReceived ? "FACTURER" : "AJOUTER")}
                                                 </Button>
                                             </div>
-                                        </div>
-                                    );
-                                })}
-                            </CardContent>
-                        </Card>
+                                        </CardContent>
+                                    </Card>
+                                );
+                            })}
+                        </div>
                     </div>
                 )}
 

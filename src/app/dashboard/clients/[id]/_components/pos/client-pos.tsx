@@ -1,41 +1,60 @@
 'use client';
 
 import * as React from 'react';
-import type { Client, Product } from '@/lib/types';
+import { useRouter } from 'next/navigation';
+import { usePosCartStore } from '@/features/pos/store/use-pos-cart-store';
+import { useToast } from '@/hooks/use-toast';
+import { getClientAvailableLenses } from '@/app/actions/pos-lens-actions';
+import { getClientReservationsAction, createFrameReservationAction, completeFrameReservationAction } from '@/app/actions/reservation-actions';
+import { createSale } from '@/app/actions/sales-actions';
+import { createLineItem, recalculateLineTotal } from '@/lib/pos/pricing';
+import { Product, Client } from '@/lib/types';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tag, Printer } from 'lucide-react';
 import { ProductSearch } from './product-search';
-import { Cart, CartItem } from './cart';
+import { Cart } from './cart';
 import { PaymentSection } from './payment-section';
 import { SalesHistory } from './sales-history';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, CheckCircle2, Package, Plus, Tag, Printer } from 'lucide-react';
-import { createSale } from '@/app/actions/sales-actions';
-import { getPendingLensOrders } from '@/app/actions/lens-orders-actions';
-import { createFrameReservationAction, completeFrameReservationAction, getClientReservationsAction } from '@/app/actions/reservation-actions';
-import { usePosCartStore } from '@/features/pos/store/use-pos-cart-store';
-import { createLineItem, recalculateLineTotal } from '@/features/pos/utils/pricing';
 
 interface ClientPOSProps {
-    client: Client;
+    client: Client; 
     clientId: string;
 }
 
 export function ClientPOS({ client, clientId }: ClientPOSProps) {
+    const router = useRouter();
     const { items: cartItems, setItems, updateLinePricing, totalAmount } = usePosCartStore();
     const [isProcessing, setIsProcessing] = React.useState(false);
     const { toast } = useToast();
     // Simple state to force refresh history
     const [historyRefreshKey, setHistoryRefreshKey] = React.useState(0);
     const [pendingOrders, setPendingOrders] = React.useState<any[]>([]);
+    const [debugInfo, setDebugInfo] = React.useState<any>(null);
 
     React.useEffect(() => {
         if (clientId) {
-            getPendingLensOrders(clientId).then(res => {
+            console.log('🎨 [ClientPOS] Component mounted for client:', clientId);
+            getClientAvailableLenses(clientId).then(res => {
+                console.log('📦 [ClientPOS] Lens Data received:', res.data?.length || 0);
                 if (res.success && res.data) {
                     setPendingOrders(res.data);
+                    setDebugInfo({
+                        clientId,
+                        count: res.data.length,
+                        timestamp: new Date().toLocaleTimeString()
+                    });
+                    
+                    if (res.data.length > 0) {
+                        toast({
+                            title: `✨ ${res.data.length} commande(s) de verres disponible(s)`,
+                            description: 'Consultez l\'onglet Verres pour les ajouter.',
+                        });
+                    }
+                } else if (res.error) {
+                    console.error('❌ [ClientPOS] Error fetching lens orders:', res.error);
                 }
             });
 
@@ -60,6 +79,7 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
                                     item.unitPrice || 0, // In reservation types we had items: {productId, productName, reference, quantity}
                                     item.quantity,
                                     'MONTURE'
+                                    // Metadata for reservations could be added here if needed, but 'fromReservation' field handles it currently in pricing.ts type
                                 )
                             ).map((line: any) => ({ ...line, fromReservation: reservation.id }));
                             
@@ -72,19 +92,29 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
         }
     }, [clientId]);
 
-    const addLensOrderToCart = (order: any) => {
-        const virtualId = `LO-${order.id}`;
+    const addLensOrderToCart = ({ product, lensOrder }: { product: any, lensOrder: any }) => {
+        const virtualId = `LO-${lensOrder.id}`;
         if (cartItems.some(item => item.productId === virtualId)) {
             toast({ description: "Cette commande est déjà dans le panier." });
             return;
         }
 
-        const price = parseFloat(order.sellingPrice);
+        const price = parseFloat(lensOrder.sellingPrice);
         const newLine = createLineItem(
             virtualId,
-            `Verres: ${order.lensType}`,
+            `Verres: ${lensOrder.lensType}`,
             price,
-            1
+            1,
+            'VERRE',
+            { 
+                lensOrderId: lensOrder.id,
+                prescription: {
+                    sphereR: lensOrder.sphereR,
+                    cylindreR: lensOrder.cylindreR,
+                    sphereL: lensOrder.sphereL,
+                    cylindreL: lensOrder.cylindreL
+                }
+            }
         );
 
         setItems([...cartItems, newLine]);
@@ -261,11 +291,14 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
 
             toast({
                 title: "Vente réussie !",
-                description: "La vente a été enregistrée avec succès.",
+                description: "La vente a été enregistrée avec succès. Redirection...",
             });
 
             clearCart();
             setHistoryRefreshKey(prev => prev + 1);
+            
+            // Redirect to Sale Details
+            router.push(`/dashboard/ventes/${saleId}`);
 
         } catch (error: any) {
             console.error("Sale Error:", error);
@@ -283,50 +316,11 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
 
     return (
         <div className="space-y-6">
-            {/* Pending Orders Block */}
-            {pendingOrders.length > 0 && (
-                <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
-                     <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-lg text-indigo-900">Commandes en attente ({pendingOrders.length})</h3>
-                    </div>
-                    <Card className="border-indigo-100 bg-indigo-50/30 shadow-sm">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-base font-medium flex items-center gap-2">
-                                <Package className="h-4 w-4 text-indigo-600" />
-                                Ce client a des commandes de verres prêtes à être facturées.
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="grid gap-3 pt-0">
-                            {pendingOrders.map(order => {
-                                const isAdded = cartItems.some(i => i.productId === `LO-${order.id}`);
-                                return (
-                                    <div key={order.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-indigo-100 shadow-sm">
-                                        <div>
-                                            <p className="font-semibold text-slate-800">{order.lensType} <span className="text-slate-400 font-normal">({order.orderType})</span></p>
-                                            <p className="text-xs text-slate-500">
-                                                Commandée le {new Date(order.createdAt).toLocaleDateString()} • {parseFloat(order.sellingPrice).toFixed(2)} DH
-                                            </p>
-                                            <Badge variant="outline" className="mt-1 text-[10px] bg-indigo-100 text-indigo-700 border-indigo-200">
-                                                {order.status === 'received' ? 'Reçue' : 'En cours'}
-                                            </Badge>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-bold text-sm">{parseFloat(order.sellingPrice).toFixed(2)} DH</span>
-                                            <Button 
-                                                size="sm" 
-                                                variant={isAdded ? "secondary" : "default"}
-                                                className={isAdded ? "bg-green-100 text-green-700" : "bg-indigo-600 hover:bg-indigo-700"}
-                                                onClick={() => addLensOrderToCart(order)}
-                                                disabled={isAdded}
-                                            >
-                                                {isAdded ? "Ajouté" : "Ajouter"}
-                                            </Button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </CardContent>
-                    </Card>
+            {/* Visual Debug Panel (Available in dev mode logic) */}
+            {process.env.NODE_ENV === 'development' && debugInfo && (
+                <div className="bg-amber-50 border border-amber-200 p-2 rounded text-[10px] font-mono text-amber-800 flex justify-between items-center opacity-70 hover:opacity-100 transition-opacity">
+                    <span>DEBUG: Client {debugInfo.clientId} | {debugInfo.count} orders </span>
+                    <span>Last refresh: {debugInfo.timestamp}</span>
                 </div>
             )}
 
@@ -336,7 +330,12 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
                     <h3 className="font-semibold text-lg flex items-center gap-2">
                         <Badge variant="outline">1</Badge> Sélectionner Produits
                     </h3>
-                    <ProductSearch onProductSelect={addToCart} />
+                    <ProductSearch 
+                        onProductSelect={addToCart} 
+                        clientLenses={pendingOrders}
+                        onLensSelect={(product, lensOrder) => addLensOrderToCart({ product, lensOrder })}
+                        addedLensIds={cartItems.filter(i => i.productId.startsWith('LO-')).map(i => i.productId.replace('LO-', ''))}
+                    />
                 </div>
 
                 {/* Right Col: Cart & Payment (60%) */}

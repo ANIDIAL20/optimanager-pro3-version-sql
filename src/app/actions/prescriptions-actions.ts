@@ -21,6 +21,8 @@ export interface EyePrescription {
     cylinder: string;
     axis: string;
     addition?: string;
+    pd?: string;
+    height?: string;
 }
 
 export interface PrescriptionData {
@@ -63,19 +65,33 @@ export const getPrescriptions = secureAction(async (userId, user, clientId?: str
                 eq(prescriptions.userId, userId),
                 clientId ? eq(prescriptions.clientId, parseInt(clientId)) : undefined
             ),
-            with: { client: true }
+            with: { 
+                client: {
+                    columns: { id: true, fullName: true }
+                } 
+            }
         });
 
         // 2. Fetch from NEW table (AI Scanner)
-        const newPrescriptionsQuery = db.query.prescriptions.findMany({
-            where: and(
-                eq(newPrescriptionsTable.userId, userId),
-                clientId ? eq(newPrescriptionsTable.clientId, parseInt(clientId)) : undefined
-            ),
-             with: { client: true }
-        });
+        // 2. Fetch from NEW table (AI Scanner) with error handling
+        let newResults: any[] = [];
+        try {
+            newResults = await db.query.prescriptions.findMany({
+                where: and(
+                    eq(newPrescriptionsTable.userId, userId),
+                    clientId ? eq(newPrescriptionsTable.clientId, parseInt(clientId)) : undefined
+                ),
+                 with: { 
+                    client: {
+                        columns: { id: true, fullName: true }
+                    } 
+                }
+            });
+        } catch (error) {
+            console.warn("⚠️ Could not fetch from new prescriptions table:", error);
+        }
 
-        const [legacyResults, newResults] = await Promise.all([legacyQuery, newPrescriptionsQuery]);
+        const legacyResults = await legacyQuery;
 
         // 3. Map LEGACY results
         const mappedLegacy: Prescription[] = legacyResults.map((p: any) => ({
@@ -100,13 +116,17 @@ export const getPrescriptions = secureAction(async (userId, user, clientId?: str
                     sphere: p.odSph?.toString() || '',
                     cylinder: p.odCyl?.toString() || '',
                     axis: p.odAxis?.toString() || '',
-                    addition: p.odAdd?.toString() || ''
+                    addition: p.odAdd?.toString() || '',
+                    pd: p.odPd?.toString() || '',
+                    height: p.odHeight?.toString() || ''
                 },
                 og: {
                     sphere: p.osSph?.toString() || '',
                     cylinder: p.osCyl?.toString() || '',
                     axis: p.osAxis?.toString() || '',
-                    addition: p.osAdd?.toString() || ''
+                    addition: p.osAdd?.toString() || '',
+                    pd: p.osPd?.toString() || '',
+                    height: p.osHeight?.toString() || ''
                 },
                 pd: p.pd?.toString() || '',
                 doctorName: p.doctorName || ''
@@ -176,7 +196,8 @@ export const createPrescription = secureAction(async (userId, user, input: Presc
 
         // Verify client ownership
         const clientExists = await db.query.clients.findFirst({
-            where: and(eq(clients.id, clientId), eq(clients.userId, userId))
+            where: and(eq(clients.id, clientId), eq(clients.userId, userId)),
+            columns: { id: true } // Only need to know if it exists
         });
         if (!clientExists) return { success: false, error: 'Client introuvable' };
 

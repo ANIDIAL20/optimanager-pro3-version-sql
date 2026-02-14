@@ -6,7 +6,7 @@
 'use server';
 
 import { db } from '@/db';
-import { clients, prescriptionsLegacy as prescriptions, sales, lensOrders, clientInteractions } from '@/db/schema';
+import { clients, prescriptionsLegacy as prescriptions, prescriptions as newPrescriptionsTable, sales, lensOrders, clientInteractions } from '@/db/schema';
 import { eq, and, or, like, desc } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure, logAudit } from '@/lib/audit-log';
@@ -78,6 +78,13 @@ export const getClients = secureAction(async (userId, user, searchQuery?: string
                         prescriptionData: true,
                     }
                 },
+                prescriptions: {
+                    columns: {
+                        id: true,
+                        createdAt: true,
+                        // Avoid selecting odSph, etc. which might be missing
+                    }
+                },
             },
             orderBy: desc(clients.createdAt),
         });
@@ -97,7 +104,17 @@ export const getClients = secureAction(async (userId, user, searchQuery?: string
             address: client.address,
             city: client.city,
             dateOfBirth: client.dateOfBirth?.toISOString(),
-            prescriptions: (client.prescriptionsLegacy || []).map((p: any) => p.prescriptionData as any) || [], // 👈 Prescriptions included!
+            prescriptions: [
+                ...(client.prescriptionsLegacy || []).map((p: any) => p.prescriptionData as any),
+                ...(client.prescriptions || []).map((p: any) => ({
+                    id: p.id,
+                    date: p.prescriptionDate?.toISOString() || '',
+                    od: { sphere: p.odSph?.toString() || '', cylinder: p.odCyl?.toString() || '', axis: p.odAxis?.toString() || '', addition: p.odAdd?.toString() || '', pd: p.odPd?.toString() || '', height: p.odHeight?.toString() || '' },
+                    og: { sphere: p.osSph?.toString() || '', cylinder: p.osCyl?.toString() || '', axis: p.osAxis?.toString() || '', addition: p.osAdd?.toString() || '', pd: p.osPd?.toString() || '', height: p.osHeight?.toString() || '' },
+                    pd: p.pd?.toString() || '',
+                    createdAt: p.createdAt?.toISOString() || ''
+                } as any))
+            ], // 👈 Prescriptions merged!
             createdAt: client.createdAt?.toISOString() || new Date().toISOString(),
             updatedAt: client.updatedAt?.toISOString(),
         }));
@@ -139,67 +156,135 @@ export const getClient = secureAction(async (userId, user, clientId: string) => 
     try {
         const clientIdNum = parseInt(clientId);
         
-        // Use relational query to automatically fetch prescriptions
-        const clientWithPrescriptions = await db.query.clients.findFirst({
-            where: and(
-                eq(clients.id, clientIdNum),
-                eq(clients.userId, userId) // ⚠️ CRITICAL: Verify ownership
-            ),
-            with: {
-                prescriptionsLegacy: {
-                    columns: {
-                        id: true,
-                        prescriptionData: true,
-                        createdAt: true, // Needed for ordering
-                    },
-                    orderBy: (pl: any, { desc }: any) => [desc(pl.createdAt)],
-                },
-            },
-        });
+        // 🛡️ RobustFetch Step 1: Fetch Client Primary Data (Safe Selection)
+        // We use a safe list of columns that definitely exist in the DB
+        const clientResults = await db.select({
+            id: clients.id,
+            fullName: clients.fullName,
+            prenom: clients.prenom,
+            nom: clients.nom,
+            email: clients.email,
+            phone: clients.phone,
+            address: clients.address,
+            city: clients.city,
+            gender: clients.gender,
+            cin: clients.cin,
+            dateOfBirth: clients.dateOfBirth,
+            mutuelle: clients.mutuelle,
+            notes: clients.notes,
+            balance: clients.balance,
+            totalSpent: clients.totalSpent,
+            isActive: clients.isActive,
+            lastVisit: clients.lastVisit,
+            createdAt: clients.createdAt,
+            updatedAt: clients.updatedAt,
+        })
+        .from(clients)
+        .where(and(
+            eq(clients.id, clientIdNum),
+            eq(clients.userId, userId)
+        ))
+        .limit(1);
 
-        if (!clientWithPrescriptions) {
-            return {
-                success: false,
-                error: 'Client introuvable'
-            };
+        if (clientResults.length === 0) {
+            return { success: false, error: 'Client introuvable' };
         }
+
+        const clientData = clientResults[0];
+        const allPrescriptions: any[] = [];
+
+        // 🛡️ RobustFetch Step 2: Fetch Legacy Prescriptions (Isolated)
+        try {
+            const legacyResults = await db.select()
+                .from(prescriptions) // Variable 'prescriptions' refers to 'prescriptionsLegacy' table in this file
+                .where(and(
+                    eq(prescriptions.clientId, clientIdNum),
+                    eq(prescriptions.userId, userId)
+                ))
+                .orderBy(desc(prescriptions.createdAt));
+            
+            allPrescriptions.push(...legacyResults.map((p: any) => ({
+                ...(p.prescriptionData as any),
+                id: p.id?.toString(),
+                createdAt: p.createdAt?.toISOString() || ''
+            })));
+        } catch (e: any) {
+            console.warn(`[getClient] Failed to fetch legacy prescriptions for client ${clientId}: ${e?.message || 'Unknown error'}`);
+        }
+
+        // 🛡️ RobustFetch Step 3: Fetch New Structured Prescriptions (Isolated)
+        try {
+             const newResults = await db.query.prescriptions.findMany({
+                where: and(
+                    eq(newPrescriptionsTable.clientId, clientIdNum),
+                    eq(newPrescriptionsTable.userId, userId)
+                ),
+                orderBy: (p: any, { desc }: any) => [desc(p.createdAt)],
+            });
+
+            allPrescriptions.push(...newResults.map((p: any) => ({
+                id: p.id,
+                date: p.prescriptionDate?.toISOString() || '',
+                od: {
+                    sphere: p.odSph?.toString() || '',
+                    cylinder: p.odCyl?.toString() || '',
+                    axis: p.odAxis?.toString() || '',
+                    addition: p.odAdd?.toString() || '',
+                    pd: p.odPd?.toString() || '',
+                    height: p.odHeight?.toString() || ''
+                },
+                og: {
+                    sphere: p.osSph?.toString() || '',
+                    cylinder: p.osCyl?.toString() || '',
+                    axis: p.osAxis?.toString() || '',
+                    addition: p.osAdd?.toString() || '',
+                    pd: p.osPd?.toString() || '',
+                    height: p.osHeight?.toString() || ''
+                },
+                pd: p.pd?.toString() || '',
+                doctorName: p.doctorName || '',
+                notes: p.notes || '',
+                createdAt: p.createdAt?.toISOString() || ''
+            })));
+        } catch (e: any) {
+            console.warn(`[getClient] Failed to fetch new prescriptions for client ${clientId}: ${e?.message || 'Unknown error'}`);
+        }
+
+        // Final sorting
+        const sortedPrescriptions = allPrescriptions.sort((a, b) => 
+            new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+        );
 
         // Transform to Client interface
         const client: Client = {
-            id: clientWithPrescriptions.id.toString(),
-            name: clientWithPrescriptions.fullName,
-            prenom: clientWithPrescriptions.prenom,
-            nom: clientWithPrescriptions.nom,
-            phone: clientWithPrescriptions.phone,
-            phone2: clientWithPrescriptions.phone2,
-            email: clientWithPrescriptions.email,
-            gender: clientWithPrescriptions.gender,
-            cin: clientWithPrescriptions.cin,
-            mutuelle: clientWithPrescriptions.mutuelle,
-            address: clientWithPrescriptions.address,
-            city: clientWithPrescriptions.city,
-            dateOfBirth: clientWithPrescriptions.dateOfBirth?.toISOString(),
-            prescriptions: (clientWithPrescriptions.prescriptionsLegacy || []).map((p: any) => p.prescriptionData as any),
-            createdAt: clientWithPrescriptions.createdAt?.toISOString() || new Date().toISOString(),
-            updatedAt: clientWithPrescriptions.updatedAt?.toISOString(),
+            id: clientData.id.toString(),
+            name: clientData.fullName,
+            prenom: clientData.prenom || undefined,
+            nom: clientData.nom || undefined,
+            phone: clientData.phone || '',
+            email: clientData.email || undefined,
+            gender: clientData.gender || undefined,
+            cin: clientData.cin || undefined,
+            mutuelle: clientData.mutuelle || undefined,
+            address: clientData.address || undefined,
+            city: clientData.city || undefined,
+            dateOfBirth: clientData.dateOfBirth?.toISOString(),
+            prescriptions: sortedPrescriptions,
+            createdAt: clientData.createdAt?.toISOString() || new Date().toISOString(),
+            updatedAt: clientData.updatedAt?.toISOString(),
         };
 
-        console.log(`✅ Client fetched: ${client.name} with ${(client.prescriptions || []).length} prescriptions`);
+        console.log(`✅ Client fetched: ${client.name} with ${sortedPrescriptions.length} prescriptions`);
         await logSuccess(userId, 'READ', 'clients', clientId);
 
         return { success: true, client };
 
     } catch (error: any) {
-        console.error('💥 Error fetching client:', error);
-        console.error('💥 Error details:', {
-            message: error.message,
-            stack: error.stack,
-            clientId
-        });
+        console.error('💥 Critical error in getClient:', error.message);
         await logFailure(userId, 'READ', 'clients', error.message, clientId);
         return {
             success: false,
-            error: `Erreur lors de la récupération du client: ${error.message}`
+            error: `Erreur critique lors de la récupération du client: ${error.message}`
         };
     }
 });
@@ -525,7 +610,26 @@ export const getClientSnapshot = secureAction(async (userId, user, clientId: str
             where: and(
                 eq(clients.id, clientIdNum),
                 eq(clients.userId, userId)
-            )
+            ),
+            columns: {
+                id: true,
+                fullName: true,
+                phone: true,
+                // phone2: true,
+                email: true,
+                gender: true,
+                cin: true,
+                dateOfBirth: true,
+                mutuelle: true,
+                address: true,
+                city: true,
+                balance: true,
+                // creditLimit: true,
+                totalSpent: true,
+                isActive: true,
+                createdAt: true,
+                updatedAt: true,
+            }
         });
 
         if (!client) {

@@ -61,8 +61,8 @@ Extrais avec précision:
 **Format JSON uniquement:**
 \`\`\`json
 {
-  "OD": { "sph": -2.00, "cyl": -0.50, "axis": 180, "add": 1.50 },
-  "OS": { "sph": -1.75, "cyl": -0.25, "axis": 10, "add": 1.50 },
+  "OD": { "sph": -2.00, "cyl": -0.50, "axis": 180, "add": 1.50, "pd": 31.5, "height": 18 },
+  "OS": { "sph": -1.75, "cyl": -0.25, "axis": 10, "add": 1.50, "pd": 31.5, "height": 18 },
   "PD": 63,
   "doctorName": "Dr. X",
   "date": "2026-02-11"

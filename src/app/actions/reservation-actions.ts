@@ -90,7 +90,8 @@ export async function getClientReservationsAction(clientId: string) {
     const reservations = await getClientReservations(parseInt(clientId));
     return { success: true, data: reservations };
   } catch (error: any) {
-    console.error('Error fetching reservations:', error);
+    console.error('❌ ERROR in getClientReservationsAction:', error);
+    if (error.stack) console.error(error.stack);
     return { success: false, error: error.message };
   }
 }

@@ -19,6 +19,7 @@ export interface PosLineItem {
   // Metadata for frame reservations
   type?: 'MONTURE' | 'VERRE' | 'ACCESSOIRE' | 'AUTRE';
   fromReservation?: number;
+  metadata?: any;
 }
 
 /** يعيد السطر إلى الثمن العادي بدون أي تخفيض */
@@ -102,7 +103,8 @@ export function createLineItem(
   productName: string,
   originalUnitPrice: number,
   quantity: number = 1,
-  type?: 'MONTURE' | 'VERRE' | 'ACCESSOIRE' | 'AUTRE'
+  type?: 'MONTURE' | 'VERRE' | 'ACCESSOIRE' | 'AUTRE',
+  metadata?: any
 ): PosLineItem {
   return {
     lineId: Math.random().toString(36).substring(7),
@@ -114,6 +116,7 @@ export function createLineItem(
     lineTotal: originalUnitPrice * quantity,
     priceMode: 'STANDARD',
     type,
+    metadata,
   };
 }
 

@@ -27,6 +27,10 @@ interface ShopSettings {
     phone?: string;
     ice?: string;
     rib?: string;
+    if?: string;
+    rc?: string;
+    tp?: string;
+    inpe?: string;
 }
 
 interface InvoiceActionsProps {

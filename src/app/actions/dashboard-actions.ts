@@ -41,9 +41,22 @@ export const getDashboardStats = secureAction(async (userId, user) => {
         const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
         const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
 
-        // 2. Fetch Data (Drizzle ORM)
-        const [qSales, qLowStock, qDevis, qReservations] = await Promise.all([
-            db.select().from(sales).where(eq(sales.userId, userId)).orderBy(desc(sales.createdAt)),
+        // 2. Fetch Data (Drizzle ORM) - Optimized Aggregations
+        const [revenueResults, todaySalesResults, qLowStock, qDevis, qReservations, qRecentSales] = await Promise.all([
+            // Global Revenue (Total Net/TTC)
+            db.select({ 
+                total: sql<string>`sum(COALESCE(total_net, total_ttc, '0'))` 
+            }).from(sales).where(eq(sales.userId, userId)),
+            
+            // Today's Sales Count
+            db.select({ 
+                count: sql<number>`count(*)` 
+            }).from(sales).where(and(
+                eq(sales.userId, userId),
+                sql`date >= ${startOfDay} AND date <= ${endOfDay}`
+            )),
+
+            // Low Stock Items (Limited for dashboard)
             db.select().from(products)
                 .where(and(
                     eq(products.userId, userId), 
@@ -51,28 +64,33 @@ export const getDashboardStats = secureAction(async (userId, user) => {
                 ))
                 .orderBy(asc(products.quantiteStock))
                 .limit(10),
+
+            // Recent Devis
             db.select().from(devis).where(eq(devis.userId, userId)).orderBy(desc(devis.createdAt)).limit(5),
-            db.select().from(frameReservations).where(eq(frameReservations.status, 'PENDING'))
+
+            // Pending Reservations
+            // Pending Reservations - with Error Fallback
+            db.select().from(frameReservations).where(and(
+                eq(frameReservations.storeId, userId),
+                eq(frameReservations.status, 'PENDING')
+            )).catch((err) => {
+                console.warn("⚠️ Dashboard: Missing frame_reservations table, skipping."); 
+                return []; 
+            }),
+
+            // Recent Sales for Activity Feed (Limit to 5)
+            db.select().from(sales)
+                .where(eq(sales.userId, userId))
+                .orderBy(desc(sales.createdAt))
+                .limit(5)
         ]);
 
-        // 3. Process Revenue & Today's Counts
-        let globalRevenue = 0;
-        let todaySalesCount = 0;
-
-        const dStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const dEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-
-        qSales.forEach((sale: any) => {
-            const revenueValue = parseFloat(sale.totalNet || sale.totalTtc || '0');
-            globalRevenue += isNaN(revenueValue) ? 0 : revenueValue;
-
-            const saleDate = sale.date ? new Date(sale.date) : (sale.createdAt ? new Date(sale.createdAt) : null);
-            if (saleDate && saleDate >= dStart && saleDate <= dEnd) {
-                todaySalesCount++;
-            }
-        });
-
-        const totalSalesCount = qSales.length;
+        const globalRevenue = parseFloat(revenueResults[0]?.total || '0');
+        const todaySalesCount = Number(todaySalesResults[0]?.count || 0);
+        
+        // Total count (Quickly count without fetching)
+        const totalSalesCountResult = await db.select({ count: sql`count(*)` }).from(sales).where(eq(sales.userId, userId));
+        const totalSalesCount = Number(totalSalesCountResult[0]?.count || 0);
 
         // 4. Process Stock Alerts
         const stockAlertItems = qLowStock.map((p: any) => ({
@@ -83,7 +101,7 @@ export const getDashboardStats = secureAction(async (userId, user) => {
         }));
 
         // 5. Build Unified Recent Activity
-        const mappedSales = qSales.slice(0, 5).map((s: any) => {
+        const mappedSales = qRecentSales.map((s: any) => {
             const reste = parseFloat(s.resteAPayer || '0');
             return {
                 id: s.id.toString(),
