@@ -230,8 +230,6 @@ export function ProductsClientView({ initialProducts, initialCategories, usageSt
         <DataTable
             columns={columns}
             data={filteredProducts}
-            searchKey="reference"
-            searchValue={searchTerm}
             // @ts-ignore - custom meta for optimistic updates
             meta={{
                 deleteProduct: deleteProductLocally

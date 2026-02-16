@@ -67,10 +67,10 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
                     // Map items
                     items: fetchedSale.items.map(item => ({
                         ...item,
-                        productId: item.productRef, // Map Ref to ID
+                        productId: item.productId || item.productRef, // Map ID preferencing explicit ID
                         price: item.unitPrice,      // Map UnitPrice to Price
                         nomProduit: item.productName,
-                        reference: item.productRef
+                        reference: item.reference || item.productRef
                     }))
                 } as unknown as Sale;
                 
@@ -276,18 +276,25 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
                         <table className="w-full text-sm">
                             <thead className="bg-slate-50 dark:bg-slate-900 border-b">
                                 <tr>
-                                    <th className="text-left p-3 font-medium text-muted-foreground">Article</th>
-                                    <th className="text-left p-3 font-medium text-muted-foreground">Réf</th>
-                                    <th className="text-right p-3 font-medium text-muted-foreground">Prix U.</th>
-                                    <th className="text-right p-3 font-medium text-muted-foreground">Qté</th>
-                                    <th className="text-right p-3 font-medium text-muted-foreground">Total</th>
+                                    <th className="text-left p-3 font-medium text-muted-foreground w-[30%]">Article</th>
+                                    <th className="text-left p-3 font-medium text-muted-foreground w-[15%]">Marque</th>
+                                    <th className="text-left p-3 font-medium text-muted-foreground w-[15%]">Modèle</th>
+                                    <th className="text-left p-3 font-medium text-muted-foreground w-[10%]">Réf</th>
+                                    <th className="text-right p-3 font-medium text-muted-foreground w-[10%]">Prix U.</th>
+                                    <th className="text-right p-3 font-medium text-muted-foreground w-[8%]">Qté</th>
+                                    <th className="text-right p-3 font-medium text-muted-foreground w-[12%]">Total</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {sale.items?.map((item, idx) => (
                                     <tr key={idx} className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-slate-900/50">
-                                        <td className="p-3 font-medium">{item.productName || item.nomProduit || 'Produit sans nom'}</td>
-                                        <td className="p-3 text-muted-foreground">{item.productRef || item.reference || '-'}</td>
+                                        <td className="p-3 font-medium">
+                                            <div className="font-semibold text-slate-900">{item.productName || item.nomProduit || 'Produit sans nom'}</div>
+                                            {item.couleur && <div className="text-xs text-slate-500">Coul: {item.couleur}</div>}
+                                        </td>
+                                        <td className="p-3 text-slate-600">{item.marque || item.brand || '-'}</td>
+                                        <td className="p-3 text-slate-600">{item.modele || item.model || '-'}</td>
+                                        <td className="p-3 text-muted-foreground text-xs font-mono">{item.reference || item.productRef || '-'}</td>
                                         <td className="p-3 text-right">{(item.unitPrice || item.prixVente || 0).toFixed(2)} DH</td>
                                         <td className="p-3 text-right">{item.quantity}</td>
                                         <td className="p-3 text-right font-semibold">{(item.total || ((item.unitPrice || item.price || 0) * item.quantity)).toFixed(2)} DH</td>

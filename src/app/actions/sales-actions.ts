@@ -19,18 +19,48 @@ import { track } from '@vercel/analytics/server';
 // ========================================
 
 export interface SaleItem {
-    productRef: string; // This is actually productId or reference? In legacy it seemed to be ID or Ref.
+    productId?: string;
+    productRef: string;
     productName: string;
+    nomProduit?: string; // alias
     
-    // New fields for print template
+    // Details
+    reference?: string;
     marque?: string;
     modele?: string;
     couleur?: string;
 
+    // Financials
     quantity: number;
-    unitPrice: number;
-    total: number;
+    unitPrice: number; // TTC
+    priceHT?: number;
+    tvaRate?: number;
+    amountTVA?: number;
+    
+    total: number; // TTC
+    totalHT?: number;
+    totalTTC?: number;
+    
     returnedQuantity?: number;
+    
+    // Snapshot fields
+    category?: string;
+    brand?: string;
+    productType?: string;
+    
+    // Optical Details
+    lensDetails?: {
+        eye: 'OD' | 'OG';
+        sphere?: string;
+        cylinder?: string;
+        axis?: string;
+        addition?: string;
+        treatment?: string;
+    }[];
+
+    // Legacy
+    prixVente?: number;
+    price?: number;
 }
 
 export interface Sale {
@@ -67,6 +97,65 @@ export interface CreateSaleInput {
     totalHT?: number; // Optional, usually calculated
     totalTVA?: number;
     totalTTC?: number;
+    isDeclared?: boolean; // 🆕 Dual-Mode
+}
+
+// Helper for tax calculation
+function calculateTaxBreakdown(price: number, qty: number, isTTC: boolean, hasTva: boolean) {
+    // Basic rate: 20% or 0%
+    const rate = hasTva ? 0.20 : 0.0;
+    
+    let unitHT, unitTVA, unitTTC;
+
+    if (isTTC) {
+        unitTTC = price;
+        unitHT = hasTva ? price / 1.2 : price;
+        unitTVA = unitTTC - unitHT;
+    } else {
+        unitHT = price;
+        unitTVA = unitHT * rate;
+        unitTTC = unitHT + unitTVA;
+    }
+
+    return {
+        unitHT: Number(unitHT.toFixed(2)),
+        unitTVA: Number(unitTVA.toFixed(2)),
+        unitTTC: Number(unitTTC.toFixed(2)),
+        totalHT: Number((unitHT * qty).toFixed(2)),
+        totalTVA: Number((unitTVA * qty).toFixed(2)),
+        totalTTC: Number((unitTTC * qty).toFixed(2)),
+        rate: hasTva ? 20 : 0
+    };
+}
+
+async function generateInvoiceNumber(userId: string, tx: any) {
+    const year = new Date().getFullYear();
+    const prefix = `${year}-`;
+    
+    // Find the last invoice number for this user and year
+    // Optimized for concurrency: use a locking read if possible or atomic increments
+    // For now, we select desc limit 1.
+    // Note: In high concurrency, this needs a separate counters table. 
+    // Given the scale (single shop usually), this is acceptable with unique constraint fallback.
+    
+    const lastSale = await tx.query.sales.findFirst({
+        where: and(
+            eq(sales.userId, userId),
+            sql`${sales.saleNumber} LIKE ${prefix + '%'}`
+        ),
+        orderBy: [desc(sales.saleNumber)],
+        columns: { saleNumber: true }
+    });
+
+    let nextNum = 1;
+    if (lastSale && lastSale.saleNumber) {
+        const parts = lastSale.saleNumber.split('-');
+        if (parts.length === 2 && !isNaN(parseInt(parts[1]))) {
+            nextNum = parseInt(parts[1]) + 1;
+        }
+    }
+
+    return `${prefix}${nextNum.toString().padStart(4, '0')}`;
 }
 
 // ========================================
@@ -98,6 +187,8 @@ const mapSale = (s: any): Sale => ({
     date: s.date ? (typeof s.date === 'string' ? s.date : s.date.toISOString()) : undefined,
     lastPaymentDate: s.lastPaymentDate ? (typeof s.lastPaymentDate === 'string' ? s.lastPaymentDate : s.lastPaymentDate.toISOString()) : undefined
 });
+
+
 
 /**
  * Get all sales
@@ -188,266 +279,235 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
         }
         const saleId = await withTiming('CREATE_SALE_COMPLETE', async () => {
             return await db.transaction(async (tx: any) => {
-                // 1. Calculate totals
-                const items = data.items;
-                const totalHT = items.reduce((sum, item) => sum + item.total, 0);
-                const totalTVA = totalHT * 0.20;
-                const totalTTC = totalHT + totalTVA;
-
+                const activeItemsInput = data.items.filter(i => i.quantity > 0);
+                if (activeItemsInput.length === 0) {
+                    throw new Error('Veuillez ajouter au moins un article avec une quantité positive');
+                }
                 // 2. Fetch Client Data + Snapshot
-            let clientSnapshot: any = {};
-            let clientIdNum: number | undefined;
+                let clientSnapshot: any = {};
+                let clientIdNum: number | undefined;
 
-            if (data.clientId) {
-                clientIdNum = parseInt(data.clientId);
-                if (isNaN(clientIdNum)) throw new Error("ID Client invalide");
+                if (data.clientId) {
+                    clientIdNum = parseInt(data.clientId);
+                    if (isNaN(clientIdNum)) throw new Error("ID Client invalide");
 
-                const client = await tx.query.clients.findFirst({
-                    where: and(eq(clients.id, clientIdNum), eq(clients.userId, userId)),
-                    columns: {
-                        id: true,
-                        fullName: true,
-                        phone: true,
-                        address: true,
-                        balance: true,
-                        creditLimit: true,
-                    },
-                    with: {
-                        prescriptionsLegacy: {
-                            orderBy: (prescriptionsLegacy: any, { desc }: any) => [desc(prescriptionsLegacy.createdAt)],
-                            limit: 1
+                    const client = await tx.query.clients.findFirst({
+                        where: and(eq(clients.id, clientIdNum), eq(clients.userId, userId)),
+                        columns: {
+                            id: true,
+                            fullName: true,
+                            phone: true,
+                            address: true,
+                            balance: true,
+                            creditLimit: true,
+                        },
+                        with: {
+                            prescriptionsLegacy: {
+                                orderBy: (prescriptionsLegacy: any, { desc }: any) => [desc(prescriptionsLegacy.createdAt)],
+                                limit: 1
+                            }
                         }
-                    }
-                });
+                    });
 
-                if (client) {
-                    clientSnapshot = {
-                        clientName: client.fullName,
-                        clientPhone: client.phone,
-                        clientAddress: client.address
-                    };
+                    if (client) {
+                        clientSnapshot = {
+                            clientName: client.fullName,
+                            clientPhone: client.phone,
+                            clientAddress: client.address
+                        };
 
-                    if (client.prescriptionsLegacy && client.prescriptionsLegacy.length > 0) {
-                        const latest = client.prescriptionsLegacy[0];
-                        if (latest) {
-                            clientSnapshot.prescriptionSnapshot = latest.prescriptionData;
+                        if (client.prescriptionsLegacy && client.prescriptionsLegacy.length > 0) {
+                            const latest = client.prescriptionsLegacy[0];
+                            if (latest) {
+                                clientSnapshot.prescriptionSnapshot = latest.prescriptionData;
+                            }
                         }
                     }
                 }
-            }
 
-            // 3. Update Stock & Enrich Items
-            const enrichedItems: SaleItem[] = [];
-            
-            // ✅ N+1 Fix: Fetch all products in bulk
-            const productRefs = data.items.map(i => i.productRef);
-            const possibleIds = productRefs.map(r => parseInt(r)).filter(id => !isNaN(id));
-            const possibleRefs = productRefs.filter(r => isNaN(parseInt(r)));
+                // 3. Update Stock & Enrich Items
+                const enrichedItems: any[] = [];
+                
+                // ✅ N+1 Fix: Fetch all products in bulk
+                const productRefs = activeItemsInput.map(i => i.productRef);
+                const possibleIds = productRefs.map(r => parseInt(r)).filter(id => !isNaN(id));
+                const possibleRefs = productRefs.filter(r => isNaN(parseInt(r)));
 
-            const fetchedProducts = await tx.query.products.findMany({
-                where: and(
-                    eq(products.userId, userId),
-                    or(
-                        possibleIds.length > 0 ? inArray(products.id, possibleIds) : undefined,
-                        possibleRefs.length > 0 ? inArray(products.reference, possibleRefs) : undefined
+                const fetchedProducts = await tx.query.products.findMany({
+                    where: and(
+                        eq(products.userId, userId),
+                        or(
+                            possibleIds.length > 0 ? inArray(products.id, possibleIds) : undefined,
+                            possibleRefs.length > 0 ? inArray(products.reference, possibleRefs) : undefined
+                        )
                     )
-                )
-            });
-
-            for (const item of data.items) {
-                const productToUpdate = fetchedProducts.find((p: any) => 
-                    p.id.toString() === item.productRef || p.reference === item.productRef
-                );
-
-                if (productToUpdate) {
-                    // ✅ CHECK STOCK
-                    if ((productToUpdate.quantiteStock || 0) < item.quantity) {
-                        throw new Error(`STOCK_INSUFFISANT: ${productToUpdate.nom}`);
-                    }
-
-                    // ✅ OPTIMISTIC LOCKING UPDATE
-                    const updateResult = await tx.update(products)
-                        .set({
-                            quantiteStock: sql`${products.quantiteStock} - ${item.quantity}`,
-                            version: sql`${products.version} + 1`,
-                            updatedAt: new Date()
-                        })
-                        .where(and(
-                            eq(products.id, productToUpdate.id),
-                            eq(products.version, productToUpdate.version) // Check current version
-                        ));
-                    
-                    if (updateResult.rowCount === 0) {
-                        throw new Error(`CONCURRENCY_ERROR: Le produit ${productToUpdate.nom} a été modifié par un autre utilisateur.`);
-                    }
-
-                    // Audit product change
-                    await logAudit({
-                        userId,
-                        entityType: 'product',
-                        entityId: productToUpdate.id.toString(),
-                        action: 'UPDATE_STOCK',
-                        oldValue: { stock: productToUpdate.quantiteStock, version: productToUpdate.version },
-                        newValue: { stock: productToUpdate.quantiteStock - item.quantity, version: productToUpdate.version + 1 },
-                        metadata: { saleRef: 'pending' },
-                        success: true
-                    });
-                } else {
-                    console.warn(`⚠️ Product not found: ${item.productRef}`);
-                }
-
-                const finalRef = productToUpdate ? productToUpdate.reference : item.productRef;
-                const finalName = item.productName || (productToUpdate ? productToUpdate.nom : 'Article Inconnu');
-                const finalPrice = item.unitPrice ?? (productToUpdate ? Number(productToUpdate.prixVente) : 0);
-                const finalTotal = item.total ?? (finalPrice * item.quantity);
-
-                enrichedItems.push({
-                    productRef: finalRef,
-                    productName: finalName,
-                    marque: productToUpdate?.marque || undefined,
-                    modele: productToUpdate?.modele || undefined,
-                    couleur: productToUpdate?.couleur || undefined,
-                    quantity: item.quantity,
-                    unitPrice: finalPrice,
-                    total: finalTotal,
-                    returnedQuantity: 0
                 });
-            }
 
-            const calcTotalHT = enrichedItems.reduce((sum, item) => sum + item.total, 0);
-            const calcTotalTVA = calcTotalHT * 0.20;
-            const calcTotalTTC = calcTotalHT + calcTotalTVA;
+                let runningTotalHT = 0;
+                let runningTotalTVA = 0;
+                let runningTotalTTC = 0;
 
-            const saleNumber = `SALE-${Date.now().toString().slice(-8)}`;
+                for (const item of activeItemsInput) {
+                    const productToUpdate = fetchedProducts.find((p: any) => 
+                        p.id.toString() === item.productRef || p.reference === item.productRef
+                    );
 
-            const saleData = {
-                userId,
-                clientId: clientIdNum,
-                saleNumber,
-                ...clientSnapshot,
-                items: enrichedItems,
-                totalHT: calcTotalHT.toFixed(2),
-                totalTVA: calcTotalTVA.toFixed(2),
-                totalTTC: calcTotalTTC.toFixed(2),
-                totalNet: calcTotalTTC.toFixed(2),
-                totalPaye: '0',
-                resteAPayer: calcTotalTTC.toFixed(2),
-                status: 'impaye',
-                paymentMethod: data.paymentMethod,
-                paymentHistory: [],
-                notes: data.notes,
-                createdAt: new Date(),
-                date: new Date()
-            };
+                    if (productToUpdate) {
+                        // CHECK STOCK
+                        if (productToUpdate.isStockManaged && (productToUpdate.quantiteStock || 0) < item.quantity) {
+                            throw new Error(`STOCK_INSUFFISANT: ${productToUpdate.nom}`);
+                        }
 
-            const result = await tx.insert(sales).values(saleData).returning();
-            const createdSaleId = result[0].id;
-
-            // 5. Link Lens Orders
-            if (data.lensOrderIds && data.lensOrderIds.length > 0) {
-                await tx.update(lensOrders)
-                    .set({
-                        saleId: createdSaleId,
-                        status: 'delivered', 
-                        deliveredDate: new Date(),
-                        updatedAt: new Date()
-                    })
-                    .where(and(
-                        inArray(lensOrders.id, data.lensOrderIds),
-                        eq(lensOrders.userId, userId)
-                    ));
-
-                // 5b. Decrement Stock for these Lens Orders (Global Stock Integration)
-                // We find the product with reference VERRE-{id} and decrement it
-                for (const loId of data.lensOrderIds) {
-                    const productRef = `VERRE-${loId}`;
-                    const product = await tx.query.products.findFirst({
-                        where: and(eq(products.userId, userId), eq(products.reference, productRef))
-                    });
-
-                    if (product) {
-                        try {
-                             await tx.update(products)
-                                .set({ 
-                                    quantiteStock: sql`${products.quantiteStock} - 1`,
+                        // OPTIMISTIC LOCKING UPDATE
+                        if (productToUpdate.isStockManaged) {
+                            const updateResult = await tx.update(products)
+                                .set({
+                                    quantiteStock: sql`${products.quantiteStock} - ${item.quantity}`,
+                                    version: sql`${products.version} + 1`,
                                     updatedAt: new Date()
                                 })
-                                .where(eq(products.id, product.id));
+                                .where(and(
+                                    eq(products.id, productToUpdate.id),
+                                    eq(products.version, productToUpdate.version)
+                                ));
+                            
+                            if (updateResult.rowCount === 0) {
+                                throw new Error(`CONCURRENCY_ERROR: Le produit ${productToUpdate.nom} a été modifié.`);
+                            }
+                        }
+                    }
 
-                             await tx.insert(stockMovements).values({
-                                userId,
-                                productId: product.id,
-                                type: 'OUT',
-                                quantite: 1,
-                                notes: `Vente LensOrder #${loId} (Sale #${createdSaleId})`,
-                                createdAt: new Date()
+                    // ✅ DUAL-MODE TVA LOGIC
+                    const isDeclared = data.isDeclared === true;
+                    let rawRate = Number(productToUpdate?.tvaRate || item.tvaRate || 20);
+                    const effectiveRate = isDeclared ? rawRate : 0;
+                    
+                    const unitTTC = Number(item.unitPrice || 0);
+                    const unitHT = unitTTC / (1 + (effectiveRate / 100));
+                    const unitTVA = unitTTC - unitHT;
+
+                    const lineHT = unitHT * item.quantity;
+                    const lineTTC = unitTTC * item.quantity;
+                    const lineTVA = lineTTC - lineHT;
+
+                    enrichedItems.push({
+                        productId: productToUpdate?.id.toString() || item.productRef,
+                        productRef: productToUpdate?.reference || item.productRef,
+                        productName: item.productName || productToUpdate?.nom || 'Article Inconnu',
+                        
+                        brand: productToUpdate?.brand || productToUpdate?.marque || 'N/A',
+                        marque: productToUpdate?.brand || productToUpdate?.marque || 'N/A',
+                        modele: productToUpdate?.modele || '-',
+                        category: productToUpdate?.category || productToUpdate?.categorie || 'OPTIQUE',
+                        productType: productToUpdate?.productType || (productToUpdate?.categorie?.toLowerCase().includes('monture') ? 'frame' : 'accessory'),
+                        
+                        reference: productToUpdate?.reference || item.productRef,
+                        unitPrice: unitTTC,
+                        priceHT: unitHT,
+                        tvaRate: effectiveRate,
+                        amountTVA: unitTVA,
+                        
+                        quantity: item.quantity,
+                        totalHT: lineHT,
+                        totalTTC: lineTTC,
+                        total: lineTTC,
+                        
+                        lensDetails: item.lensDetails
+                    });
+                    
+                    runningTotalHT += lineHT;
+                    runningTotalTVA += lineTVA;
+                    runningTotalTTC += lineTTC;
+                }
+
+                // 5. Reference Numbers
+                const saleNumber = await generateInvoiceNumber(userId, tx);
+                let transactionNumber = null;
+                if (data.isDeclared) {
+                    const countResult = await tx.execute(sql`SELECT count(*) FROM sales WHERE user_id = ${userId} AND is_declared = true`);
+                    const count = parseInt(countResult.rows[0].count) || 0;
+                    transactionNumber = `FACT-${new Date().getFullYear()}-${(count + 1).toString().padStart(5, '0')}`;
+                }
+
+                const saleData = {
+                    userId,
+                    clientId: clientIdNum,
+                    saleNumber,
+                    transactionNumber,
+                    isDeclared: data.isDeclared || false,
+                    ...clientSnapshot,
+                    items: enrichedItems,
+                    totalHT: runningTotalHT.toFixed(2),
+                    totalTVA: runningTotalTVA.toFixed(2),
+                    totalTTC: runningTotalTTC.toFixed(2),
+                    totalNet: runningTotalTTC.toFixed(2),
+                    totalPaye: '0',
+                    resteAPayer: runningTotalTTC.toFixed(2),
+                    status: 'impaye',
+                    paymentMethod: data.paymentMethod,
+                    type: data.isDeclared ? 'INVOICE' : 'VENTE',
+                    createdAt: new Date(),
+                    date: new Date()
+                };
+
+                const saleResult = await tx.insert(sales).values(saleData).returning();
+                const createdSaleId = saleResult[0].id;
+
+                // 7. Normalized Items Insertion
+                for (const item of enrichedItems) {
+                    const itemResult = await tx.insert(saleItems).values({
+                        saleId: createdSaleId,
+                        productId: parseInt(item.productId!) || null,
+                        brand: item.brand,
+                        category: item.category,
+                        productType: item.productType as any,
+                        label: item.productName,
+                        qty: item.quantity,
+                        unitPriceHT: item.priceHT?.toFixed(2),
+                        unitPriceTVA: item.amountTVA?.toFixed(2),
+                        unitPriceTTC: item.unitPrice.toFixed(2),
+                        tvaRate: item.tvaRate?.toFixed(2),
+                        lineTotalHT: item.totalHT?.toFixed(2),
+                        lineTotalTVA: (item.totalTTC! - item.totalHT!).toFixed(2),
+                        lineTotalTTC: item.totalTTC?.toFixed(2),
+                    }).returning();
+
+                    if (item.productType === 'lens' && item.lensDetails) {
+                        for (const lens of item.lensDetails) {
+                            await tx.insert(saleLensDetails).values({
+                                saleItemId: itemResult[0].id,
+                                eye: lens.eye,
+                                sphere: lens.sphere || '0.00',
+                                cylinder: lens.cylinder || '0.00',
+                                axis: lens.axis || '0',
+                                addition: lens.addition || '0.00',
+                                treatment: lens.treatment || 'N/A'
                             });
-                        } catch (err) {
-                            console.error(`Failed to decrement stock for lens order ${loId}`, err);
-                            // Don't fail the sale for this, but log it
                         }
                     }
                 }
-            }
 
-            // 6. CLIENT LEDGER
-            if (clientIdNum) {
-                const client = await tx.query.clients.findFirst({ 
-                    where: eq(clients.id, clientIdNum),
-                    columns: { id: true, balance: true, creditLimit: true, fullName: true }
-                });
-                if (client) {
-                    const currentBalance = Number(client.balance || 0);
-                    const saleAmount = calcTotalTTC;
-                    
-                    if (Number(client.creditLimit) > 0 && (currentBalance + saleAmount) > Number(client.creditLimit)) {
-                        throw new Error(`Crédit refusé. Solde: ${currentBalance.toFixed(2)}, Limite: ${client.creditLimit}`);
-                    }
-
-                    const newBalance = currentBalance + saleAmount;
-                    await tx.update(clients)
-                        .set({ 
-                            balance: newBalance.toFixed(2),
-                            totalSpent: sql`${clients.totalSpent} + ${saleAmount}`,
+                // 8. CLIENT LEDGER
+                if (clientIdNum) {
+                    const client = await tx.query.clients.findFirst({ where: eq(clients.id, clientIdNum) });
+                    if (client) {
+                        const currentBalance = Number(client.balance || 0);
+                        await tx.update(clients).set({ 
+                            balance: (currentBalance + runningTotalTTC).toFixed(2),
+                            totalSpent: sql`${clients.totalSpent} + ${runningTotalTTC}`,
                             updatedAt: new Date()
-                        })
-                        .where(eq(clients.id, clientIdNum));
-
-                    await tx.insert(clientTransactions).values({
-                        userId,
-                        clientId: clientIdNum,
-                        type: 'SALE',
-                        referenceId: createdSaleId.toString(),
-                        amount: saleAmount.toFixed(2),
-                        previousBalance: currentBalance.toFixed(2),
-                        newBalance: newBalance.toFixed(2),
-                        notes: `Vente #${saleNumber}`,
-                        date: new Date()
-                    });
+                        }).where(eq(clients.id, clientIdNum));
+                    }
                 }
-            }
 
-            await logSuccess(userId, 'CREATE', 'sales', createdSaleId.toString(), {
-                saleNumber,
-                totalAmount: calcTotalTTC,
-                clientId: clientIdNum
-            }, null, saleData);
-
-            // Track for analytics
-            track('sale_created', {
-                amount: calcTotalTTC,
-                userId: userId,
-                itemsCount: enrichedItems.length
+                revalidatePath('/dashboard/ventes');
+                revalidatePath('/dashboard/stock');
+                revalidateTag('sales');
+                revalidateTag('products');
+                
+                return { success: true, id: createdSaleId.toString(), message: `Vente #${saleNumber} créée` };
             });
 
-            revalidatePath('/dashboard/ventes');
-            revalidatePath('/dashboard/stock');
-            if (clientIdNum) revalidatePath(`/dashboard/clients/${clientIdNum}`);
-            revalidateTag('sales');
-            revalidateTag('products');
-            
-            return { success: true, id: createdSaleId.toString(), message: `Vente #${saleNumber} créée avec succès` };
-            });
         });
 
         return saleId;

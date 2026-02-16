@@ -1,0 +1,253 @@
+🛑 Step 0: Backup (أول حاجة قبل ما تقيس الكود)
+قبل ما دير أي تغيير، خود نسخة احتياطية. فتح Terminal ودير هاد الكود:
+
+Bash
+# 1. خود Backup ديال Base de données كاملة
+pg_dump -h [HOST] -U [USER] -d [DB_NAME] > backup_avant_tva_15fev2026.sql
+
+# 2. تأكد أن الملف تكريا وفيه data
+ls -lh backup_avant_tva_15fev2026.sql
+(بدل [HOST], [USER], [DB_NAME] بالمعلومات ديال Neon/Postgres ديالك).
+
+🏗️ Step 1: Database Migration (SQL Solid)
+هاد الملف هو "القلب" ديال التغيير. فيه Migration + Constraints + Indexes + Transaction.
+
+Fichier: src/db/migrations/0005_tva_smart_system.sql
+
+SQL
+-- 🔒 START TRANSACTION: يا يدوز كلشي، يا ما يدوز والو
+BEGIN;
+
+-- 1. زيادة الأعمدة الجديدة (Columns)
+ALTER TABLE products 
+ADD COLUMN has_tva BOOLEAN DEFAULT true,
+ADD COLUMN price_type TEXT DEFAULT 'TTC' CHECK (price_type IN ('HT', 'TTC')),
+ADD COLUMN sale_price_ht DECIMAL(10, 2),
+ADD COLUMN sale_price_tva DECIMAL(10, 2),
+ADD COLUMN sale_price_ttc DECIMAL(10, 2),
+ADD COLUMN exemption_note TEXT;
+
+-- 2. ترحيل البيانات (Migration Logic: TTC First)
+-- كنعتبرو prix_vente القديم هو TTC
+UPDATE products 
+SET 
+  sale_price_ttc = prix_vente,
+  sale_price_ht = ROUND(prix_vente / 1.20, 2),
+  sale_price_tva = ROUND(prix_vente - (prix_vente / 1.20), 2)
+WHERE deleted_at IS NULL;
+
+-- 3. تطبيق القيود الصارمة (Constraints) 🛡️
+-- ممنوع ثمن سالب
+ALTER TABLE products ADD CONSTRAINT chk_sale_price_positive CHECK (
+  sale_price_ht >= 0 AND sale_price_tva >= 0 AND sale_price_ttc >= 0
+);
+
+-- الحساب خاصو يكون متناسق (HT + TVA = TTC) مع تسامح 0.02
+ALTER TABLE products ADD CONSTRAINT chk_tva_coherence CHECK (
+  ABS((sale_price_ht + sale_price_tva) - sale_price_ttc) <= 0.02
+);
+
+-- 4. تسريع البحث (Indexes) ⚡
+CREATE INDEX idx_products_has_tva ON products(has_tva);
+CREATE INDEX idx_products_price_type ON products(price_type);
+CREATE INDEX idx_products_ttc_active ON products(sale_price_ttc) WHERE deleted_at IS NULL;
+
+-- 5. التحقق النهائي (Validation Inline)
+DO $$
+DECLARE 
+  missing_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO missing_count FROM products 
+  WHERE (sale_price_ttc IS NULL OR sale_price_ht IS NULL) AND deleted_at IS NULL;
+  
+  IF missing_count > 0 THEN
+    RAISE EXCEPTION '❌ Error: % produits n ont pas été migrés correctement!', missing_count;
+  END IF;
+END $$;
+
+-- 🔒 COMMIT: حفظ التغييرات
+COMMIT;
+⚠️ Rollback Script (للطوارئ):
+وجد هاد الملف سميه rollback_0005.sql. يلا وقع مشكل، طلقو يمسح كلشي ويرجعك للحالة القديمة:
+
+SQL
+BEGIN;
+ALTER TABLE products DROP COLUMN IF EXISTS has_tva;
+ALTER TABLE products DROP COLUMN IF EXISTS price_type;
+ALTER TABLE products DROP COLUMN IF EXISTS sale_price_ht;
+ALTER TABLE products DROP COLUMN IF EXISTS sale_price_tva;
+ALTER TABLE products DROP COLUMN IF EXISTS sale_price_ttc;
+ALTER TABLE products DROP COLUMN IF EXISTS exemption_note;
+COMMIT;
+📝 Step 2: Drizzle Schema Definition
+دابا علم الكود ديالك (TypeScript) بالتغييرات اللي درنا فالـ DB.
+
+Fichier: src/db/schema.ts
+
+TypeScript
+import { pgTable, serial, text, decimal, boolean, index, check } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+
+export const products = pgTable('products', {
+  id: serial('id').primaryKey(),
+  // ... champs l'9dam (reference, nom, etc.)
+  
+  // Nouveaux Champs Fiscalité
+  hasTva: boolean('has_tva').default(true).notNull(),
+  priceType: text('price_type', { enum: ['HT', 'TTC'] }).default('TTC').notNull(),
+  
+  // Utilisation de decimal pour la précision financière
+  salePriceHT: decimal('sale_price_ht', { precision: 10, scale: 2 }).notNull(),
+  salePriceTVA: decimal('sale_price_tva', { precision: 10, scale: 2 }).notNull(),
+  salePriceTTC: decimal('sale_price_ttc', { precision: 10, scale: 2 }).notNull(),
+  
+  exemptionNote: text('exemption_note'),
+}, (table) => {
+  return {
+    // Indexes
+    hasTvaIdx: index('idx_products_has_tva').on(table.hasTva),
+    priceTypeIdx: index('idx_products_price_type').on(table.priceType),
+    
+    // Constraints (Drizzle way - optional, since SQL handles it, but good for documentation)
+    positivePrices: check('chk_sale_price_positive', sql`${table.salePriceTTC} >= 0`),
+  }
+});
+🧠 Step 3: Core Logic & Edge Cases
+هنا فين غنحطو "الدماغ" ديال الحساب، باش نتفاداو الأخطاء ديال الفاصلة و Edge Cases.
+
+Fichier: src/lib/tva-helpers.ts
+
+TypeScript
+// Utility pour l'arrondi financier (évite le bug 0.1 + 0.2 = 0.300004)
+export const round2 = (num: number): number => {
+  return Math.round((num + Number.EPSILON) * 100) / 100;
+};
+
+export type PriceBreakdown = {
+  ht: number;
+  tva: number;
+  ttc: number;
+};
+
+// Calcul depuis TTC (Méthode par défaut pour OptiManager)
+export const calculateFromTTC = (ttc: number, hasTva: boolean = true, rate: number = 0.20): PriceBreakdown => {
+  // Edge Case: Prix Négatif
+  if (ttc < 0) throw new Error("Le prix ne peut pas être négatif");
+  // Edge Case: Gratuit
+  if (ttc === 0) return { ht: 0, tva: 0, ttc: 0 };
+
+  if (!hasTva) {
+    return { ht: ttc, tva: 0, ttc: ttc };
+  }
+
+  const ht = round2(ttc / (1 + rate));
+  const tva = round2(ttc - ht);
+  
+  return { ht, tva, ttc };
+};
+
+// Calcul depuis HT (Pour les factures fournisseurs en HT)
+export const calculateFromHT = (ht: number, hasTva: boolean = true, rate: number = 0.20): PriceBreakdown => {
+  if (ht < 0) throw new Error("Le prix ne peut pas être négatif");
+  if (ht === 0) return { ht: 0, tva: 0, ttc: 0 };
+
+  if (!hasTva) {
+    return { ht, tva: 0, ttc: ht };
+  }
+
+  const tva = round2(ht * rate);
+  const ttc = round2(ht + tva);
+
+  return { ht, tva, ttc };
+};
+🛒 Step 4: Sales Actions (Le Fix Critique)
+هنا فين غنصلحو "Surfacturation". مابقاش Total * 1.2.
+
+Fichier: src/app/actions/sales-actions.ts
+
+TypeScript
+import { calculateFromTTC } from '@/lib/tva-helpers';
+
+// ... inside createSale function
+// items = liste des produits dans le panier
+
+// 1. Calcul précis basé sur les valeurs STOCKÉES (pas de re-calcul dynamique risqué)
+const totalTTC = items.reduce((sum, item) => {
+  // On utilise salePriceTTC qui vient de la DB
+  return sum + (Number(item.product.salePriceTTC) * item.qty);
+}, 0);
+
+const totalHT = items.reduce((sum, item) => {
+  return sum + (Number(item.product.salePriceHT) * item.qty);
+}, 0);
+
+// On déduit la TVA globale (plus précis que la somme des TVA individuelles pour l'affichage)
+const totalTVA = round2(totalTTC - totalHT);
+
+// ... Create sale in DB with these exact values
+await db.insert(sales).values({
+  // ...
+  totalHt: totalHT.toString(),
+  totalTva: totalTVA.toString(),
+  totalTtc: totalTTC.toString(), // C'est ce que le client paie
+});
+🖥️ Step 5: Frontend Product Form (Interface)
+هنا فين غتعطي للـ Opticien "Switch" باش يختار كيفاش يسيزي.
+
+Fichier: src/app/produits/_components/product-form.tsx
+
+TypeScript
+// Pseudo-code pour l'idée générale du composant
+import { calculateFromHT, calculateFromTTC } from '@/lib/tva-helpers';
+
+export const ProductForm = () => {
+  const [mode, setMode] = useState<'HT' | 'TTC'>('TTC'); // TTC par défaut
+  const [hasTva, setHasTva] = useState(true);
+  const [priceInput, setPriceInput] = useState<number>(0);
+
+  // Auto-calcul en temps réel
+  const values = mode === 'TTC' 
+    ? calculateFromTTC(priceInput, hasTva)
+    : calculateFromHT(priceInput, hasTva);
+
+  return (
+    <div className="space-y-4 border p-4 rounded">
+      {/* Switch Mode */}
+      <div className="flex gap-4">
+        <label>Mode de Saisie:</label>
+        <button onClick={() => setMode('HT')} className={mode === 'HT' ? 'font-bold' : ''}>HT</button>
+        <button onClick={() => setMode('TTC')} className={mode === 'TTC' ? 'font-bold' : ''}>TTC</button>
+      </div>
+
+      {/* Input */}
+      <input 
+        type="number" 
+        label={`Prix ${mode}`}
+        value={priceInput}
+        onChange={(e) => setPriceInput(Number(e.target.value))}
+      />
+
+      {/* Résultat Visuel pour vérification */}
+      <div className="bg-gray-100 p-2 text-sm">
+        <p>Base HT: {values.ht} DH</p>
+        <p>TVA (20%): {values.tva} DH</p>
+        <p className="font-bold text-lg">Total TTC: {values.ttc} DH</p>
+      </div>
+      
+      {/* Hidden inputs pour le formulaire final */}
+      <input type="hidden" name="salePriceHT" value={values.ht} />
+      <input type="hidden" name="salePriceTVA" value={values.tva} />
+      <input type="hidden" name="salePriceTTC" value={values.ttc} />
+    </div>
+  );
+};
+✅ Checklist Finale (Avant de Lancer)
+[ ] Backup درتيه؟
+
+[ ] SQL Migration تكوبا وتكولا فملف .sql؟
+
+[ ] Schema تحدث؟
+
+[ ] Helpers تكرياو؟
+
+[ ] Sales Logic تصحح؟

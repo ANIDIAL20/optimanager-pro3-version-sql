@@ -161,7 +161,9 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
                 product.nomProduit,
                 product.prixVente,
                 1,
-                product.type
+                product.type,
+                undefined, // metadata
+                product.reference // productReference
             );
             setItems([...cartItems, newLine]);
         }

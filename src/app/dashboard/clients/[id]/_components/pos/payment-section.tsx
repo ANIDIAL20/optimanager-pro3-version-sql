@@ -7,18 +7,30 @@ import { Label } from '@/components/ui/label';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
 import { BrandLoader } from '@/components/ui/loader-brand';
+import { Receipt } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Switch } from '@/components/ui/switch';
 
+
+interface PaymentData {
+    amountPaid: number;
+    method: string;
+    notes: string;
+    isDeclared: boolean;
+}
 
 interface PaymentSectionProps {
     total: number;
-    onProcessSale: (paymentData: { amountPaid: number; method: string; notes: string }) => Promise<void>;
+    onProcessSale: (paymentData: PaymentData) => Promise<void>;
     isProcessing: boolean;
+    defaultDeclared?: boolean;
 }
 
-export function PaymentSection({ total, onProcessSale, isProcessing }: PaymentSectionProps) {
-    const [amountPaid, setAmountPaid] = React.useState<string>(''); // String to handle inputs better
+export function PaymentSection({ total, onProcessSale, isProcessing, defaultDeclared = false }: PaymentSectionProps) {
+    const [amountPaid, setAmountPaid] = React.useState<string>(''); 
     const [method, setMethod] = React.useState('Especes');
     const [notes, setNotes] = React.useState('');
+    const [isDeclared, setIsDeclared] = React.useState(defaultDeclared);
 
     // Auto-fill amount paid with total when total changes (optional convenience)
     // Auto-fill amount paid with total whenever total changes
@@ -34,7 +46,8 @@ export function PaymentSection({ total, onProcessSale, isProcessing }: PaymentSe
         onProcessSale({
             amountPaid: numericAmount,
             method,
-            notes
+            notes,
+            isDeclared
         });
     };
 
@@ -69,6 +82,24 @@ export function PaymentSection({ total, onProcessSale, isProcessing }: PaymentSe
                         searchPlaceholder="Rechercher..."
                     />
                 </div>
+            </div>
+
+            <div className={cn(
+                "p-3 rounded-lg border-2 transition-all flex items-center justify-between",
+                isDeclared ? "border-indigo-500 bg-indigo-50" : "border-slate-200 bg-slate-50 opacity-80"
+            )}>
+                <div className="flex flex-col">
+                    <Label className="font-bold flex items-center gap-2">
+                        <Receipt className="h-4 w-4" />
+                        Facture Officielle
+                    </Label>
+                    <span className="text-[10px] text-muted-foreground uppercase font-semibold">TVA 20% Incluse • Déclaration Fiscale</span>
+                </div>
+                <Switch 
+                    checked={isDeclared} 
+                    onCheckedChange={setIsDeclared}
+                    className="data-[state=checked]:bg-indigo-600"
+                />
             </div>
 
             <div className="flex justify-between items-center bg-background p-3 rounded border">

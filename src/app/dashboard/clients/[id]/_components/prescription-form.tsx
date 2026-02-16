@@ -39,7 +39,7 @@ import { ScannerDialog } from './scanner-dialog';
 const PrescriptionSchema = z.object({
   date: z.date({ required_error: 'La date est requise.' }),
   type: z.enum(['Vision de loin', 'Vision de pres', 'Progressif'], { required_error: 'Le type est requis.' }),
-  prescripteur: z.string().min(1, 'Le nom du prescripteur est requis.'),
+  prescripteur: z.string().optional(),
 
   odSphere: z.string().optional(),
   odCylindre: z.string().optional(),
@@ -249,7 +249,7 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
                 name="prescripteur"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Prescripteur</FormLabel>
+                    <FormLabel>Prescripteur (Optionnel)</FormLabel>
                     <FormControl>
                       <Input placeholder="ex. Dr. Martin" {...field} value={field.value ?? ''} />
                     </FormControl>

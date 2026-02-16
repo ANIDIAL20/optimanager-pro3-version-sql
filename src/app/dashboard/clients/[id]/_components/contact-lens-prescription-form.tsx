@@ -42,7 +42,7 @@ import { BrandLoader } from '@/components/ui/loader-brand';
 const ContactLensPrescriptionSchema = z.object({
   date: z.date({ required_error: 'La date est requise.' }),
   lensType: z.enum(['Souple journalière', 'Souple mensuelle', 'Rigide', 'Torique', 'Multifocale'], { required_error: 'Le type de lentilles est requis.' }),
-  prescripteur: z.string().min(1, 'Le nom du prescripteur est requis.'),
+  prescripteur: z.string().optional(),
   lensBrand: z.string().optional(),
 
   odSphere: z.string().optional(),
@@ -237,7 +237,7 @@ export function ContactLensPrescriptionForm({ clientId, onSuccess }: ContactLens
                 name="prescripteur" 
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Prescripteur</FormLabel>
+                    <FormLabel>Prescripteur (Optionnel)</FormLabel>
                     <FormControl>
                       <Input placeholder="ex. Dr. Martin" {...field} />
                     </FormControl>

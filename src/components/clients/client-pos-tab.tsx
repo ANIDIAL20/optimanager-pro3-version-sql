@@ -757,9 +757,17 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                                                     quantity={item.quantity}
                                                 />
                                             </div>
-                                            {item.priceMode !== 'STANDARD' && item.discountPercent && item.discountPercent > 0 && (
-                                                <p className="text-[9px] font-medium text-emerald-600 bg-emerald-50 self-start px-1.5 py-0.5 rounded border border-emerald-100 mt-0.5 w-fit">
-                                                    -{item.discountPercent.toFixed(0)}% OFF {item.overrideReason && `• ${item.overrideReason}`}
+                                            {item.priceMode !== 'STANDARD' && item.discountPercent !== undefined && Math.abs(item.discountPercent) > 0.01 && (
+                                                <p className={cn(
+                                                    "text-[9px] font-medium self-start px-1.5 py-0.5 rounded border mt-0.5 w-fit",
+                                                    item.discountPercent > 0 
+                                                        ? "text-emerald-600 bg-emerald-50 border-emerald-100" 
+                                                        : "text-orange-600 bg-orange-50 border-orange-100"
+                                                )}>
+                                                    {item.discountPercent > 0 
+                                                        ? `-${item.discountPercent.toFixed(0)}% OFF` 
+                                                        : `+${Math.abs(item.discountPercent).toFixed(0)}% AJOUT`
+                                                    } {item.overrideReason && `• ${item.overrideReason}`}
                                                 </p>
                                             )}
                                         </div>

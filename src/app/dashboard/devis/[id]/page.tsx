@@ -235,23 +235,29 @@ export default function DevisDetailsPage({ params }: DevisDetailsPageProps) {
                         <table className="w-full text-sm text-left">
                             <thead className="bg-slate-50 dark:bg-slate-900 border-b">
                                 <tr>
-                                    <th className="p-3 font-medium text-muted-foreground">Désignation</th>
-                                    <th className="p-3 text-right font-medium text-muted-foreground">Qté</th>
-                                    <th className="p-3 text-right font-medium text-muted-foreground">Prix U.</th>
-                                    <th className="p-3 text-right font-medium text-muted-foreground">Total</th>
+                                    <th className="p-3 font-medium text-muted-foreground w-[25%]">Article</th>
+                                    <th className="p-3 font-medium text-muted-foreground w-[15%]">Marque</th>
+                                    <th className="p-3 font-medium text-muted-foreground w-[15%]">Modèle</th>
+                                    <th className="p-3 font-medium text-muted-foreground w-[10%]">Réf</th>
+                                    <th className="p-3 text-right font-medium text-muted-foreground w-[12%]">Prix U.</th>
+                                    <th className="p-3 text-right font-medium text-muted-foreground w-[8%]">Qté</th>
+                                    <th className="p-3 text-right font-medium text-muted-foreground w-[15%]">Total</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {devis.items.map((item, idx) => (
                                     <tr key={idx} className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-slate-900/50">
                                         <td className="p-3">
-                                            <div className="font-medium">{item.designation}</div>
-                                            {item.reference && <div className="text-xs text-muted-foreground">{item.reference}</div>}
+                                            <div className="font-medium text-slate-900">{item.designation}</div>
+                                            {item.couleur && <div className="text-xs text-slate-500 mt-0.5">Coul: {item.couleur}</div>}
                                         </td>
-                                        <td className="p-3 text-right">{item.quantite}</td>
-                                        <td className="p-3 text-right">{item.prixUnitaire.toFixed(2)} DH</td>
+                                        <td className="p-3 text-slate-600 text-sm">{item.marque || '-'}</td>
+                                        <td className="p-3 text-slate-600 text-sm">{item.modele || '-'}</td>
+                                        <td className="p-3 text-muted-foreground text-xs font-mono">{item.reference || '-'}</td>
+                                        <td className="p-3 text-right">{(item.prixUnitaire || item.unitPrice || 0).toFixed(2)} DH</td>
+                                        <td className="p-3 text-right font-medium">{item.quantite}</td>
                                         <td className="p-3 text-right font-semibold">
-                                            {(item.quantite * item.prixUnitaire).toFixed(2)} DH
+                                            {((item.quantite) * (item.prixUnitaire || item.unitPrice || 0)).toFixed(2)} DH
                                         </td>
                                     </tr>
                                 ))}

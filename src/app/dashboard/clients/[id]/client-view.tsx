@@ -12,6 +12,7 @@ import {
     Eye,
     Glasses,
     ShoppingBag,
+    AlertTriangle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { getClient } from '@/app/actions/clients-actions';
@@ -204,17 +205,32 @@ export default function ClientDetailView({ initialClient, initialReservations }:
                     />
                 </TabsContent>
 
-                {/* Contact Lens Orders Tab */}
+                {/* Contact Lens Orders Tab - HORS SERVICE */}
                 <TabsContent value="contact-orders" className="space-y-6">
-                    <LensOrderForm clientId={id} mode="contacts" onSuccess={() => setRefreshKey(prev => prev + 1)} />
-                    <Separator />
-                    <LensOrderList 
-                        key={`contact-orders-${refreshKey}`} 
-                        mode="contacts" 
-                        clientId={id} 
-                        clientName={`${client?.prenom || ''} ${client?.nom || ''}`}
-                        onUseOrder={handleUseOrder}
-                    />
+                    <Card className="border-red-200 bg-red-50 shadow-sm border-2">
+                        <CardHeader className="pb-2">
+                            <div className="flex items-center gap-3">
+                                <div className="p-3 bg-red-100 rounded-xl text-red-600 shadow-sm">
+                                    <AlertTriangle className="h-6 w-6" />
+                                </div>
+                                <div className="space-y-1">
+                                    <CardTitle className="text-red-700 font-extrabold text-xl tracking-tight uppercase">
+                                        Module Hors Service
+                                    </CardTitle>
+                                    <CardDescription className="text-red-500 font-semibold italic">
+                                        Maintenance technique temporaire
+                                    </CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-4 pt-2">
+                            <div className="bg-white/80 backdrop-blur-sm p-6 rounded-xl border border-red-100 shadow-inner">
+                                <p className="text-red-800 font-bold text-lg leading-relaxed text-center italic">
+                                    " Nous améliorons ce module. Il sera de nouveau disponible sous 48 heures "
+                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </TabsContent>
 
                 {/* Purchase History Tab */}

@@ -42,11 +42,14 @@ export async function createFrameReservation(
       // حساب المتاح
       const available = product.quantiteStock - product.reservedQuantity;
       
+      /*
       if (available < item.quantity) {
-        throw new Error(
-          `Stock insuffisant pour "${product.nom}". Disponible: ${available}, demandé: ${item.quantity}`
-        );
+        // Allow backorder for reservations
+        // throw new Error(
+        //   `Stock insuffisant pour "${product.nom}". Disponible: ${available}, demandé: ${item.quantity}`
+        // );
       }
+      */
       
       reservationItems.push({
         productId: product.id,
