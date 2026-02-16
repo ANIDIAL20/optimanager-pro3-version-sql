@@ -97,6 +97,14 @@ export const products = pgTable('products', {
   prixVente: decimal('prix_vente', { precision: 10, scale: 2 }).notNull(),
   prixGros: decimal('prix_gros', { precision: 10, scale: 2 }),
   
+  // ✅ SMART TVA SYSTEM
+  hasTva: boolean('has_tva').default(true),
+  priceType: text('price_type').$type<'HT' | 'TTC'>().default('TTC'),
+  salePriceHT: decimal('sale_price_ht', { precision: 10, scale: 2 }),
+  salePriceTVA: decimal('sale_price_tva', { precision: 10, scale: 2 }),
+  salePriceTTC: decimal('sale_price_ttc', { precision: 10, scale: 2 }),
+  exemptionNote: text('exemption_note'),
+  
   // Stock
   quantiteStock: integer('quantite_stock').notNull().default(0),
   reservedQuantity: integer('reserved_quantity').notNull().default(0),
@@ -114,14 +122,31 @@ export const products = pgTable('products', {
   createdAt: timestamp('created_at', { mode: 'string' }).defaultNow(),
   updatedAt: timestamp('updated_at', { mode: 'string' }),
   deletedAt: timestamp('deleted_at'), // 🆕 Soft Delete
+
+  // 🆕 New Architecture Fields (Part 1 Implementation)
+  brand: text('brand'),
+  category: text('category').default('OPTIQUE'),
+  productType: text('product_type').$type<'frame' | 'lens' | 'contact_lens' | 'accessory' | 'service'>().default('accessory'),
+  tvaRate: decimal('tva_rate', { precision: 5, scale: 2 }).default('20.00'),
+  isMedical: boolean('is_medical').default(false),
+  isStockManaged: boolean('is_stock_managed').default(true),
 }, (table) => ({
   userIdIdx: index('products_user_id_idx').on(table.userId),
   referenceIdx: index('products_reference_idx').on(table.reference),
   nomIdx: index('products_nom_idx').on(table.nom),
-  idx_products_user_marque: index('idx_products_user_marque').on(table.userId, table.marque), // ✅ Composite
+  idx_products_user_marque: index('idx_products_user_marque').on(table.userId, table.marque), // Legacy ID index
   searchIdx: index('products_search_idx').on(table.marque, table.fournisseur),
-  // unique_user_reference: uniqueIndex('idx_unique_user_reference').on(table.userId, table.reference),
+  
+  // 🆕 Optimizations requested
+  brandIdx: index('idx_products_brand').on(table.brand),
+  productTypeIdx: index('idx_products_type').on(table.productType),
+  // Using unique index on reference + userId is safer for multi-tenant, 
+  // but user requested strict UNIQUE on reference. 
+  // We'll add the Drizzle definition for it.
+  uniqueReference: uniqueIndex('unique_product_reference').on(table.reference),
+  
   idx_products_not_deleted: index('idx_products_not_deleted').on(table.userId, table.deletedAt), // ✅ Performance for soft delete
+  idx_products_category: index('idx_products_category').on(table.category),
 }));
 
 // ========================================
@@ -152,11 +177,15 @@ export const invoiceImports = pgTable('invoice_imports', {
 // ========================================
 // 3. SALES TABLE
 // ========================================
+// ========================================
+// 3. SALES TABLE
+// ========================================
 export const sales = pgTable('sales', {
   id: serial('id').primaryKey(),
   firebaseId: text('firebase_id').unique(),
   userId: text('user_id').notNull(),
-  saleNumber: text('sale_number'), // 🆕 Added field
+  saleNumber: text('sale_number'), // Internal Ref / Display Ref
+  transactionNumber: text('transaction_number'), // 🆕 Official Fiscal Number (Unique Sequence)
   
   // Client info
   clientId: integer('client_id').references(() => clients.id),
@@ -174,15 +203,17 @@ export const sales = pgTable('sales', {
   resteAPayer: decimal('reste_a_payer', { precision: 10, scale: 2 }),
   
   // Status
-  status: text('status').default('impaye'), // impaye, partiel, paye
+  status: text('status').$type<'impaye' | 'partiel' | 'paye' | 'brouillon' | 'annule'>().default('impaye'),
   paymentMethod: text('payment_method'),
-  type: text('type'), // 'commande', 'vente', etc.
+  type: text('type').$type<'INVOICE' | 'QUOTE' | 'COMMANDE' | 'VENTE'>().default('VENTE'), 
+  
+  isDeclared: boolean('is_declared').default(false), // 🆕 Dual-Mode Logic
   
   // Complex data (stored as JSON)
-  items: json('items').$type<any[]>().notNull(),
+  items: json('items').$type<any[]>().notNull(), // Legacy/Denormalized Fallback
   paymentHistory: json('payment_history').$type<any[]>(),
   prescriptionSnapshot: json('prescription_snapshot'),
-  lastPaymentDate: timestamp('last_payment_date'), // Preserve legacy field for safety
+  lastPaymentDate: timestamp('last_payment_date'),
   
   notes: text('notes'),
   date: timestamp('date'),
@@ -191,8 +222,102 @@ export const sales = pgTable('sales', {
 }, (table) => ({
   userIdIdx: index('sales_user_id_idx').on(table.userId),
   saleNumberIdx: index('sales_sale_number_idx').on(table.saleNumber),
+  transactionNumberIdx: index('sales_transaction_number_idx').on(table.transactionNumber),
   clientIdIdx: index('sales_client_id_idx').on(table.clientId),
-  idx_sales_user_date: index('idx_sales_user_date').on(table.userId, table.createdAt), // ✅ Composite
+  idx_sales_user_date: index('idx_sales_user_date').on(table.userId, table.createdAt),
+  uniqueSaleNumber: uniqueIndex('idx_sales_unique_number').on(table.userId, table.saleNumber),
+  // Fiscal number should be explicitly unique per user (or global if single fiscal entity, but here multi-tenant)
+  uniqueTransactionNumber: uniqueIndex('idx_sales_unique_transaction').on(table.userId, table.transactionNumber), 
+}));
+
+// ========================================
+// 3b. SALE ITEMS (Normalized)
+// ========================================
+export const saleItems = pgTable('sale_items', {
+  id: serial('id').primaryKey(),
+  saleId: integer('sale_id').notNull().references(() => sales.id, { onDelete: 'cascade' }),
+  productId: integer('product_id').references(() => products.id), 
+  
+  // Snapshots from Product (Historical Invariance)
+  brand: text('brand'),
+  category: text('category'), 
+  productType: text('product_type').$type<'frame' | 'lens' | 'contact_lens' | 'accessory' | 'service'>(),
+  
+  // Label on document
+  label: text('label').notNull(),
+  
+  // Quantities
+  qty: integer('qty').notNull().default(1),
+  
+  // Financial Snapshot (Unit)
+  unitPriceHT: decimal('unit_price_ht', { precision: 10, scale: 2 }).notNull().default('0'),
+  unitPriceTVA: decimal('unit_price_tva', { precision: 10, scale: 2 }).notNull().default('0'),
+  unitPriceTTC: decimal('unit_price_ttc', { precision: 10, scale: 2 }).notNull().default('0'),
+  tvaRate: decimal('tva_rate', { precision: 5, scale: 2 }).notNull().default('20'),
+  
+  // Financial Totals (Line)
+  lineTotalHT: decimal('line_total_ht', { precision: 10, scale: 2 }).notNull().default('0'),
+  lineTotalTVA: decimal('line_total_tva', { precision: 10, scale: 2 }).notNull().default('0'),
+  lineTotalTTC: decimal('line_total_ttc', { precision: 10, scale: 2 }).notNull().default('0'),
+  
+  // Metadata
+  isDiscountLine: boolean('is_discount_line').default(false),
+  metadata: json('metadata'),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  saleIdIdx: index('sale_items_sale_id_idx').on(table.saleId),
+  productIdIdx: index('sale_items_product_id_idx').on(table.productId),
+}));
+
+// ========================================
+// 3c. LENS DETAILS (Per Eye)
+// ========================================
+export const saleLensDetails = pgTable('sale_lens_details', {
+  id: serial('id').primaryKey(),
+  saleItemId: integer('sale_item_id').notNull().references(() => saleItems.id, { onDelete: 'cascade' }),
+  
+  eye: text('eye').$type<'OD' | 'OG'>().notNull(),
+  
+  // Optical Params
+  sphere: text('sphere'),
+  cylinder: text('cylinder'),
+  axis: text('axis'),
+  addition: text('addition'),
+  index: text('index'),
+  diameter: text('diameter'),
+  material: text('material'),
+  treatment: text('treatment'),
+  lensType: text('lens_type'), // 'single_vision', 'progressive'
+  baseCurve: text('base_curve'),
+  prism: text('prism'),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  saleLensDetailsItemIdIdx: index('sale_lens_details_item_id_idx').on(table.saleItemId),
+}));
+
+// ========================================
+// 3d. CONTACT LENS DETAILS
+// ========================================
+export const saleContactLensDetails = pgTable('sale_contact_lens_details', {
+  id: serial('id').primaryKey(),
+  saleItemId: integer('sale_item_id').notNull().references(() => saleItems.id, { onDelete: 'cascade' }),
+  
+  eye: text('eye').$type<'OD' | 'OG' | 'BOTH'>().notNull(),
+  
+  // Params
+  power: text('power'),
+  baseCurve: text('base_curve'),
+  diameter: text('diameter'),
+  duration: text('duration'), // 'daily', 'monthly'
+  cylinder: text('cylinder'), // Toric params
+  axis: text('axis'),
+  addition: text('addition'), // Multifocal
+  
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  saleContactItemIdIdx: index('sale_contact_lens_details_item_id_idx').on(table.saleItemId),
 }));
 
 // ========================================
@@ -512,10 +637,38 @@ export const lensOrdersRelations = relations(lensOrders, ({ one }) => ({
   }),
 }));
 
-export const salesRelations = relations(sales, ({ one }) => ({
+export const salesRelations = relations(sales, ({ one, many }) => ({
   client: one(clients, {
     fields: [sales.clientId],
     references: [clients.id],
+  }),
+  saleItems: many(saleItems),
+}));
+
+export const saleItemsRelations = relations(saleItems, ({ one, many }) => ({
+  sale: one(sales, {
+    fields: [saleItems.saleId],
+    references: [sales.id],
+  }),
+  product: one(products, {
+    fields: [saleItems.productId],
+    references: [products.id],
+  }),
+  lensDetails: many(saleLensDetails),
+  contactLensDetails: many(saleContactLensDetails),
+}));
+
+export const saleLensDetailsRelations = relations(saleLensDetails, ({ one }) => ({
+  saleItem: one(saleItems, {
+    fields: [saleLensDetails.saleItemId],
+    references: [saleItems.id],
+  }),
+}));
+
+export const saleContactLensDetailsRelations = relations(saleContactLensDetails, ({ one }) => ({
+  saleItem: one(saleItems, {
+    fields: [saleContactLensDetails.saleItemId],
+    references: [saleItems.id],
   }),
 }));
 

@@ -139,9 +139,9 @@ export function PrintDocumentTemplate({ type, data }: PrintDocumentTemplateProps
                     <table className="w-full border-collapse">
                         <thead>
                             <tr className="bg-slate-900 text-white print:bg-slate-900 print:text-white">
-                                <th className="py-2 pl-2 text-left text-[9px] font-bold uppercase tracking-wider w-[40%] rounded-tl-sm">Désignation</th>
+                                <th className="py-2 pl-2 text-left text-[9px] font-bold uppercase tracking-wider w-[30%] rounded-tl-sm">Désignation</th>
                                 <th className="py-2 text-left text-[9px] font-bold uppercase tracking-wider w-[15%]">Marque</th>
-                                <th className="py-2 text-left text-[9px] font-bold uppercase tracking-wider w-[12%]">Modèle</th>
+                                <th className="py-2 text-left text-[9px] font-bold uppercase tracking-wider w-[15%]">Modèle</th>
                                 <th className="py-2 text-center text-[9px] font-bold uppercase tracking-wider w-[8%]">Qté</th>
                                 <th className="py-2 text-right text-[9px] font-bold uppercase tracking-wider w-[12%]">P.U. HT</th>
                                 <th className="py-2 pr-2 text-right text-[9px] font-bold uppercase tracking-wider w-[13%] rounded-tr-sm">Total HT</th>
@@ -150,13 +150,15 @@ export function PrintDocumentTemplate({ type, data }: PrintDocumentTemplateProps
                         <tbody className="text-[10px]">
                             {items.map((item: any, index: number) => {
                                 const name = item.productName || item.nomProduit || item.designation;
-                                const ref = item.productRef || item.reference;
+                                const ref = item.reference || item.productRef;
                                 const marque = item.marque || item.brand || '-';
                                 const modele = item.modele || item.model || '-';
                                 const couleur = item.couleur || item.color;
-                                const qty = item.quantity || item.quantite;
+                                const qty = item.quantity || item.quantite || 0;
+                                const returned = item.returnedQuantity || 0;
+                                const effectiveQty = Math.max(0, qty - returned);
                                 const price = item.unitPrice || item.prixVente || item.prixUnitaire || 0;
-                                const lineTotal = qty * price;
+                                const lineTotal = effectiveQty * price;
 
                                 return (
                                     <tr key={index} className="border-b border-slate-100 last:border-0">
@@ -164,10 +166,45 @@ export function PrintDocumentTemplate({ type, data }: PrintDocumentTemplateProps
                                             <p className="font-semibold text-slate-900 leading-tight">{name}</p>
                                             {ref && <p className="text-[9px] text-slate-500 font-mono mt-0.5">Réf: {ref}</p>}
                                             {couleur && <p className="text-[9px] text-slate-600 mt-0.5">Couleur: {couleur}</p>}
+                                            {returned > 0 && <p className="text-[9px] text-red-500 font-bold mt-0.5">Retourné: {returned}</p>}
+
+                                            {/* Lens Details */}
+                                            {item.lensDetails && item.lensDetails.length > 0 && (
+                                                <div className="mt-1.5 flex flex-wrap gap-1">
+                                                    {item.lensDetails.map((d: any, i: number) => (
+                                                        <div key={i} className="text-[8px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 font-mono flex items-center gap-1">
+                                                            <span className="font-bold">{d.eye}:</span>
+                                                            <span className="flex gap-1">
+                                                                {d.sphere && <span>S:{d.sphere}</span>}
+                                                                {d.cylinder && <span>C:{d.cylinder}</span>}
+                                                                {d.axis && <span>A:{d.axis}°</span>}
+                                                                {d.addition && <span>Add:{d.addition}</span>}
+                                                                {d.treatment && <span className="text-slate-500 ml-0.5 italic">{d.treatment}</span>}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {/* Contact Lens Details */}
+                                            {item.contactLensDetails && item.contactLensDetails.length > 0 && (
+                                                <div className="mt-1.5 flex flex-wrap gap-1">
+                                                    {item.contactLensDetails.map((d: any, i: number) => (
+                                                        <div key={i} className="text-[8px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-100 font-mono flex items-center gap-1">
+                                                            <span className="font-bold">{d.eye}:</span>
+                                                            <span className="flex gap-1">
+                                                                {d.power && <span>P:{d.power}</span>}
+                                                                {d.baseCurve && <span>BC:{d.baseCurve}</span>}
+                                                                {d.diameter && <span>D:{d.diameter}</span>}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="py-2.5 text-slate-700">{marque}</td>
                                         <td className="py-2.5 text-slate-700">{modele}</td>
-                                        <td className="py-2.5 text-center text-slate-600 font-medium">{qty}</td>
+                                        <td className="py-2.5 text-center text-slate-600 font-medium">{effectiveQty}</td>
                                         <td className="py-2.5 text-right text-slate-600 font-medium">{price.toFixed(2)}</td>
                                         <td className="py-2.5 pr-2 text-right font-bold text-slate-900">{lineTotal.toFixed(2)}</td>
                                     </tr>
@@ -177,8 +214,75 @@ export function PrintDocumentTemplate({ type, data }: PrintDocumentTemplateProps
                     </table>
                 </div>
 
-                {/* Totals Section */}
-                <div className="flex justify-end mb-8">
+                {/* Totals & VAT Breakdown Section */}
+                <div className="flex justify-between items-start mb-8 gap-8">
+                    
+                    {/* VAT Breakdown (Left) */}
+                    <div className="flex-1">
+                        <table className="w-full text-[9px] border-collapse border border-slate-200">
+                            <thead>
+                                <tr className="bg-slate-100 text-slate-700">
+                                    <th className="border border-slate-200 p-1.5 text-left font-semibold">Taux TVA</th>
+                                    <th className="border border-slate-200 p-1.5 text-right font-semibold">Base HT</th>
+                                    <th className="border border-slate-200 p-1.5 text-right font-semibold">Montant TVA</th>
+                                    <th className="border border-slate-200 p-1.5 text-right font-semibold">Total TTC</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {(() => {
+                                    // Calculate VAT Breakdown dynamically
+                                    const breakdown: Record<number, { base: number, tax: number, ttc: number }> = {};
+                                    
+                                    items.forEach((item: any) => {
+                                        const qty = item.quantity || item.quantite || 0;
+                                        const returned = item.returnedQuantity || 0;
+                                        const effectiveQty = Math.max(0, qty - returned);
+                                        
+                                        // Prefer pre-calculated totals if available but adjusted for quantity
+                                        // If totals are pre-calced on full qty, we must scale them down?
+                                        // Usually lineTotal is unit * qty.
+                                        const unitPrice = item.unitPrice || item.prixVente || item.prixUnitaire || 0;
+                                        
+                                        // Re-calculate line totals based on effective quantity to be safe
+                                        let lineTTC = effectiveQty * unitPrice;
+                                        let lineHT = lineTTC; 
+                                        let lineTax = 0;
+                                        
+                                        const rate = item.tvaRate !== undefined ? parseFloat(item.tvaRate) : tvaRate;
+                                        
+                                        // If we have unit tax details, use them
+                                        if (item.priceHT && item.amountTVA) {
+                                            // item.amountTVA is usually UNIT TVA
+                                            lineHT = effectiveQty * item.priceHT;
+                                            lineTax = effectiveQty * item.amountTVA;
+                                            lineTTC = lineHT + lineTax; // Or effectiveQty * unitPrice (diff due to rounding)
+                                        } else {
+                                            // Standard back-calc
+                                            lineHT = lineTTC / (1 + rate / 100);
+                                            lineTax = lineTTC - lineHT;
+                                        }
+
+                                        if (!breakdown[rate]) breakdown[rate] = { base: 0, tax: 0, ttc: 0 };
+                                        
+                                        breakdown[rate].base += Number(lineHT);
+                                        breakdown[rate].tax += Number(lineTax);
+                                        breakdown[rate].ttc += Number(lineTTC);
+                                    });
+
+                                    return Object.entries(breakdown).map(([rate, vals]) => (
+                                        <tr key={rate}>
+                                            <td className="border border-slate-200 p-1.5 text-slate-600">{rate}%</td>
+                                            <td className="border border-slate-200 p-1.5 text-right text-slate-600">{vals.base.toFixed(2)} DH</td>
+                                            <td className="border border-slate-200 p-1.5 text-right text-slate-600">{vals.tax.toFixed(2)} DH</td>
+                                            <td className="border border-slate-200 p-1.5 text-right text-slate-600">{vals.ttc.toFixed(2)} DH</td>
+                                        </tr>
+                                    ));
+                                })()}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Totals (Right) */}
                     <div className="w-64">
                         <div className="space-y-1.5 mb-2 px-3">
                             <div className="flex justify-between text-[10px] text-slate-600">
@@ -186,7 +290,7 @@ export function PrintDocumentTemplate({ type, data }: PrintDocumentTemplateProps
                                 <span>{totalHT.toFixed(2)} DH</span>
                             </div>
                             <div className="flex justify-between text-[10px] text-slate-600">
-                                <span className="font-medium">TVA ({tvaRate}%)</span>
+                                <span className="font-medium">Total TVA</span>
                                 <span>{totalTVA.toFixed(2)} DH</span>
                             </div>
                         </div>
@@ -227,14 +331,10 @@ export function PrintDocumentTemplate({ type, data }: PrintDocumentTemplateProps
                 )}
 
                 {/* Signature and Stamp Area */}
-                <div className="mb-8 grid grid-cols-2 gap-6">
-                    <div className="border border-dashed border-slate-300 rounded p-3 h-24">
-                        <p className="text-[9px] font-bold uppercase text-slate-500 mb-1">Signature du Client</p>
-                        <p className="text-[8px] text-slate-400 italic">Lu et approuvé</p>
-                    </div>
-                    <div className="border border-dashed border-slate-300 rounded p-3 h-24">
+                <div className="mb-8 flex justify-end">
+                    <div className="border border-dashed border-slate-300 rounded p-3 h-24 w-64">
                         <p className="text-[9px] font-bold uppercase text-slate-500 mb-1">Cachet et Signature</p>
-                        <p className="text-[8px] text-slate-400 italic">{settings?.shopName || 'OptiManager'}</p>
+                        <p className="text-[8px] text-slate-400 italic">{settings?.storeName || settings?.shopName || 'OptiManager'}</p>
                     </div>
                 </div>
 
@@ -246,7 +346,6 @@ export function PrintDocumentTemplate({ type, data }: PrintDocumentTemplateProps
                             {isDevis ? (
                                 <>
                                     <p>Ce devis est valable 15 jours.</p>
-                                    <p>Pour accord, merci de retourner ce devis signé.</p>
                                 </>
                             ) : (
                                 <>

@@ -104,6 +104,14 @@ export const sessions = pgTable("sessions", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   expires: timestamp("expires", { mode: "date" }).notNull(),
+  
+  // 🔍 SESSION SECURITY (Synced with schema.ts)
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  fingerprint: text("fingerprint"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  lastActivityAt: timestamp("last_activity_at").defaultNow(),
 })
 
 export const verificationTokens = pgTable(

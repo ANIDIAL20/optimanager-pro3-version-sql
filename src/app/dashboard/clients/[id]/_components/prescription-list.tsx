@@ -129,7 +129,7 @@ export function PrescriptionList({ clientId }: PrescriptionListProps) {
                 <TableHead>Addition</TableHead>
                 <TableHead>EP (OD/OG)</TableHead>
                 <TableHead>Hauteur (OD/OG)</TableHead>
-                <TableHead>Docteur</TableHead>
+                <TableHead>Prescripteur</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>

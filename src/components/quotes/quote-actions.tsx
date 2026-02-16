@@ -12,8 +12,8 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { pdf } from '@react-pdf/renderer';
-import { QuotePDF } from './quote-pdf';
+// import { pdf } from '@react-pdf/renderer'; 
+// import { QuotePDF } from './quote-pdf';
 import type { Devis } from '@/app/actions/devis-actions';
 import type { Client } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -34,102 +34,45 @@ interface QuoteActionsProps {
     client?: Client; // Optional full client details
 }
 
+// Force HMR Update
 export function QuoteActions({ devis, shopSettings, client }: QuoteActionsProps) {
-    const [isGenerating, setIsGenerating] = React.useState(false);
     const [showPrintPreview, setShowPrintPreview] = React.useState(false);
     const { toast } = useToast();
 
-    // Generate PDF blob
-    const generatePDFBlob = async (): Promise<Blob | null> => {
-        try {
-            setIsGenerating(true);
-
-            // Create PDF document
-            const doc = <QuotePDF devis={devis} shopSettings={shopSettings} client={client} />;
-
-            // Generate blob
-            const asPdf = pdf(doc);
-            const blob = await asPdf.toBlob();
-
-            return blob;
-        } catch (error) {
-            console.error('Error generating PDF:', error);
-            toast({
-                variant: 'destructive',
-                title: 'Erreur',
-                description: 'Impossible de générer le devis PDF.',
-            });
-            return null;
-        } finally {
-            setIsGenerating(false);
-        }
-    };
-
-    // Print handler
+    // Unified Print Handling (The "Master" Source)
     const handlePrint = () => {
         setShowPrintPreview(true);
     };
 
-    // Download handler
-    const handleDownload = async () => {
-        const blob = await generatePDFBlob();
-        if (!blob) return;
-
-        try {
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `devis-${devis.id?.substring(0, 8) || 'quote'}.pdf`;
-
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-
-            toast({
-                title: 'Téléchargement réussi',
-                description: 'Le devis a été téléchargé.',
-            });
-        } catch (error) {
-            console.error('Error downloading PDF:', error);
-            toast({
-                variant: 'destructive',
-                title: 'Erreur',
-                description: 'Échec du téléchargement.',
-            });
-        }
+    // Unified Download/Share (Use Print Page -> Save as PDF)
+    const handleDownload = () => {
+        // Open print page in new tab with auto-print
+        const url = `/print/devis/${devis.id}?auto=true`;
+        window.open(url, '_blank');
     };
 
-    // Share handler
     const handleShare = async () => {
-        const blob = await generatePDFBlob();
-        if (!blob) return;
-
-        try {
-            if (navigator.share && navigator.canShare) {
-                const file = new File(
-                    [blob],
-                    `devis-${devis.id?.substring(0, 8) || 'quote'}.pdf`,
-                    { type: 'application/pdf' }
-                );
-
-                if (navigator.canShare({ files: [file] })) {
-                    await navigator.share({
-                        title: 'Devis',
-                        text: `Devis pour ${devis.clientName}`,
-                        files: [file],
-                    });
-                    return;
-                }
+        const url = `${window.location.origin}/print/devis/${devis.id}`;
+        
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: `Devis #${devis.id?.substring(0, 8)}`,
+                    text: `Devis pour ${devis.clientName}`,
+                    url: url
+                });
+                toast({ title: 'Lien partagé' });
+            } catch (error) {
+                console.error('Share failed:', error);
             }
-            
-            // Fallback: Open in new tab
-            const url = URL.createObjectURL(blob);
-            window.open(url, '_blank');
-            setTimeout(() => URL.revokeObjectURL(url), 10000);
-
-        } catch (error) {
-            console.error('Error sharing PDF:', error);
+        } else {
+            // Fallback: Copy link
+            try {
+                await navigator.clipboard.writeText(url);
+                toast({ title: 'Lien copié', description: 'Le lien vers le devis a été copié.' });
+            } catch (err) {
+                toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de copier le lien.' });
+            }
         }
     };
 
@@ -137,30 +80,50 @@ export function QuoteActions({ devis, shopSettings, client }: QuoteActionsProps)
         <>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="outline" disabled={isGenerating}>
-                        {isGenerating ? (
-                            <BrandLoader size="xs" className="mr-2 inline-flex" />
-                        ) : (
-                            <FileText className="mr-2 h-4 w-4" />
-                        )}
+                    <Button variant="outline">
+                        <FileText className="mr-2 h-4 w-4" />
                         Actions Devis
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>Actions Devis</DropdownMenuLabel>
                     <DropdownMenuSeparator />
 
-                    <DropdownMenuItem onClick={handlePrint} disabled={isGenerating}>
+                    <DropdownMenuItem onClick={handlePrint}>
                         <Printer className="mr-2 h-4 w-4" />
                         <span>Imprimer</span>
                     </DropdownMenuItem>
 
-                    <DropdownMenuItem onClick={handleDownload} disabled={isGenerating}>
+                    <DropdownMenuItem onClick={async (e) => {
+                        e.preventDefault();
+                        try {
+                            const { pdf } = await import('@react-pdf/renderer');
+                            const { PdfDocumentTemplate } = await import('@/components/documents/pdf-document-template');
+                            
+                            const blob = await pdf(
+                                <PdfDocumentTemplate 
+                                    type="devis" 
+                                    data={{ document: devis, client, settings: shopSettings }} 
+                                />
+                            ).toBlob();
+                            
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = `Devis-${devis.id?.slice(0, 8) || 'Sans-ID'}.pdf`;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                        } catch (err) {
+                            console.error('PDF Error:', err);
+                            toast({ title: 'Erreur PDF', description: "Impossible de générer le fichier.", variant: 'destructive' });
+                        }
+                    }}>
                         <Download className="mr-2 h-4 w-4" />
-                        <span>Télécharger</span>
+                        <span>Télécharger (PDF)</span>
                     </DropdownMenuItem>
 
-                    <DropdownMenuItem onClick={handleShare} disabled={isGenerating}>
+                    <DropdownMenuItem onClick={handleShare}>
                         <Share2 className="mr-2 h-4 w-4" />
                         <span>Partager</span>
                     </DropdownMenuItem>

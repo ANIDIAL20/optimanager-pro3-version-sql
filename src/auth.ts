@@ -42,84 +42,95 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        console.log('🔐 AUTHORIZE FUNCTION CALLED');
-        console.log('📥 Credentials received:', {
-          hasEmail: !!credentials?.email,
-          hasPassword: !!credentials?.password,
-          email: credentials?.email,
-          passwordLength: credentials?.password?.length,
-        });
-
-        // Validation check
+        console.log('🔐 AUTHORIZE START');
+        
         if (!credentials?.email || !credentials?.password) {
-          console.log('❌ AUTHORIZE FAILED: Missing credentials');
+          console.log('❌ Missing credentials');
           return null;
         }
 
+        const email = (credentials.email as string).toLowerCase().trim();
+        const password = credentials.password as string;
+
         try {
-          console.log('🔍 Querying database for user:', credentials.email);
-          
-          // Find user by email
+          // 1. Find user
           const [user] = await db
             .select()
             .from(users)
-            .where(eq(users.email, credentials.email as string))
+            .where(eq(users.email, email))
             .limit(1);
 
-          console.log('📊 Database query result:', {
-            userFound: !!user,
-            hasPassword: !!user?.password,
-            userId: user?.id,
-            userEmail: user?.email,
-            userRole: user?.role,
-          });
-
           if (!user) {
-            console.log('❌ AUTHORIZE FAILED: User not found in database');
+            console.log('❌ User not found:', email);
             return null;
           }
 
+          // 2. Check Active Status
+          if (!user.isActive) {
+             console.warn(`⛔ User ${email} is inactive/suspended.`);
+             throw new Error("Compte désactivé. Contactez l'administrateur.");
+          }
+
+          // 3. Check Lockout
+          if (user.lockoutUntil && new Date(user.lockoutUntil) > new Date()) {
+             console.warn(`🔒 User ${email} is locked out until ${user.lockoutUntil}`);
+             throw new Error("Compte temporairement bloqué (trop de tentatives). Réessayez plus tard.");
+          }
+
+          // 4. Verify password
           if (!user.password) {
-            console.log('❌ AUTHORIZE FAILED: User exists but has no password (OAuth user?)');
-            return null;
+             console.warn(`⚠️ User ${email} has no password set.`);
+             return null;
           }
 
-          console.log('🔒 Verifying password with bcrypt...');
-          console.log('Password hash preview:', user.password.substring(0, 20) + '...');
-
-          // Verify password
-          const isValidPassword = await bcrypt.compare(
-            credentials.password as string,
-            user.password
-          );
-
-          console.log('🔓 Password verification result:', isValidPassword);
+          const isValidPassword = await bcrypt.compare(password, user.password);
 
           if (!isValidPassword) {
-            console.log('❌ AUTHORIZE FAILED: Invalid password');
+            console.log(`❌ Invalid password for ${email}`);
+            
+            // Increment failed attempts
+            const newFailCount = (user.failedLoginAttempts || 0) + 1;
+            let updateData: any = { failedLoginAttempts: newFailCount };
+            
+            // Lock if threshold reached (e.g., 5 attempts)
+            if (newFailCount >= 5) {
+                const lockoutTime = new Date(Date.now() + 15 * 60 * 1000); // 15 mins lock
+                updateData.lockoutUntil = lockoutTime;
+                console.warn(`🔒 Locking user ${email} due to ${newFailCount} failed attempts.`);
+            }
+
+            await db.update(users).set(updateData).where(eq(users.id, user.id));
+            
             return null;
           }
 
-          console.log('✅ AUTHORIZE SUCCESS! Returning user:', {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: user.role || 'user',
-          });
+          // 5. Success - Reset failures & Return user
+          if ((user.failedLoginAttempts || 0) > 0 || user.lockoutUntil) {
+              await db.update(users).set({
+                  failedLoginAttempts: 0,
+                  lockoutUntil: null,
+                  lastLoginAt: new Date(),
+              }).where(eq(users.id, user.id));
+          } else {
+              // Just update last login time casually
+               await db.update(users).set({
+                  lastLoginAt: new Date(),
+              }).where(eq(users.id, user.id));
+          }
+
+          console.log('✅ AUTHORIZE SUCCESS:', email);
 
           return {
             id: user.id,
             email: user.email,
             name: user.name,
             role: user.role || "user",
+            image: user.image,
           };
-        } catch (error) {
-          console.error('💥 AUTHORIZE ERROR:', error);
-          console.error('Error details:', {
-            message: error.message,
-            stack: error.stack,
-          });
-          return null;
+
+        } catch (error: any) {
+          console.error('💥 AUTHORIZE ERROR:', error.message);
+          throw error; // Re-throw to show specific error to client if possible
         }
       },
     }),

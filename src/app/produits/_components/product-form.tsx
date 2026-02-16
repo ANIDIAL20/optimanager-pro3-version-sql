@@ -44,9 +44,11 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { CreditCard, Wallet } from 'lucide-react';
+import { CreditCard, Wallet, Percent, ShieldCheck } from 'lucide-react';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { BreadcrumbCustom } from "@/components/ui/breadcrumb-custom";
+import { calculateFromHT, calculateFromTTC, calculatePrices, formatPrice, isCategoryVatExempt } from '@/lib/tva-helpers';
+import { useFormContext } from 'react-hook-form';
 
 const GRID_LAYOUT = "grid grid-cols-[50px_1fr_200px_300px_80px] items-center gap-4";
 
@@ -75,6 +77,9 @@ const ProductItemSchema = z.object({
   description: z.string().optional(),
   details: z.string().optional(),
   imageUrl: z.string().optional(),
+  // ✅ New VAT Fields
+  hasTva: z.boolean().default(true).optional(),
+  priceType: z.enum(['HT', 'TTC']).default('TTC').optional(),
 });
 
 const BulkProductSchema = z.object({
@@ -132,16 +137,29 @@ export function ProductForm({ product }: ProductFormProps) {
   const totals = React.useMemo(() => {
     return watchedItems.reduce((acc, item) => {
       const gQty = Number(item.quantiteStock) || 0;
-      const gPriceAchat = Number(item.prixAchat) || 0;
+      const gPriceAchatInput = Number(item.prixAchat) || 0;
       const gIsTTC = !!item.isAchatTTC;
       
-      const costHT = gIsTTC ? (gPriceAchat / 1.2) : gPriceAchat;
-      const costTTC = gIsTTC ? gPriceAchat : (gPriceAchat * 1.2);
+      // Calculate costs using robust helper
+      // If item.isAchatTTC is true, input is TTC. If false, input is HT.
+      // We assume purchase always has VAT unless specifically marked otherwise, 
+      // but current schema doesn't seem to have a specific 'purchaseHasTva' field separate from 'hasTva' (which is for sales).
+      // However, typically B2B purchases have VAT unless supplier is exempt.
+      // For now, we apply standard logic: 
+      // - If input is TTC, HT = Input / 1.2
+      // - If input is HT, TTC = Input * 1.2
+      // - Standard VAT rate applies
       
+      const breakdown = calculatePrices({
+        amount: gPriceAchatInput,
+        type: gIsTTC ? 'TTC' : 'HT',
+        hasTva: item.hasTva !== false
+      });
+
       acc.count += 1;
       acc.units += gQty;
-      acc.totalCostHT += costHT * gQty;
-      acc.totalCostTTC += costTTC * gQty;
+      acc.totalCostHT += breakdown.ht * gQty;
+      acc.totalCostTTC += breakdown.ttc * gQty;
       return acc;
     }, { count: 0, units: 0, totalCostHT: 0, totalCostTTC: 0 });
   }, [watchedItems]);
@@ -176,7 +194,9 @@ export function ProductForm({ product }: ProductFormProps) {
   }, [watchedItems]);
 
   const hasMixedTaxes = React.useMemo(() => {
-    return watchedItems.some(it => it.isAchatTTC) && watchedItems.some(it => !it.isAchatTTC);
+    // Only check items that actually have VAT
+    const relevantItems = watchedItems.filter(it => it.hasTva !== false);
+    return relevantItems.some(it => it.isAchatTTC) && relevantItems.some(it => !it.isAchatTTC);
   }, [watchedItems]);
 
   React.useEffect(() => {
@@ -267,7 +287,10 @@ export function ProductForm({ product }: ProductFormProps) {
                 couleurId: item.couleurId || undefined,
                 categorie: categories.find(c => c.id === item.categorieId)?.name,
                 marque: brands.find(b => b.id === item.marqueId)?.name,
-                fournisseur: suppliers.find(s => s.id === data.fournisseurId)?.name 
+                fournisseur: suppliers.find(s => s.id === data.fournisseurId)?.name,
+                // ✅ TVA Fields
+                hasTva: item.hasTva,
+                priceType: item.priceType 
             };
             const res = await updateProduct(product.id, payload);
             if (res.success) {
@@ -286,7 +309,10 @@ export function ProductForm({ product }: ProductFormProps) {
                  couleurId: item.couleurId || undefined,
                  categorie: categories.find(c => c.id === item.categorieId)?.name,
                  marque: brands.find(b => b.id === item.marqueId)?.name,
-                 fournisseur: suppliers.find(s => s.id === data.fournisseurId)?.name
+                 fournisseur: suppliers.find(s => s.id === data.fournisseurId)?.name,
+                 // ✅ TVA Fields
+                 hasTva: item.hasTva,
+                 priceType: item.priceType
              }));
              const res = await createBulkProducts({ 
                  items, 
@@ -322,7 +348,8 @@ export function ProductForm({ product }: ProductFormProps) {
           matiereId: lastItem?.matiereId || '', 
           couleurId: lastItem?.couleurId || '',
           prixAchat: 0, prixVente: 0, quantiteStock: 1, stockMin: 5,
-          imageUrl: '', description: '', details: '', isAchatTTC: lastItem?.isAchatTTC || false
+          imageUrl: '', description: '', details: '', isAchatTTC: lastItem?.isAchatTTC || false,
+          hasTva: true, priceType: 'TTC'
         });
     }
     
@@ -335,7 +362,8 @@ export function ProductForm({ product }: ProductFormProps) {
       const currentItems = form.getValues().items;
       const itemToCopy = currentItems[index];
       if (!itemToCopy) return;
-      const newItem = { ...itemToCopy, reference: '', nomProduit: '' };
+      // Copy the name as well to save time, but clear reference as it should be unique
+      const newItem = { ...itemToCopy, reference: '', nomProduit: itemToCopy.nomProduit };
       insert(index + 1, newItem);
       toast({ description: "Ligne dupliquée 👇", duration: 1500 });
   };
@@ -795,18 +823,64 @@ interface ProductRowProps {
 function ProductRow({ 
     index, control, remove, duplicate, brands, categories, materials, colors, isEditMode, onAddRow, handleQuickCreate, isCreatingSetting, setBrands, setCategories, setMaterials, setColors, isLast
 }: ProductRowProps) {
+    const { setValue } = useFormContext();
     const prixAchat = useWatch({ control, name: `items.${index}.prixAchat` });
     const prixVente = useWatch({ control, name: `items.${index}.prixVente` });
     const isAchatTTC = useWatch({ control, name: `items.${index}.isAchatTTC` });
     const nomProduit = useWatch({ control, name: `items.${index}.nomProduit` });
     const categorieId = useWatch({ control, name: `items.${index}.categorieId` });
+    const priceType = useWatch({ control, name: `items.${index}.priceType` });
+    const hasTva = useWatch({ control, name: `items.${index}.hasTva` });
+
+    // Auto-detect VAT exemption
+    React.useEffect(() => {
+        if (!categorieId) return;
+        const category = categories.find(c => c.id === categorieId);
+        if (category) {
+            const isExempt = isCategoryVatExempt(category.name);
+            // Only update if it differs from current to avoid loops, 
+            // but we want to ENFORCE it when category changes.
+            // Check if user manually changed it? 
+            // For now, simple logic: if category implies exemption, apply it.
+            // If category implies standard, apply it ONLY if current is not explicitly set?
+            // Safer: Just apply the rule when category changes.
+            const shouldHaveTva = !isExempt;
+            if (hasTva !== shouldHaveTva) {
+               setValue(`items.${index}.hasTva`, shouldHaveTva);
+               // Also default priceType to HT if exempt (since HT=TTC)
+               if (!shouldHaveTva) {
+                   setValue(`items.${index}.isAchatTTC`, false);
+                   setValue(`items.${index}.priceType`, 'HT');
+               }
+            }
+        }
+    }, [categorieId, categories, setValue, index, hasTva]);
 
     const valPrixAchat = Number(prixAchat) || 0;
     const valPrixVente = Number(prixVente) || 0;
-    const cost = isAchatTTC ? (valPrixAchat / 1.2) : valPrixAchat;
-    const margin = valPrixVente - cost;
-    const marginPercent = valPrixVente > 0 ? (margin / valPrixVente) * 100 : 0;
-    const isLowMargin = marginPercent < 20 && valPrixVente > 0;
+    
+    // ✅ MARGIN CALCULATION (COMMERCIAL MARGIN)
+    // Formula: ((Vente TTC - Achat TTC) / Vente TTC) * 100
+    // We use TTC values to represent the actual commercial value including tax impact if applicable
+    
+    const pricesAchat = calculatePrices({
+        amount: valPrixAchat,
+        type: isAchatTTC ? 'TTC' : 'HT',
+        hasTva: hasTva !== false
+    });
+
+    const pricesVente = calculatePrices({
+        amount: valPrixVente,
+        type: priceType || 'TTC',
+        hasTva: hasTva !== false
+    });
+
+    // Commercial Margin (Marge Commerciale) - Calculated on HT to be tax-neutral
+    const marginValue = pricesVente.ht > 0 ? ((pricesVente.ht - pricesAchat.ht) / pricesVente.ht) * 100 : 0;
+    
+    // Thresholds: Standard retail often aims for > 30-40%. 
+    // Low margin warning if below 20% (configurable)
+    const isLowMargin = marginValue < 20 && pricesVente.ttc > 0;
     
     const isIncomplete = !nomProduit || !categorieId;
 
@@ -873,36 +947,104 @@ function ProductRow({
             <TableCell className="py-3 px-4 h-full border-r border-slate-50">
                 <div className="flex flex-col gap-3">
                     <div className="grid grid-cols-2 gap-2">
-                        <FormField control={control} name={`items.${index}.prixAchat`} render={({ field }) => (
-                            <div className="relative group/price flex flex-col">
-                                <div className="relative flex items-center">
-                                    <span className="absolute left-2 top-[3px] text-[10px] font-bold text-slate-400 uppercase tracking-wider z-10 pointer-events-none">Achat</span>
-                                    <Input type="number" step="0.01" {...field} onKeyDown={handleKeyDown} className="no-spinner h-11 pt-4 text-right pr-9 pl-2 font-mono text-sm font-bold border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-primary/10 w-full" />
-                                    <FormField control={control} name={`items.${index}.isAchatTTC`} render={({ field }) => (
-                                        <div 
-                                            onClick={() => field.onChange(!field.value)} 
-                                            className={cn(
-                                                "absolute right-1 top-[6px] h-8 w-6 rounded flex items-center justify-center cursor-pointer transition-all border text-[10px] font-bold z-20",
-                                                field.value ? "bg-green-50 border-green-200 text-green-600" : "bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100"
-                                            )}
-                                        >
-                                            {field.value ? "T" : "H"}
-                                        </div>
+                        <div className="relative group/price flex flex-col">
+                            <div className="relative flex items-center">
+                                <span className="absolute left-2 top-[3px] text-[10px] font-bold text-slate-400 uppercase tracking-wider z-10 pointer-events-none">Achat</span>
+                                <FormField control={control} name={`items.${index}.prixAchat`} render={({ field }) => (
+                                    <Input type="number" step="0.01" {...field} onKeyDown={handleKeyDown} className="no-spinner h-11 pt-4 text-right pr-9 pl-2 font-mono text-sm font-bold border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-primary/10 w-full" title="Prix d'achat unitaire" />
+                                )} />
+                                
+                                <div className="absolute right-1 top-[6px] w-6 h-8 z-20">
+                                    <FormField control={control} name={`items.${index}.isAchatTTC`} render={({ field: achatField }) => (
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <div 
+                                                    onClick={() => hasTva !== false && achatField.onChange(!achatField.value)} 
+                                                    className={cn(
+                                                        "h-full w-full rounded flex items-center justify-center transition-all border text-[10px] font-black select-none",
+                                                        hasTva === false 
+                                                            ? "bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed" 
+                                                            : "cursor-pointer group-hover/price:border-slate-300",
+                                                        hasTva !== false && achatField.value ? "bg-blue-50 border-blue-200 text-blue-600" : (hasTva !== false ? "bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100" : "")
+                                                    )}
+                                                >
+                                                    {hasTva === false ? <AlertCircle className="h-3 w-3" /> : (achatField.value ? "TTC" : "HT")}
+                                                </div>
+                                            </TooltipTrigger>
+                                            <TooltipContent className="text-[10px]">
+                                                {hasTva === false ? "Exonéré de TVA (Fixe)" : (achatField.value ? "Mode TTC : Taxe incluse" : "Mode HT : Taxe à ajouter")}
+                                            </TooltipContent>
+                                        </Tooltip>
                                     )} />
                                 </div>
-                                <div className="mt-1 flex justify-end px-1">
-                                    <span className="text-[10px] font-medium text-slate-400 tabular-nums">
-                                        Eq. {isAchatTTC ? (valPrixAchat / 1.2).toFixed(2) : (valPrixAchat * 1.2).toFixed(2)} {isAchatTTC ? 'HT' : 'TTC'}
-                                    </span>
+                            </div>
+                                <div className="mt-1 flex justify-end px-1 h-4">
+                                    {hasTva !== false ? (
+                                        <span className="text-[10px] font-medium text-slate-400 tabular-nums">
+                                            Eq. {isAchatTTC 
+                                                ? pricesAchat.ht.toFixed(2) 
+                                                : pricesAchat.ttc.toFixed(2)} {isAchatTTC ? 'HT' : 'TTC'}
+                                        </span>
+                                    ) : (
+                                         <span className="text-[9px] font-medium text-slate-300 italic">Hors Champ TVA</span>
+                                    )}
                                 </div>
                             </div>
-                        )} />
-                         <FormField control={control} name={`items.${index}.prixVente`} render={({ field }) => (
-                            <div className="relative">
-                                <span className="absolute left-2 top-[3px] text-[10px] font-bold text-slate-400 uppercase tracking-wider pointer-events-none">Vente TTC</span>
-                                <Input type="number" step="0.01" {...field} onKeyDown={handleKeyDown} className={cn("no-spinner h-11 pt-4 text-right pr-2 pl-2 font-mono font-bold text-sm border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-emerald-500/20", isLowMargin ? "text-red-500" : "text-emerald-600")} />
+                        <div className="relative group/sale flex flex-col">
+                            <div className="relative flex items-center">
+                                <span className="absolute left-2 top-[3px] text-[10px] font-bold text-emerald-600/70 uppercase tracking-wider z-10 pointer-events-none">Vente</span>
+                                <FormField control={control} name={`items.${index}.prixVente`} render={({ field }) => (
+                                    <Input 
+                                        type="number" 
+                                        step="0.01" 
+                                        {...field} 
+                                        onKeyDown={handleKeyDown} 
+                                        className={cn(
+                                            "no-spinner h-11 pt-4 text-right pr-9 pl-2 font-mono font-bold text-sm border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-emerald-500/20 w-full", 
+                                            isLowMargin ? "text-red-500" : "text-emerald-600"
+                                        )} 
+                                    />
+                                )} />
+                                
+                                <div className="absolute right-1 top-[6px] w-6 h-8 z-20">
+                                    <FormField control={control} name={`items.${index}.priceType`} render={({ field: typeField }) => (
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <div 
+                                                    onClick={() => hasTva !== false && typeField.onChange(typeField.value === 'HT' ? 'TTC' : 'HT')}
+                                                    className={cn(
+                                                        "h-full w-full rounded flex items-center justify-center transition-all border text-[10px] font-black select-none",
+                                                        hasTva === false 
+                                                            ? "bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed" 
+                                                            : "cursor-pointer group-hover/sale:border-emerald-200",
+                                                        hasTva !== false && typeField.value === 'HT' 
+                                                            ? "bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200" 
+                                                            : (hasTva !== false ? "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100" : "")
+                                                    )}
+                                                >
+                                                    {hasTva === false ? <AlertCircle className="h-3 w-3" /> : (typeField.value === 'HT' ? "HT" : "TTC")}
+                                                </div>
+                                            </TooltipTrigger>
+                                            <TooltipContent className="text-[10px]">
+                                                {hasTva === false ? "Exonéré de TVA (Fixe)" : (typeField.value === 'HT' ? "Prix affiché Hors Taxes" : "Prix affiché Toutes Taxes Comprises")}
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    )} />
+                                </div>
                             </div>
-                        )} />
+                                <div className="mt-1 flex justify-end px-1 h-4">
+                                     {hasTva !== false ? (
+                                        <span className={cn(
+                                            "text-[10px] font-medium tabular-nums",
+                                            isLowMargin ? "text-red-400" : "text-emerald-600/60"
+                                        )}>
+                                            Eq. {priceType === 'HT' ? pricesVente.ttc.toFixed(2) : pricesVente.ht.toFixed(2)} {priceType === 'HT' ? 'TTC' : 'HT'}
+                                        </span>
+                                     ) : (
+                                         <span className="text-[9px] font-medium text-emerald-600/30 italic">Hors Champ TVA</span>
+                                     )}
+                                </div>
+                            </div>
                     </div>
                     
                     <div className="grid grid-cols-[1fr_1fr_60px] items-center gap-1 p-1 bg-slate-50 rounded-lg border border-slate-100">
@@ -920,7 +1062,7 @@ function ProductRow({
                         </div>
                         <div className="flex justify-center border-l border-slate-200">
                             <span className={cn("text-xs font-bold tabular-nums", valPrixVente === 0 ? "text-slate-200" : isLowMargin ? "text-red-500" : "text-emerald-600")}>
-                                {isFinite(marginPercent) ? `${marginPercent.toFixed(0)}%` : '-'}
+                                {isFinite(marginValue) ? `${marginValue.toFixed(0)}%` : '-'}
                             </span>
                         </div>
                     </div>
@@ -929,15 +1071,15 @@ function ProductRow({
 
             {/* Actions */}
             <TableCell className="text-center py-4 h-full">
-                <div className="flex flex-col items-center justify-center gap-1 h-full">
+                <div className="flex flex-row items-center justify-center gap-1.5 h-full">
                     {!isEditMode ? (
                         <>
                          <Tooltip><TooltipTrigger asChild>
-                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-blue-600 hover:bg-blue-50 transition-all rounded-full" onClick={() => duplicate(index)}><Copy className="h-3.5 w-3.5" /></Button>
+                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all rounded-full" onClick={() => duplicate(index)}><Copy className="h-3.5 w-3.5" /></Button>
                          </TooltipTrigger><TooltipContent className="text-[10px]">Copier</TooltipContent></Tooltip>
                          
                          <Tooltip><TooltipTrigger asChild>
-                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-red-600 hover:bg-red-50 transition-all rounded-full" onClick={() => remove(index)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all rounded-full" onClick={() => remove(index)}><Trash2 className="h-3.5 w-3.5" /></Button>
                          </TooltipTrigger><TooltipContent className="text-[10px]">Supprimer</TooltipContent></Tooltip>
                         </>
                     ) : ( <div className="text-[8px] font-black text-slate-300 uppercase -rotate-90">Edit</div> )}

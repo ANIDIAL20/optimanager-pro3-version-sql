@@ -1,4 +1,6 @@
 import { requireAdmin } from "@/lib/auth-guard";
+// Security migration verified
+
 
 export default async function AdminLayout({
     children,

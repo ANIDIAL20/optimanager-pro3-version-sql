@@ -46,24 +46,26 @@ export const createClient = adminAction(async (user, formData: FormData) => {
   try {
 
     const displayName = formData.get('displayName') as string;
-    const email = formData.get('email') as string;
+    const email = (formData.get('email') as string).toLowerCase().trim();
     const password = formData.get('password') as string;
     const phoneNumber = formData.get('phoneNumber') as string;
-    const isActive = formData.get('isActive') === 'true';
+    const isActive = formData.get('isActive') === 'true'; // Warning: string vs boolean
     const limitsRaw = formData.get('limits') as string;
     
     // Financial & Dates
-    const paymentMode = formData.get('paymentMode') as 'subscription' | 'lifetime' || 'subscription';
-    const billingCycle = formData.get('billingCycle') as 'monthly' | 'yearly' || 'monthly';
+    const paymentMode = (formData.get('paymentMode') as 'subscription' | 'lifetime') || 'subscription';
+    const billingCycle = (formData.get('billingCycle') as 'monthly' | 'yearly') || 'monthly';
     const agreedPrice = parseFloat(formData.get('agreedPrice') as string) || 0;
     const trainingPrice = parseFloat(formData.get('trainingPrice') as string) || 0;
     const setupPrice = parseFloat(formData.get('setupPrice') as string) || 0;
     const amountPaid = parseFloat(formData.get('amountPaid') as string) || 0;
     const installmentsCount = parseInt(formData.get('installmentsCount') as string) || 1;
     
-    const lastPaymentDate = formData.get('lastPaymentDate') ? new Date(formData.get('lastPaymentDate') as string) : null;
-    const nextPaymentDate = formData.get('nextPaymentDate') ? new Date(formData.get('nextPaymentDate') as string) : null;
-    const subscriptionExpiry = formData.get('subscriptionExpiry') ? new Date(formData.get('subscriptionExpiry') as string) : null;
+    // Proper date parsing
+    const parseDate = (val: FormDataEntryValue | null) => val ? new Date(val as string) : null;
+    const lastPaymentDate = parseDate(formData.get('lastPaymentDate'));
+    const nextPaymentDate = parseDate(formData.get('nextPaymentDate'));
+    const subscriptionExpiry = parseDate(formData.get('subscriptionExpiry'));
 
     if (!displayName || !email || !password) {
       return { success: false, error: "Champs obligatoires manquants (Nom, Email, Mot de passe)" };
@@ -77,18 +79,18 @@ export const createClient = adminAction(async (user, formData: FormData) => {
     if (limitsRaw) {
         try {
             const parsed = JSON.parse(limitsRaw);
-            maxProducts = parsed.maxProducts || 50;
-            maxClients = parsed.maxClients || 20;
-            maxSuppliers = parsed.maxSuppliers || 10;
+            maxProducts = Number(parsed.maxProducts) || 50;
+            maxClients = Number(parsed.maxClients) || 20;
+            maxSuppliers = Number(parsed.maxSuppliers) || 10;
         } catch (e) {
             console.error("Failed to parse limits JSON", e);
         }
     }
 
     // Check existing
-    const existingResult = await db.execute(sql`SELECT id FROM "users" WHERE "email" = ${email} LIMIT 1`);
-    const existingRows = Array.isArray(existingResult) ? existingResult : (existingResult.rows || []);
-    const existingUser = existingRows[0];
+    const existingUser = await db.query.users.findFirst({
+        where: eq(users.email, email)
+    });
 
     if (existingUser) {
         return { success: false, error: "Un utilisateur avec cet email existe déjà." };
@@ -99,15 +101,22 @@ export const createClient = adminAction(async (user, formData: FormData) => {
 
     // Insert User
     await db.insert(users).values({
+        id: crypto.randomUUID(), // Explicitly generate ID if schema handles it poorly
         name: displayName,
         email: email,
         password: hashedPassword,
         role: "USER",
         isActive: isActive,
-        maxProducts: maxProducts,
-        maxClients: maxClients,
-        maxSuppliers: maxSuppliers,
+        
+        // Quotas
+        maxProducts,
+        maxClients,
+        maxSuppliers,
+        
         emailVerified: new Date(),
+        
+        // Security Defaults
+        failedLoginAttempts: 0, 
         
         // Financial & Dates
         paymentMode,
@@ -120,6 +129,9 @@ export const createClient = adminAction(async (user, formData: FormData) => {
         lastPaymentDate,
         nextPaymentDate,
         subscriptionExpiry,
+
+        createdAt: new Date(),
+        updatedAt: new Date(),
     });
 
     revalidatePath('/dashboard/admin');
@@ -127,12 +139,38 @@ export const createClient = adminAction(async (user, formData: FormData) => {
 
   } catch (error: any) {
     console.error("Error creating client:", error);
+    // User friendly error mapping
+    if (error.code === '23505') return { success: false, error: "Un compte avec cet email existe déjà." };
     return { success: false, error: "Erreur serveur: " + error.message };
   }
 });
 
 export const resetClientPassword = adminAction(async (user, uid: string, newPassword: string) => {
-  return { success: false, error: "Admin features not yet migrated to Drizzle", message: "" };
+  try {
+    if (!newPassword || newPassword.length < 6) {
+        return { success: false, error: "Le mot de passe doit contenir au moins 6 caractères" };
+    }
+
+    // 1. Hash password
+    const hashedPassword = await import('bcryptjs').then(bcrypt => bcrypt.hash(newPassword, 10));
+
+    // 2. Update DB & Unlock Account
+    await db.update(users)
+        .set({
+            password: hashedPassword,
+            failedLoginAttempts: 0,
+            lockoutUntil: null, // Unlock account immediately
+            updatedAt: new Date()
+        })
+        .where(eq(users.id, uid));
+
+    revalidatePath('/dashboard/admin');
+    return { success: true, message: "Mot de passe réinitialisé avec succès !" };
+
+  } catch (error: any) {
+    console.error("Error resetting password:", error);
+    return { success: false, error: "Erreur serveur: " + error.message };
+  }
 });
 
 export async function getFinancialStats() {

@@ -19,6 +19,7 @@ interface PosCartState {
     mode: PriceMode,
     payload?: { newPrice?: number; percent?: number; reason?: string }
   ) => void;
+  updateLensDetails: (lineId: string, details: any[]) => void;
 }
 
 export const usePosCartStore = create<PosCartState>((set) => ({
@@ -28,6 +29,18 @@ export const usePosCartStore = create<PosCartState>((set) => ({
   setItems: (items) => {
     const totalAmount = items.reduce((sum, it) => sum + it.lineTotal, 0);
     set({ items, totalAmount });
+  },
+
+  updateLensDetails: (lineId, details) => {
+    set((state) => {
+      const items = state.items.map((item) => {
+        if (item.lineId === lineId) {
+          return { ...item, lensDetails: details };
+        }
+        return item;
+      });
+      return { ...state, items };
+    });
   },
 
   updateLinePricing: (lineId, mode, payload) => {

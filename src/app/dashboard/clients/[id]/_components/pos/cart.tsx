@@ -62,6 +62,11 @@ export function Cart({ items, onUpdateQuantity, onRemoveItem, onClearCart }: Car
                                             </p>
                                         )}
                                     </div>
+                                    {item.productReference && (
+                                        <p className="text-[10px] text-slate-400 font-mono">
+                                            Réf: {item.productReference}
+                                        </p>
+                                    )}
                                     
                                     {/* Badges/Tags for discounts */}
                                     {item.priceMode !== 'STANDARD' && (

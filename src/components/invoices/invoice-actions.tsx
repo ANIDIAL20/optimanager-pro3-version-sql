@@ -13,8 +13,8 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { pdf } from '@react-pdf/renderer';
-import { InvoicePDF } from './InvoicePDF';
+// import { pdf } from '@react-pdf/renderer'; 
+// import { InvoicePDF } from './InvoicePDF';
 import type { Sale, Client } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { PrintPreviewDialog } from '@/components/printing/print-preview-dialog';
@@ -42,131 +42,42 @@ interface InvoiceActionsProps {
 // Force HMR Update
 export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsProps) {
     const router = useRouter();
-    const [isGenerating, setIsGenerating] = React.useState(false);
     const [showPrintPreview, setShowPrintPreview] = React.useState(false);
     const { toast } = useToast();
 
-    // Generate PDF blob
-    const generatePDFBlob = async (): Promise<Blob | null> => {
-        try {
-            setIsGenerating(true);
-
-            // Create PDF document
-            const doc = <InvoicePDF sale={sale} client={client} shopSettings={shopSettings} />;
-
-            // Generate blob
-            const asPdf = pdf(doc);
-            const blob = await asPdf.toBlob();
-
-            return blob;
-        } catch (error) {
-            console.error('Error generating PDF:', error);
-            toast({
-                variant: 'destructive',
-                title: 'Erreur',
-                description: 'Impossible de générer la facture PDF.',
-            });
-            return null;
-        } finally {
-            setIsGenerating(false);
-        }
-    };
-
-    // Print handler
+    // Unified Print Handling (The "Master" Source)
     const handlePrint = () => {
         setShowPrintPreview(true);
     };
 
-    // Download handler
-    const handleDownload = async () => {
-        const blob = await generatePDFBlob();
-        if (!blob) return;
-
-        try {
-            // Create download link
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `facture-${sale.id?.substring(0, 8) || 'invoice'}.pdf`;
-
-            // Trigger download
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            // Clean up
-            URL.revokeObjectURL(url);
-
-            toast({
-                title: 'Téléchargement réussi',
-                description: 'La facture a été téléchargée avec succès.',
-            });
-        } catch (error) {
-            console.error('Error downloading PDF:', error);
-            toast({
-                variant: 'destructive',
-                title: 'Erreur',
-                description: 'Impossible de télécharger la facture.',
-            });
-        }
+    // Unified Download/Share (Use Print Page -> Save as PDF)
+    const handleDownload = () => {
+        // Open print page in new tab with auto-print
+        const url = `/print/facture/${sale.id}?auto=true`;
+        window.open(url, '_blank');
     };
 
-    // Share handler
     const handleShare = async () => {
-        const blob = await generatePDFBlob();
-        if (!blob) return;
-
-        try {
-            // Check if Web Share API is supported
-            if (navigator.share && navigator.canShare) {
-                // Create file from blob
-                const file = new File(
-                    [blob],
-                    `facture-${sale.id?.substring(0, 8) || 'invoice'}.pdf`,
-                    { type: 'application/pdf' }
-                );
-
-                // Check if we can share this file
-                if (navigator.canShare({ files: [file] })) {
-                    await navigator.share({
-                        title: 'Facture',
-                        text: `Facture pour ${client.prenom} ${client.nom}`,
-                        files: [file],
-                    });
-
-                    toast({
-                        title: 'Partage réussi',
-                        description: 'La facture a été partagée avec succès.',
-                    });
-                    return;
-                }
-            }
-
-            // Fallback: Open PDF in new tab
-            const url = URL.createObjectURL(blob);
-            const shareWindow = window.open(url, '_blank');
-
-            if (!shareWindow) {
-                toast({
-                    variant: 'destructive',
-                    title: 'Bloqué',
-                    description: 'Veuillez autoriser les pop-ups pour partager.',
+        const url = `${window.location.origin}/print/facture/${sale.id}`;
+        
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: `Facture #${sale.saleNumber || sale.id?.substring(0, 8)}`,
+                    text: `Facture pour ${client.prenom} ${client.nom}`,
+                    url: url
                 });
+                toast({ title: 'Lien partagé' });
+            } catch (error) {
+                console.error('Share failed:', error);
             }
-
-            // Clean up URL after a delay
-            setTimeout(() => URL.revokeObjectURL(url), 10000);
-        } catch (error) {
-            // User cancelled share or other error
-            console.error('Error sharing PDF:', error);
-
-            // Don't show error toast if user simply cancelled
-            if (error instanceof Error && error.name !== 'AbortError') {
-                toast({
-                    variant: 'destructive',
-                    title: 'Erreur',
-                    description: 'Impossible de partager la facture.',
-                });
+        } else {
+            // Fallback: Copy link
+            try {
+                await navigator.clipboard.writeText(url);
+                toast({ title: 'Lien copié', description: 'Le lien vers la facture a été copié.' });
+            } catch (err) {
+                toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de copier le lien.' });
             }
         }
     };
@@ -175,36 +86,50 @@ export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsPro
         <>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="outline" disabled={isGenerating}>
-                        {isGenerating ? (
-                            <>
-                                <BrandLoader size="xs" className="mr-2 inline-flex" />
-                                Génération...
-                                Facture
-                            </>
-                        ) : (
-                            <>
-                                <FileText className="mr-2 h-4 w-4" />
-                                Actions Facture
-                            </>
-                        )}
+                    <Button variant="outline">
+                        <FileText className="mr-2 h-4 w-4" />
+                        Actions Facture
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuContent align="end" className="w-56">
                     <DropdownMenuLabel>Actions Facture</DropdownMenuLabel>
                     <DropdownMenuSeparator />
 
-                    <DropdownMenuItem onClick={handlePrint} disabled={isGenerating}>
+                    <DropdownMenuItem onClick={handlePrint}>
                         <Printer className="mr-2 h-4 w-4" />
                         <span>Imprimer</span>
                     </DropdownMenuItem>
 
-                    <DropdownMenuItem onClick={handleDownload} disabled={isGenerating}>
+                    <DropdownMenuItem onClick={async (e) => {
+                        e.preventDefault();
+                        try {
+                            const { pdf } = await import('@react-pdf/renderer');
+                            const { PdfDocumentTemplate } = await import('@/components/documents/pdf-document-template');
+                            
+                            const blob = await pdf(
+                                <PdfDocumentTemplate 
+                                    type="facture" 
+                                    data={{ document: sale, client, settings: shopSettings }} 
+                                />
+                            ).toBlob();
+                            
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = `Facture-${sale.saleNumber || sale.id}.pdf`;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                        } catch (err) {
+                            console.error('PDF Error:', err);
+                            toast({ title: 'Erreur PDF', description: "Impossible de générer le fichier.", variant: 'destructive' });
+                        }
+                    }}>
                         <Download className="mr-2 h-4 w-4" />
-                        <span>Télécharger</span>
+                        <span>Télécharger (PDF)</span>
                     </DropdownMenuItem>
 
-                    <DropdownMenuItem onClick={handleShare} disabled={isGenerating}>
+                    <DropdownMenuItem onClick={handleShare}>
                         <Share2 className="mr-2 h-4 w-4" />
                         <span>Partager</span>
                     </DropdownMenuItem>
