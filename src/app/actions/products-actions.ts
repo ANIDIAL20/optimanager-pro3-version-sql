@@ -9,6 +9,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { measurePerformance } from '@/lib/performance';
 import { getClientUsageStats } from './adminActions';
+import { calculatePrices } from '@/lib/tva-helpers';
 
 // ========================================
 // TYPE DEFINITIONS
@@ -22,8 +23,11 @@ export interface Product {
     prixVente: number;
     quantiteStock: number;
     seuilAlerte: number;
-    categorie: string;
-    marque: string;
+    categorie: string; // Deprecated, use category
+    category: string;  // New
+    marque: string;    // Deprecated, use brand
+    brand: string;     // New
+    productType: 'frame' | 'lens' | 'contact_lens' | 'accessory' | 'service' | string; // 'frame', 'lens', etc.
     modele?: string;
     couleur?: string;
     fournisseur: string;
@@ -36,6 +40,11 @@ export interface Product {
     marqueId?: string;
     matiereId?: string;
     couleurId?: string;
+    // New fields
+    tvaRate: number;
+    isMedical: boolean;
+    isStockManaged: boolean;
+    type?: string; 
 }
 
 /**
@@ -57,8 +66,10 @@ export const getProducts = secureAction(async (userId, user, searchQuery?: strin
                 filters.push(or(
                     ilike(products.nom, search),
                     ilike(products.reference, search),
-                    ilike(products.categorie, search),
-                    ilike(products.marque, search)
+                    ilike(products.category, search), // Use new col
+                    ilike(products.categorie, search), // Fallback
+                    ilike(products.brand, search),    // Use new col
+                    ilike(products.marque, search)    // Fallback
                 )!);
             }
 
@@ -75,8 +86,14 @@ export const getProducts = secureAction(async (userId, user, searchQuery?: strin
                 prixVente: Number(p.prixVente || 0),
                 quantiteStock: p.quantiteStock || 0,
                 seuilAlerte: p.seuilAlerte || 5,
-                categorie: p.categorie || '',
-                marque: p.marque || '',
+                
+                // Map new fields with fallbacks
+                category: p.category || p.categorie || '',
+                categorie: p.category || p.categorie || '', 
+                brand: p.brand || p.marque || '',
+                marque: p.brand || p.marque || '',
+                productType: p.productType || p.type || 'accessory',
+                
                 modele: p.modele || '',
                 couleur: p.couleur || '',
                 fournisseur: p.fournisseur || '',
@@ -86,9 +103,12 @@ export const getProducts = secureAction(async (userId, user, searchQuery?: strin
                 updatedAt: p.updatedAt ? (typeof p.updatedAt === 'string' ? p.updatedAt : p.updatedAt.toISOString()) : undefined,
                 matiereId: p.matiereId?.toString(),
                 couleurId: p.couleurId?.toString(),
-                categorieId: p.categorie,
-                marqueId: p.marque,
-                type: p.type
+                categorieId: p.category || p.categorie,
+                marqueId: p.brand || p.marque,
+                
+                tvaRate: Number(p.tvaRate || 20),
+                isMedical: p.isMedical || false,
+                isStockManaged: p.isStockManaged !== false // Default true
             }));
 
             console.log(`✅ Found ${mappedProducts.length} products (Drizzle)`);
@@ -123,25 +143,29 @@ export const searchProducts = secureAction(async (userId, user, params: {
             sql`${products.deletedAt} IS NULL`
         ];
 
-        // Type filter
+        // Type filter (Check new productType first)
         if (params.type && params.type !== 'ALL') {
-             // Handle 'SOLAIRE' specially if it's not a native type but a category convention
-             // Assuming user uses standard types: MONTURE, VERRE, ACCESSOIRE
              if (params.type === 'SOLAIRE') {
-                 // Solaire is tricky, usually a category or type. 
-                 // If schema has no SOLAIRE type, check category or name
                  filters.push(or(
+                     ilike(products.category, '%solaire%'),
                      ilike(products.categorie, '%solaire%'),
                      ilike(products.nom, '%solaire%')
                  )!);
              } else {
-                 filters.push(eq(products.type, params.type as any));
+                 // Try matching productType or legacy type
+                 filters.push(or(
+                     eq(products.productType, params.type),
+                     eq(products.type, params.type as any)
+                 )!);
              }
         }
 
         // Category filter
         if (params.category && params.category !== 'all') {
-            filters.push(eq(products.categorie, params.category));
+            filters.push(or(
+                eq(products.category, params.category),
+                eq(products.categorie, params.category)
+            )!);
         }
 
         // Text search
@@ -150,6 +174,7 @@ export const searchProducts = secureAction(async (userId, user, params: {
             filters.push(or(
                 ilike(products.nom, search),
                 ilike(products.reference, search),
+                ilike(products.brand, search),
                 ilike(products.marque, search)
             )!);
         }
@@ -170,12 +195,19 @@ export const searchProducts = secureAction(async (userId, user, params: {
             reservedQuantity: p.reservedQuantity || 0,
             availableQuantity: p.availableQuantity || 0,
             seuilAlerte: p.seuilAlerte || 5,
-            categorie: p.categorie || '',
-            marque: p.marque || '',
+            
+            category: p.category || p.categorie || '',
+            categorie: p.category || p.categorie || '',
+            brand: p.brand || p.marque || '',
+            marque: p.brand || p.marque || '',
+            productType: p.productType || p.type || 'accessory',
+            
             modele: p.modele || '',
             couleur: p.couleur || '',
-            type: p.type,
             createdAt: p.createdAt ? (typeof p.createdAt === 'string' ? p.createdAt : p.createdAt.toISOString()) : new Date().toISOString(),
+            
+            tvaRate: Number(p.tvaRate || 20),
+            isMedical: p.isMedical || false,
         }));
 
         return { success: true, data: mappedProducts };
@@ -205,8 +237,13 @@ export const getProduct = secureAction(async (userId, user, productId: string) =
             id: product.id.toString(),
             nomProduit: product.nom,
             reference: product.reference || '',
-            categorie: product.categorie || '',
-            marque: product.marque || '',
+            
+            category: product.category || product.categorie || '',
+            categorie: product.category || product.categorie || '',
+            brand: product.brand || product.marque || '',
+            marque: product.brand || product.marque || '',
+            productType: product.productType || product.type || 'accessory',
+            
             fournisseur: product.fournisseur || '',
             modele: product.modele || '',
             couleur: product.couleur || '',
@@ -220,8 +257,12 @@ export const getProduct = secureAction(async (userId, user, productId: string) =
             updatedAt: product.updatedAt ? (typeof product.updatedAt === 'string' ? product.updatedAt : product.updatedAt.toISOString()) : undefined,
             matiereId: product.matiereId?.toString(),
             couleurId: product.couleurId?.toString(),
-            categorieId: product.categorie || '',
-            marqueId: product.marque || ''
+            categorieId: product.category || product.categorie || '',
+            marqueId: product.brand || product.marque || '',
+            
+            tvaRate: Number(product.tvaRate || 20),
+            isMedical: product.isMedical || false,
+            isStockManaged: product.isStockManaged !== false
         };
 
         await logSuccess(userId, 'READ', 'products', productId);
@@ -241,25 +282,36 @@ export interface ProductInput {
     id?: string;
     reference: string;
     nomProduit: string;
-    categorieId: string; // Used for linking, logic might need mapped name?
+    categorieId: string; 
     marqueId: string;
     matiereId?: string;
     couleurId?: string;
     prixAchat?: number;
     prixVente: number;
     quantiteStock: number;
-    stockMin?: number; // seuilAlerte
+    stockMin?: number; 
     description?: string;
     imageUrl?: string;
     imageHint?: string;
-    // Optional names if passed for convenience or mapped
+    
     categorie?: string;
+    category?: string; // New
     marque?: string; 
-    fournisseur?: string; // Not in form?
-    details?: string; // Back to simple string storage
+    brand?: string;    // New
+    productType?: string; // New
+    
+    fournisseur?: string; 
+    details?: string; 
     modele?: string;
     couleur?: string;
     isActive?: boolean;
+    // ✅ SMART TVA Fields
+    hasTva?: boolean;
+    tvaRate?: number; // New
+    exemptionNote?: string;
+    priceType?: 'HT' | 'TTC'; 
+    isMedical?: boolean;
+    isStockManaged?: boolean;
 }
 
 export const createProduct = secureAction(async (userId, user, data: ProductInput) => {
@@ -291,20 +343,47 @@ export const createProduct = secureAction(async (userId, user, data: ProductInpu
              return { success: false, error: 'Cette référence (ou code-barres) existe déjà.' };
         }
 
-        // 2. Create Product
+        // 2. Calculate Financials (Source of Truth)
+        const priceInput = Number(data.prixVente);
+        const hasTva = data.hasTva !== undefined ? data.hasTva : true;
+        const priceType = data.priceType || 'TTC';
+        
+        const financials = calculatePrices(priceInput, priceType, hasTva);
+
+        // Resolve generic fields
+        const categoryVal = data.category || data.categorie || data.categorieId || 'OPTIQUE';
+        const brandVal = data.brand || data.marque || data.marqueId || null;
+
+        // 3. Create Product
         const [newProduct] = await db.insert(products).values({
             userId,
             nom: data.nomProduit,
             reference: reference,
-            categorie: data.categorie || data.categorieId || null, // Use descriptive first, then ID/mapped
-            marque: data.marque || data.marqueId || null,
+            
+            // New & Old fields synced
+            category: categoryVal,
+            categorie: categoryVal, 
+            brand: brandVal,
+            marque: brandVal,
+            productType: data.productType || 'accessory',
+            
             fournisseur: data.fournisseur || null,
             modele: data.modele || null,
             couleur: data.couleur || null,
             
             // Ensure numeric values
             prixAchat: data.prixAchat ? String(data.prixAchat) : '0',
-            prixVente: data.prixVente ? String(data.prixVente) : '0',
+            prixVente: String(financials.ttc), 
+            
+            // ✅ New Financial Fields
+            hasTva: hasTva,
+            tvaRate: data.tvaRate ? String(data.tvaRate) : '20.00',
+            priceType: priceType,
+            exemptionNote: data.exemptionNote || null,
+            salePriceHT: String(financials.ht),
+            salePriceTVA: String(financials.tva),
+            salePriceTTC: String(financials.ttc),
+
             quantiteStock: data.quantiteStock || 0,
             seuilAlerte: data.stockMin || 5,
 
@@ -315,9 +394,12 @@ export const createProduct = secureAction(async (userId, user, data: ProductInpu
             couleurId: data.couleurId ? parseInt(data.couleurId) : null,
             
             isActive: true,
+            isMedical: data.isMedical || false,
+            isStockManaged: data.isStockManaged !== false,
+            
             version: 0,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
         }).returning();
 
         // 3. Log Success
@@ -332,7 +414,6 @@ export const createProduct = secureAction(async (userId, user, data: ProductInpu
     } catch (error: any) {
         console.error('Create Product Error (Drizzle):', error);
         
-        // Handle Unique Constraint on Reference
         if (error.code === '23505') {
              return { success: false, error: 'Cette référence produit existe déjà.' };
         }
@@ -358,26 +439,57 @@ export const updateProduct = secureAction(async (userId, user, productId: string
 
         if (!oldProduct) return { success: false, error: 'Produit introuvable' };
 
+        // Calculate Financials if relevant fields change
+        const currentPriceVente = data.prixVente !== undefined ? Number(data.prixVente) : Number(oldProduct.prixVente);
+        const currentHasTva = data.hasTva !== undefined ? data.hasTva : oldProduct.hasTva;
+        const currentPriceType = (data.priceType || (oldProduct as any).priceType || 'TTC') as 'HT' | 'TTC';
+
+        const financials = calculatePrices(currentPriceVente, currentPriceType, currentHasTva);
+        
+        // Resolve generic fields logic
+        const categoryVal = data.category || data.categorie || data.categorieId;
+        const brandVal = data.brand || data.marque || data.marqueId;
+
         // 2. Execute Update (Drizzle)
         await db.update(products)
             .set({
                 nom: data.nomProduit !== undefined ? data.nomProduit : undefined,
                 reference: data.reference !== undefined ? data.reference : undefined,
-                categorie: data.categorie !== undefined ? data.categorie : (data.categorieId !== undefined ? data.categorieId : undefined),
-                marque: data.marque !== undefined ? data.marque : (data.marqueId !== undefined ? data.marqueId : undefined),
+                
+                // Sync new/old
+                category: categoryVal !== undefined ? categoryVal : undefined,
+                categorie: categoryVal !== undefined ? categoryVal : undefined,
+                brand: brandVal !== undefined ? brandVal : undefined,
+                marque: brandVal !== undefined ? brandVal : undefined,
+                productType: data.productType !== undefined ? data.productType : undefined,
+                
                 fournisseur: data.fournisseur !== undefined ? data.fournisseur : undefined,
                 modele: data.modele !== undefined ? data.modele : undefined,
                 couleur: data.couleur !== undefined ? data.couleur : undefined,
                 matiereId: data.matiereId !== undefined ? (data.matiereId ? parseInt(data.matiereId) : null) : undefined,
                 couleurId: data.couleurId !== undefined ? (data.couleurId ? parseInt(data.couleurId) : null) : undefined,
+                
                 prixAchat: data.prixAchat !== undefined ? data.prixAchat.toString() : undefined,
-                prixVente: data.prixVente !== undefined ? data.prixVente.toString() : undefined,
+                
+                // Financials Update
+                prixVente: String(financials.ttc), 
+                hasTva: currentHasTva,
+                tvaRate: data.tvaRate !== undefined ? String(data.tvaRate) : undefined,
+                exemptionNote: data.exemptionNote !== undefined ? data.exemptionNote : undefined,
+                priceType: currentPriceType,
+                salePriceHT: String(financials.ht),
+                salePriceTVA: String(financials.tva),
+                salePriceTTC: String(financials.ttc),
+
                 quantiteStock: data.quantiteStock !== undefined ? data.quantiteStock : undefined,
                 seuilAlerte: data.stockMin !== undefined ? data.stockMin : undefined,
                 description: data.description !== undefined ? data.description : undefined,
                 isActive: data.isActive !== undefined ? data.isActive : undefined,
+                isMedical: data.isMedical !== undefined ? data.isMedical : undefined,
+                isStockManaged: data.isStockManaged !== undefined ? data.isStockManaged : undefined,
+                
                 version: sql`${products.version} + 1`,
-                updatedAt: new Date().toISOString()
+                updatedAt: new Date()
             })
             .where(and(eq(products.id, id), eq(products.userId, userId)));
 
@@ -437,7 +549,7 @@ export const updateStock = secureAction(async (userId, user, { productId, quanti
                 await tx.update(products)
                     .set({ 
                         quantiteStock: newStock, 
-                        updatedAt: new Date().toISOString() 
+                        updatedAt: new Date() 
                     })
                     .where(eq(products.id, id));
 
@@ -449,7 +561,7 @@ export const updateStock = secureAction(async (userId, user, { productId, quanti
                     quantite: quantity, // Mapped from quantity
                     notes: reason,      // Mapped from reason
                     // previousStock/newStock not in schema, removed
-                    createdAt: new Date().toISOString()
+                    createdAt: new Date()
                 });
 
                 await logSuccess(userId, 'UPDATE', 'products', `STOCK-${type}`, { productId, quantity, newStock });
@@ -650,6 +762,12 @@ export const createBulkProducts = secureAction(async (userId, user, data: { item
                  return isNaN(parsed) ? '0' : String(parsed);
              };
 
+             const priceInput = safeNum(item.prixVente);
+             const currentHasTva = item.hasTva !== undefined ? item.hasTva : true;
+             const currentPriceType = (item.priceType || 'TTC') as 'HT' | 'TTC';
+             
+             const financials = calculatePrices(Number(priceInput), currentPriceType, currentHasTva);
+
              return {
                 userId,
                 nom: item.nomProduit!.trim(),
@@ -660,14 +778,22 @@ export const createBulkProducts = secureAction(async (userId, user, data: { item
                 modele: item.modele || null,
                 couleur: item.couleur || null,
                 prixAchat: safeNum(item.prixAchat),
-                prixVente: safeNum(item.prixVente),
+                
+                // Financials
+                prixVente: String(financials.ttc),
+                hasTva: currentHasTva,
+                priceType: currentPriceType,
+                salePriceHT: String(financials.ht),
+                salePriceTVA: String(financials.tva),
+                salePriceTTC: String(financials.ttc),
+
                 quantiteStock: Math.max(0, parseInt(String(item.quantiteStock || 0))),
                 seuilAlerte: Math.max(0, parseInt(String(item.stockMin || 0))),
                 description: item.description || (invoiceNum ? `Facture: ${invoiceNum}` : null),
                 isActive: true,
                 version: 0,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
+                createdAt: new Date(),
+                updatedAt: new Date(),
                 deletedAt: null,
              };
         });
@@ -696,7 +822,7 @@ export const createBulkProducts = secureAction(async (userId, user, data: { item
                         .set({
                             quantiteStock: sql`${products.quantiteStock} + ${incomingQty}`,
                             prixAchat: item.prixAchat,
-                            updatedAt: new Date().toISOString(),
+                            updatedAt: new Date(),
                             deletedAt: null
                         })
                         .where(eq(products.id, existing.id));

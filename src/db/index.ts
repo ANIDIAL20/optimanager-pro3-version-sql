@@ -15,10 +15,11 @@ if (!process.env.DATABASE_URL) {
 
 // Singleton cache implementation for Next.js hot-reloading
 declare global {
-  var __db_v3: any;
+  var __db_v6: any;
 }
 
 function createDbConnection() {
+  console.log("🔌 [DB] Creating new database connection pool (v6)...");
   // Use Pool instead of simple neon() for better transaction/session support
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -29,9 +30,9 @@ function createDbConnection() {
 }
 
 // ✅ Use global cache in development, fresh instance in production
-const globalForDb = globalThis as unknown as { __db_v3: any };
+const globalForDb = globalThis as unknown as { __db_v6: any };
 
 export const db =
   process.env.NODE_ENV === 'production'
     ? createDbConnection()
-    : (globalForDb.__db_v3 = globalForDb.__db_v3 ?? createDbConnection());
+    : (globalForDb.__db_v6 = globalForDb.__db_v6 ?? createDbConnection());

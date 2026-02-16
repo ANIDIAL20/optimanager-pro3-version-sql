@@ -10,17 +10,33 @@ export async function getClientReservations(
   clientId: number
 ): Promise<FrameReservation[]> {
   try {
-    const reservations = await db.query.frameReservations.findMany({
-      where: eq(frameReservations.clientId, clientId),
-      orderBy: [desc(frameReservations.createdAt)],
-    });
-    return reservations as FrameReservation[];
+    // Use db.select() for more control and robustness
+    const results = await db
+      .select()
+      .from(frameReservations)
+      .where(eq(frameReservations.clientId, clientId))
+      .orderBy(desc(frameReservations.createdAt));
+    
+    // Map manually to ensure dates are strings/dates as expected
+    const reservations: FrameReservation[] = results.map(r => ({
+        id: r.id,
+        storeId: r.storeId,
+        clientId: r.clientId,
+        clientName: r.clientName,
+        status: r.status as any,
+        items: r.items as any[],
+        reservationDate: r.reservationDate ? new Date(r.reservationDate) : new Date(),
+        expiryDate: r.expiryDate ? new Date(r.expiryDate) : new Date(),
+        completedAt: r.completedAt ? new Date(r.completedAt) : undefined,
+        saleId: r.saleId || undefined, // Handle null
+        notes: r.notes || undefined,
+        createdAt: r.createdAt ? new Date(r.createdAt) : new Date(),
+        updatedAt: r.updatedAt ? new Date(r.updatedAt) : new Date(),
+    }));
+
+    return reservations;
   } catch (error: any) {
-    if (error.message?.includes('relation "frame_reservations" does not exist')) {
-        console.warn('⚠️ Frame Reservations table missing. Returning empty list.');
-        return [];
-    }
-    console.error('Error fetching reservations:', error);
+    console.error('❌ Error fetching reservations (select):', error);
     return [];
   }
 

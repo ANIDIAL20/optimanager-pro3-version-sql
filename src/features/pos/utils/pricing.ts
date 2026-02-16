@@ -3,6 +3,7 @@ export type PriceMode = 'STANDARD' | 'OVERRIDE' | 'DISCOUNT';
 export interface PosLineItem {
   lineId: string;
   productId: string;
+  productReference?: string;
   productName: string;
   quantity: number;
 
@@ -20,6 +21,14 @@ export interface PosLineItem {
   type?: 'MONTURE' | 'VERRE' | 'ACCESSOIRE' | 'AUTRE';
   fromReservation?: number;
   metadata?: any;
+  lensDetails?: {
+    eye: 'OD' | 'OG';
+    sphere?: string;
+    cylinder?: string;
+    axis?: string;
+    addition?: string;
+    treatment?: string;
+  }[];
 }
 
 /** يعيد السطر إلى الثمن العادي بدون أي تخفيض */
@@ -43,9 +52,12 @@ export function applyPriceOverride(
   reason?: string
 ): PosLineItem {
   if (newUnitPrice <= 0) throw new Error('Le prix doit être > 0');
+  // No longer blocking higher prices - can be used for surcharges or valid overrides
+  /*
   if (newUnitPrice > item.originalUnitPrice) {
     throw new Error('Le prix ne peut pas dépasser le prix standard');
   }
+  */
 
   const discountAmount = item.originalUnitPrice - newUnitPrice;
   const discountPercent =
@@ -104,11 +116,13 @@ export function createLineItem(
   originalUnitPrice: number,
   quantity: number = 1,
   type?: 'MONTURE' | 'VERRE' | 'ACCESSOIRE' | 'AUTRE',
-  metadata?: any
+  metadata?: any,
+  productReference?: string
 ): PosLineItem {
   return {
     lineId: Math.random().toString(36).substring(7),
     productId,
+    productReference,
     productName,
     quantity,
     originalUnitPrice,

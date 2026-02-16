@@ -23,16 +23,17 @@ import { PaymentSection } from '@/app/dashboard/clients/[id]/_components/pos/pay
 // Server Actions - NEW Architecture
 import { getClients } from '@/features/clients/actions';
 import { getProducts, getCategories, type Product as ActionProduct } from '@/app/actions/products-actions'; // Still using this for POS products 
-import { createSale } from '@/features/sales/actions';
+import { createSale } from '@/app/actions/sales-actions';
 import { getPendingLensOrders } from '@/app/actions/lens-orders-actions';
 import { BrandLoader } from '@/components/ui/loader-brand';
 import { usePosCartStore } from '@/features/pos/store/use-pos-cart-store';
 import { createLineItem, recalculateLineTotal } from '@/features/pos/utils/pricing';
 import { DiscountDialog } from '@/components/clients/discount-dialog';
+import { LensDetailsDialog } from '@/components/sales/lens-details-dialog';
 
 export default function NewSalePage() {
     const router = useRouter();
-    const { items: cartItems, setItems, updateLinePricing, totalAmount } = usePosCartStore();
+    const { items: cartItems, setItems, updateLinePricing, updateLensDetails, totalAmount } = usePosCartStore();
     const [isProcessing, setIsProcessing] = React.useState(false);
     const [selectedClient, setSelectedClient] = React.useState<Client | null>(null);
     const [products, setProducts] = React.useState<Product[]>([]);
@@ -101,7 +102,8 @@ export default function NewSalePage() {
                              marque: p.marque,
                              modele: p.modele,
                              couleur: p.couleur,
-                             description: p.description
+                             description: p.description,
+                             productType: p.productType
                              // missing others but enough for POS
                         }));
                         setProducts(mapped);
@@ -185,7 +187,8 @@ export default function NewSalePage() {
             const query = searchQuery.toLowerCase();
             filtered = filtered.filter(p =>
                 p.nomProduit?.toLowerCase().includes(query) ||
-                p.reference?.toLowerCase().includes(query)
+                p.reference?.toLowerCase().includes(query) ||
+                p.marque?.toLowerCase().includes(query)
             );
         }
         return filtered;
@@ -215,7 +218,9 @@ export default function NewSalePage() {
                 product.id,
                 product.nomProduit,
                 product.prixVente,
-                1
+                1,
+                (product as any).productType === 'lens' ? 'VERRE' : 'AUTRE',
+                { productType: (product as any).productType }
             );
             setItems([...cartItems, newItem]);
         }
@@ -250,7 +255,7 @@ export default function NewSalePage() {
 
     const clearCart = () => setItems([]);
 
-    const handleProcessSale = async (paymentData: { amountPaid: number; method: string; notes: string }) => {
+    const handleProcessSale = async (paymentData: { amountPaid: number; method: string; notes: string; isDeclared: boolean }) => {
         if (cartItems.length === 0) {
             toast({ title: "Panier vide", description: "Ajoutez au moins un produit.", variant: "destructive" });
             return;
@@ -283,19 +288,19 @@ export default function NewSalePage() {
 
             // Call New Feature Action
             const result = await createSale({
-                clientId: clientIdNum,
-                clientName: selectedClient?.name,
-                items: saleItems as any,
+                clientId: clientIdNum?.toString(),
+                items: cartItems.map(item => ({
+                    productRef: item.productId,
+                    productName: item.productName,
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice,
+                    tvaRate: 20, // Default, the action will override based on isDeclared
+                    lensDetails: item.lensDetails
+                })) as any,
                 lensOrderIds, 
-                
-                totalHT: parseFloat(totalHT.toFixed(2)),
-                totalTVA: parseFloat(totalTVA.toFixed(2)),
-                totalTTC: parseFloat(totalTTC.toFixed(2)),
-                totalPaid: paymentData.amountPaid,
-                
-                paymentMethod: paymentData.method.toUpperCase() as any,
+                paymentMethod: paymentData.method.toUpperCase(),
                 notes: paymentData.notes,
-                status: paymentData.amountPaid >= totalTTC ? 'PAYE' : paymentData.amountPaid > 0 ? 'PARTIEL' : 'IMPAYE'
+                isDeclared: paymentData.isDeclared
             });
 
             if (result && (result as any).id) {
@@ -568,6 +573,13 @@ export default function NewSalePage() {
                                                         discountPercent={item.discountPercent}
                                                         quantity={item.quantity}
                                                     />
+                                                    {(item.type === 'VERRE' || (item.metadata && item.metadata.productType === 'lens')) && (
+                                                        <LensDetailsDialog 
+                                                            productName={item.productName}
+                                                            initialDetails={item.lensDetails}
+                                                            onSave={(details) => updateLensDetails(item.lineId, details)}
+                                                        />
+                                                    )}
                                                     <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleUpdateQuantity(item.productId, -1)}>
                                                         <Minus className="h-3 w-3" />
                                                     </Button>

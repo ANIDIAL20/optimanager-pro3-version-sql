@@ -10,6 +10,7 @@ import { devis, sales, products, stockMovements } from '@/db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure, logAudit } from '@/lib/audit-log';
+import { calculateLineItem } from '@/lib/tva-helpers';
 
 // ========================================
 // TYPE DEFINITIONS
@@ -28,6 +29,15 @@ export interface DevisItem {
 
     quantite: number;
     prixUnitaire: number;
+    
+    // Financials
+    priceHT?: number;
+    tvaRate?: number;
+    amountTVA?: number;
+    totalHT?: number;
+    totalTTC?: number;
+    
+    unitPrice?: number; // Alias for priceUnitaire
 }
 
 export interface Devis {
@@ -141,18 +151,73 @@ export const createDevis = secureAction(async (userId, user, data: CreateDevisIn
         if (!data.clientName) return { success: false, error: 'Nom client requis' };
         if (!data.items || data.items.length === 0) return { success: false, error: 'Articles requis' };
 
-        // Calculate totals
-        const totalHT = data.items.reduce((sum, item) => sum + (item.quantite * item.prixUnitaire), 0);
-        const totalTTC = totalHT * 1.20;
+        // Calculate totals with strict VAT logic
+        let runningTotalHT = 0;
+        let runningTotalTVA = 0;
+        let runningTotalTTC = 0;
+
+        const enrichedItems = await Promise.all(data.items.map(async (item) => {
+            // Check product for exemptions
+            let hasTva = true;
+            if (item.productId) {
+                 const pid = parseInt(item.productId);
+                 if (!isNaN(pid)) {
+                      const product = await db.query.products.findFirst({
+                          where: and(eq(products.id, pid), eq(products.userId, userId)),
+                          columns: { 
+                              category: true, 
+                              categorie: true, 
+                              hasTva: true, 
+                              reference: true,
+                              marque: true, 
+                              modele: true, 
+                              couleur: true 
+                          }
+                      });
+                      if (product) {
+                          const cat = product.categorie || product.category;
+                          const isExempt = cat && ['Monture', 'Montures', 'Medical'].includes(cat);
+                          if (product.hasTva === false || isExempt) hasTva = false;
+                          
+                          // Ensure reference is correct
+                          if (product.reference) {
+                              item.reference = product.reference;
+                          }
+                          
+                          // Enrich text fields if missing
+                          if (!item.marque && product.marque) item.marque = product.marque;
+                          if (!item.modele && product.modele) item.modele = product.modele;
+                          if (!item.couleur && product.couleur) item.couleur = product.couleur;
+                      }
+                 }
+            }
+            
+            // Calculate
+            const tax = calculateLineItem(item.prixUnitaire, item.quantite, true, hasTva);
+            
+            runningTotalHT += tax.totalHT;
+            runningTotalTVA += tax.totalTVA;
+            runningTotalTTC += tax.totalTTC;
+            
+            return {
+                ...item,
+                priceHT: tax.unitHT,
+                tvaRate: tax.rate,
+                amountTVA: tax.unitTVA,
+                totalHT: tax.totalHT,
+                totalTTC: tax.totalTTC,
+                unitPrice: item.prixUnitaire 
+            };
+        }));
 
         const newDevis = {
             userId,
             clientId: data.clientId ? parseInt(data.clientId) : null,
             clientName: data.clientName,
             clientPhone: data.clientPhone,
-            items: data.items,
-            totalHT: totalHT.toFixed(2),
-            totalTTC: totalTTC.toFixed(2),
+            items: enrichedItems,
+            totalHT: runningTotalHT.toFixed(2),
+            totalTTC: runningTotalTTC.toFixed(2),
             status: data.status || 'EN_ATTENTE',
             validUntil: data.validUntil,
             createdAt: new Date(),
@@ -303,7 +368,7 @@ export const convertDevisToSale = secureAction(async (userId, user, devisId: str
 
             // 3. Create Sale
             const saleItems = devisItems.map(item => ({
-                productRef: item.productId || item.reference, // Use productId if available, else reference
+                productRef: item.reference || (item.productId ? item.productId : item.reference), // Prioritize reference string!
                 productName: item.designation,
                 marque: item.marque,
                 modele: item.modele,

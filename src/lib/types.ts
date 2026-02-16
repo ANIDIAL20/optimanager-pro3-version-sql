@@ -158,12 +158,29 @@ export interface SaleItem {
   productRef?: string;
   nomProduit?: string;
   productName?: string; // alias
+  
+  // Product Details
   reference?: string;
-  prixVente?: number;
-  unitPrice?: number; // alias
+  marque?: string;
+  modele?: string;
+  couleur?: string;
+  
+  // Financials (PER UNIT)
+  unitPrice: number; // Usually TTC for display
+  priceHT: number;   // Unit Price HT
+  tvaRate: number;   // 0 or 20
+  amountTVA: number; // Unit TVA amount
+  
+  // Totals (FOR LINE)
   quantity: number;
+  totalHT: number;   // priceHT * quantity
+  totalTTC: number;  // unitPrice * quantity
+  
   returnedQuantity?: number;
-  price: number;
+  
+  // Deprecated/Legacy
+  prixVente?: number;
+  price?: number;
   total?: number;
 }
 

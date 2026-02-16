@@ -91,7 +91,7 @@ export function ContactLensPrescriptionList({ clientId }: ContactLensPrescriptio
                 <TableHead>Date</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Marque</TableHead>
-                <TableHead>Docteur</TableHead>
+                <TableHead>Prescripteur</TableHead>
                 <TableHead>Durée/Exp</TableHead>
                 <TableHead>OD Sph/BC/Dia</TableHead>
                 <TableHead>OG Sph/BC/Dia</TableHead>

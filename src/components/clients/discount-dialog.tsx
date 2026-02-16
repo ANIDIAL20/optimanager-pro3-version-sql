@@ -207,6 +207,11 @@ export function DiscountDialog({
                                     Économie: {((originalPrice - previewPrice) * quantity).toFixed(2)} DH
                                 </div>
                             )}
+                            {previewPrice > originalPrice && (
+                                <div className="text-xs text-orange-600">
+                                    Majoration: {((previewPrice - originalPrice) * quantity).toFixed(2)} DH
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

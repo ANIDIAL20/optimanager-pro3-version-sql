@@ -321,4 +321,39 @@ export const pdfStyles = StyleSheet.create({
         fontSize: 7,
         color: '#94a3b8',
     },
+
+    // VAT Table Styles
+    vatTable: {
+        width: '50%',
+        marginRight: 20,
+    },
+    vatHeader: {
+        flexDirection: 'row',
+        backgroundColor: '#f1f5f9', // slate-100
+        padding: 4,
+        borderBottomWidth: 1,
+        borderBottomColor: '#cbd5e1',
+    },
+    vatRow: {
+        flexDirection: 'row',
+        padding: 4,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f1f5f9',
+    },
+    vatCellHeader: {
+        fontSize: 7,
+        fontWeight: 'bold',
+        color: '#334155', // slate-700
+        flex: 1,
+        textAlign: 'right', // Default right align
+    },
+    vatCell: {
+        fontSize: 7,
+        color: '#475569', // slate-600
+        flex: 1,
+        textAlign: 'right',
+    },
+    vatCellLeft: {
+        textAlign: 'left',
+    },
 });
