@@ -50,11 +50,11 @@ const LensOrderSchema = z.object({
     required_error: "Le type de commande est requis.",
   }),
   lensType: z.string().min(1, 'Le type de verre est requis.'),
-  
+
   // Professional Pricing
   sellingPrice: z.number().positive('Le prix de vente est obligatoire'),
   estimatedBuyingPrice: z.number().min(0).optional(),
-  
+
   treatments: z.array(z.string()).optional(),
   notes: z.string().optional(),
 });
@@ -70,7 +70,7 @@ interface LensOrderFormProps {
 export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrderFormProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  
+
   // Data State
   const [prescriptions, setPrescriptions] = React.useState<any[]>([]);
   const [suppliers, setSuppliers] = React.useState<any[]>([]);
@@ -98,7 +98,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
       try {
         const [prescriptionsRes, suppliersRes, treatmentsRes] = await Promise.all([
           getPrescriptions(clientId),
-          getSuppliersList(undefined), 
+          getSuppliersList(undefined),
           getSettings('treatments'),
         ]);
 
@@ -107,20 +107,20 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
         }
 
         if (Array.isArray(suppliersRes)) {
-             setSuppliers(suppliersRes);
+          setSuppliers(suppliersRes);
         } else if ((suppliersRes as any).success && (suppliersRes as any).data) { // logic if wrapped
-             setSuppliers((suppliersRes as any).data);
+          setSuppliers((suppliersRes as any).data);
         } else {
-             setSuppliers([]); 
+          setSuppliers([]);
         }
 
         // Handle Treatments (returns Array directly)
         if (Array.isArray(treatmentsRes)) {
-            setTreatments(treatmentsRes);
+          setTreatments(treatmentsRes);
         } else if ((treatmentsRes as any).data) {
-             setTreatments((treatmentsRes as any).data);
+          setTreatments((treatmentsRes as any).data);
         }
-        
+
       } catch (error) {
         console.error("Failed to load form data", error);
         toast({
@@ -176,7 +176,26 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
 
       // Safe find using loose assumption (s.id could be number, data.supplierId is string)
       const supplier = suppliers.find(s => s.id?.toString() === data.supplierId);
-      
+
+      // Helper to get nested value safely (handles od/OD and og/OG)
+      const getVal = (eye: 'od' | 'og', field: string) => {
+        const eyeData = fullSelectedPrescription?.data?.[eye] || fullSelectedPrescription?.data?.[eye.toUpperCase()];
+        if (!eyeData) return null;
+
+        if (field === 'pd') return eyeData.pd || eyeData.ecart || null;
+        if (field === 'hauteur') return eyeData.hauteur || eyeData.h || null;
+        if (field === 'addition') return eyeData.addition || eyeData.add || null;
+        if (field === 'sphere') return eyeData.sphere || eyeData.sph || null;
+        if (field === 'cylinder') return eyeData.cylinder || eyeData.cyl || null;
+        if (field === 'axis') return eyeData.axis || eyeData.axe || null;
+        return eyeData[field] || null;
+      };
+
+      const ecartR = getVal('od', 'pd');
+      const ecartL = getVal('og', 'pd');
+      // Total PD from prescription if monocular not found
+      const totalPD = fullSelectedPrescription?.data?.pd || fullSelectedPrescription?.data?.PD || null;
+
       const orderInput: LensOrderInput = {
         clientId: parseInt(clientId),
         prescriptionId: pId,
@@ -185,8 +204,9 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
         lensType: data.lensType,
         treatment: data.treatments?.join(', ') || null,
         supplierName: supplier?.nomCommercial || supplier?.name || 'Unknown',
-        
+
         // Explicit Prescription (Mapping from prescription data object)
+<<<<<<< Updated upstream
         sphereR: fullSelectedPrescription?.data?.od?.sphere?.toString() || null,
         cylindreR: fullSelectedPrescription?.data?.od?.cylinder?.toString() || null,
         axeR: fullSelectedPrescription?.data?.od?.axis?.toString() || null,
@@ -203,19 +223,37 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
         ecartPupillaireL: fullSelectedPrescription?.data?.og?.pd?.toString() || null,
         diameterR: fullSelectedPrescription?.data?.od?.diameter?.toString() || null,
         diameterL: fullSelectedPrescription?.data?.og?.diameter?.toString() || null,
+=======
+        sphereR: getVal('od', 'sphere')?.toString() || null,
+        cylindreR: getVal('od', 'cylinder')?.toString() || null,
+        axeR: getVal('od', 'axis')?.toString() || null,
+        additionR: getVal('od', 'addition')?.toString() || null,
+        hauteurR: getVal('od', 'hauteur')?.toString() || null,
+
+        sphereL: getVal('og', 'sphere')?.toString() || null,
+        cylindreL: getVal('og', 'cylinder')?.toString() || null,
+        axeL: getVal('og', 'axis')?.toString() || null,
+        additionL: getVal('og', 'addition')?.toString() || null,
+        hauteurL: getVal('og', 'hauteur')?.toString() || null,
+
+        ecartPupillaireR: ecartR?.toString() || totalPD?.toString() || null,
+        ecartPupillaireL: ecartL?.toString() || totalPD?.toString() || null,
+        diameterR: getVal('od', 'diameter')?.toString() || fullSelectedPrescription?.data?.diametre?.toString() || null,
+        diameterL: getVal('og', 'diameter')?.toString() || fullSelectedPrescription?.data?.diametre?.toString() || null,
+>>>>>>> Stashed changes
 
         matiere: fullSelectedPrescription?.data?.matiere || null,
         indice: fullSelectedPrescription?.data?.indice || null,
-        
+
         // Professional Pricing
         sellingPrice: data.sellingPrice,
         estimatedBuyingPrice: data.estimatedBuyingPrice || 0,
-        
+
         // Legacy (kept for compat)
         unitPrice: data.sellingPrice,
         quantity: 1,
         totalPrice: data.sellingPrice,
-        
+
         status: 'pending',
         notes: data.notes || '',
       };
@@ -228,14 +266,14 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
           description: 'La nouvelle commande a été enregistrée en tant que brouillon.',
         });
         form.reset({
-            prescriptionId: '',
-            supplierId: '',
-            orderType: mode === 'contacts' ? 'contact' : 'unifocal',
-            lensType: '',
-            treatments: [],
-            notes: '',
-            sellingPrice: 0,
-            estimatedBuyingPrice: undefined
+          prescriptionId: '',
+          supplierId: '',
+          orderType: mode === 'contacts' ? 'contact' : 'unifocal',
+          lensType: '',
+          treatments: [],
+          notes: '',
+          sellingPrice: 0,
+          estimatedBuyingPrice: undefined
         });
         if (onSuccess) onSuccess();
       } else {
@@ -320,9 +358,10 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
             {fullSelectedPrescription && (
               <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
                 <div className="flex items-center gap-2 mb-3">
-                    <Eye className="h-4 w-4 text-blue-600" />
-                    <h4 className="text-sm font-semibold text-slate-900">Détails de la correction</h4>
+                  <Eye className="h-4 w-4 text-blue-600" />
+                  <h4 className="text-sm font-semibold text-slate-900">Détails de la correction</h4>
                 </div>
+<<<<<<< Updated upstream
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
                     <div>
                         <span className="font-semibold text-blue-700 block mb-2 border-b border-blue-100 pb-1">Œil Droit (OD)</span>
@@ -345,7 +384,33 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                             <div>EP: <span className="font-bold text-blue-700">{fullSelectedPrescription.data?.og?.pd || '-'}</span></div>
                             <div>H: <span className="font-bold text-blue-700">{fullSelectedPrescription.data?.og?.height || fullSelectedPrescription.data?.og?.hauteur || '-'}</span></div>
                         </div>
+=======
+                <div className="grid grid-cols-2 gap-4 text-sm mt-2">
+                  <div className="bg-white p-3 rounded border border-slate-200">
+                    <span className="font-semibold text-blue-700 block mb-2 border-b pb-1">Œil Droit (OD)</span>
+                    <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-slate-600">
+                      <div>Sph: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.od?.sphere || '-'}</span></div>
+                      <div>Cyl: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.od?.cylinder || '-'}</span></div>
+                      <div>Axe: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.od?.axis || '-'}</span></div>
+                      <div>Add: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.od?.addition || '-'}</span></div>
+                      <div className="pt-1 border-t col-span-2 mt-1"></div>
+                      <div>EP: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.od?.pd || fullSelectedPrescription.data?.pd || '-'}</span></div>
+                      <div>H: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.od?.hauteur || '-'}</span></div>
                     </div>
+                  </div>
+                  <div className="bg-white p-3 rounded border border-slate-200">
+                    <span className="font-semibold text-blue-700 block mb-2 border-b pb-1">Œil Gauche (OG)</span>
+                    <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-slate-600">
+                      <div>Sph: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.sphere || '-'}</span></div>
+                      <div>Cyl: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.cylinder || '-'}</span></div>
+                      <div>Axe: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.axis || '-'}</span></div>
+                      <div>Add: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.addition || '-'}</span></div>
+                      <div className="pt-1 border-t col-span-2 mt-1"></div>
+                      <div>EP: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.pd || fullSelectedPrescription.data?.pd || '-'}</span></div>
+                      <div>H: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.hauteur || '-'}</span></div>
+>>>>>>> Stashed changes
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -391,6 +456,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
             )}
 
             {mode === 'contacts' && (
+<<<<<<< Updated upstream
                <FormField
                   control={form.control}
                   name="lensType"
@@ -404,6 +470,21 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                     </FormItem>
                   )}
                 />
+=======
+              <FormField
+                control={form.control}
+                name="lensType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Marque de Lentilles / Modèle</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ex: Acuvue Oasys, Biofinity..." {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+>>>>>>> Stashed changes
             )}
 
 
@@ -422,7 +503,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {isLoadingTreatments && <BrandLoader size="sm" />}
                     {!isLoadingTreatments && treatments.length === 0 && (
-                        <p className="text-sm text-slate-500 italic col-span-full">Aucun traitement configuré.</p>
+                      <p className="text-sm text-slate-500 italic col-span-full">Aucun traitement configuré.</p>
                     )}
                     {treatments.map((item) => (
                       <FormField
@@ -470,7 +551,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
               {/* Decorative background pattern */}
               <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-blue-200/20 to-transparent rounded-full blur-3xl -z-0" />
               <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-indigo-200/20 to-transparent rounded-full blur-2xl -z-0" />
-              
+
               <div className="relative z-10 flex items-center gap-3 mb-3">
                 <div className="p-2.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-md">
                   <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -484,7 +565,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                   <p className="text-xs text-blue-600/80">Gestion intelligente des marges</p>
                 </div>
               </div>
-              
+
               <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Prix de Vente Client (OBLIGATOIRE) */}
                 <FormField
@@ -501,11 +582,11 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                       </FormLabel>
                       <FormControl>
                         <div className="relative group">
-                          <Input 
+                          <Input
                             type="number"
                             step="0.01"
                             min="0"
-                            placeholder="Ex: 3500.00" 
+                            placeholder="Ex: 3500.00"
                             className="pr-14 h-11 border-2 border-blue-300/60 bg-white/80 backdrop-blur-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 group-hover:border-blue-400"
                             {...field}
                             onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
@@ -540,11 +621,11 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                       </FormLabel>
                       <FormControl>
                         <div className="relative group">
-                          <Input 
+                          <Input
                             type="number"
                             step="0.01"
                             min="0"
-                            placeholder="Ex: 2000.00 (optionnel)" 
+                            placeholder="Ex: 2000.00 (optionnel)"
                             className="pr-14 h-11 border-2 border-amber-200/60 bg-white/80 backdrop-blur-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-200 transition-all duration-200 group-hover:border-amber-300"
                             {...field}
                             onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
@@ -569,11 +650,11 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
               {(() => {
                 const sellingPrice = form.watch('sellingPrice') || 0;
                 const estimatedBuying = form.watch('estimatedBuyingPrice') || 0;
-                
+
                 if (sellingPrice > 0 && estimatedBuying > 0) {
                   const margin = sellingPrice - estimatedBuying;
                   const marginRate = (margin / sellingPrice) * 100;
-                  
+
                   let bgGradient = 'from-red-500 to-rose-600';
                   let borderColor = 'border-red-300';
                   let textColor = 'text-red-900';
@@ -584,7 +665,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                     </svg>
                   );
                   let status = 'Attention: Marge faible';
-                  
+
                   if (marginRate >= 30) {
                     bgGradient = 'from-emerald-500 to-teal-600';
                     borderColor = 'border-emerald-300';
@@ -611,7 +692,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                     bgGradient = 'from-rose-600 to-red-700';
                     status = 'Perte !';
                   }
-                  
+
                   return (
                     <div className={`relative z-10 overflow-hidden rounded-xl border-2 ${borderColor} bg-white/60 backdrop-blur-md shadow-xl`}>
                       <div className={`absolute inset-0 bg-gradient-to-r ${bgGradient} opacity-5`} />

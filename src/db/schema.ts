@@ -9,36 +9,36 @@ export const clients = pgTable('clients', {
   id: serial('id').primaryKey(),
   firebaseId: text('firebase_id').unique(),
   userId: text('user_id').notNull(), // ⚠️ CRITICAL: Store owner
-  
+
   // Full name (kept for backwards compatibility)
   fullName: text('full_name').notNull(),
-  
+
   // 🆕 Separate name fields
   prenom: text('prenom'),
   nom: text('nom'),
-  
+
   // Contact info
   email: text('email'),
   phone: text('phone'),
   phone2: text('phone_2'), // Optional secondary phone
   address: text('address'),
   city: text('city'),
-  
+
   // 🆕 Personal info
   gender: text('gender'), // 'Homme' | 'Femme'
   cin: text('cin'), // ID card number
   dateOfBirth: timestamp('date_of_birth'),
   mutuelle: text('mutuelle'), // Insurance/Mutuelle
-  
+
   notes: text('notes'),
-  
+
   balance: decimal('balance', { precision: 10, scale: 2 }).default('0'),
   creditLimit: decimal('credit_limit', { precision: 10, scale: 2 }).default('5000'), // 🆕 Max credit allowed
   totalSpent: decimal('total_spent', { precision: 10, scale: 2 }).default('0'),
-  
+
   isActive: boolean('is_active').default(true),
   lastVisit: timestamp('last_visit'), // Legacy field preserved for safety
-  
+
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
@@ -55,10 +55,10 @@ export const clientInteractions = pgTable('client_interactions', {
   id: serial('id').primaryKey(),
   userId: text('user_id').notNull(),
   clientId: integer('client_id').references(() => clients.id, { onDelete: 'cascade' }),
-  
+
   type: text('type').notNull().default('note'), // 'note', 'call', 'visit', 'whatsapp'
   content: text('content').notNull(),
-  
+
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => ({
   userIdIdx: index('interactions_user_id_idx').on(table.userId),
@@ -79,7 +79,7 @@ export const products = pgTable('products', {
   id: serial('id').primaryKey(),
   firebaseId: text('firebase_id').unique(),
   userId: text('user_id').notNull(), // Store owner
-  
+
   // Product info
   reference: text('reference'),
   nom: text('nom').notNull(),
@@ -91,12 +91,12 @@ export const products = pgTable('products', {
   matiereId: integer('matiere_id').references(() => materials.id),
   couleurId: integer('couleur_id').references(() => colors.id),
   fournisseur: text('fournisseur'),
-  
+
   // Pricing
   prixAchat: decimal('prix_achat', { precision: 10, scale: 2 }),
   prixVente: decimal('prix_vente', { precision: 10, scale: 2 }).notNull(),
   prixGros: decimal('prix_gros', { precision: 10, scale: 2 }),
-  
+
   // ✅ SMART TVA SYSTEM
   hasTva: boolean('has_tva').default(true),
   priceType: text('price_type').$type<'HT' | 'TTC'>().default('TTC'),
@@ -104,13 +104,13 @@ export const products = pgTable('products', {
   salePriceTVA: decimal('sale_price_tva', { precision: 10, scale: 2 }),
   salePriceTTC: decimal('sale_price_ttc', { precision: 10, scale: 2 }),
   exemptionNote: text('exemption_note'),
-  
+
   // Stock
   quantiteStock: integer('quantite_stock').notNull().default(0),
   reservedQuantity: integer('reserved_quantity').notNull().default(0),
   availableQuantity: integer('available_quantity').notNull().default(0),
   seuilAlerte: integer('seuil_alerte').default(5),
-  
+
   // Type of product
   type: text('type').$type<'MONTURE' | 'VERRE' | 'ACCESSOIRE' | 'AUTRE'>().notNull().default('AUTRE'),
 
@@ -136,7 +136,7 @@ export const products = pgTable('products', {
   nomIdx: index('products_nom_idx').on(table.nom),
   idx_products_user_marque: index('idx_products_user_marque').on(table.userId, table.marque), // Legacy ID index
   searchIdx: index('products_search_idx').on(table.marque, table.fournisseur),
-  
+
   // 🆕 Optimizations requested
   brandIdx: index('idx_products_brand').on(table.brand),
   productTypeIdx: index('idx_products_type').on(table.productType),
@@ -144,7 +144,7 @@ export const products = pgTable('products', {
   // but user requested strict UNIQUE on reference. 
   // We'll add the Drizzle definition for it.
   uniqueReference: uniqueIndex('unique_product_reference').on(table.reference),
-  
+
   idx_products_not_deleted: index('idx_products_not_deleted').on(table.userId, table.deletedAt), // ✅ Performance for soft delete
   idx_products_category: index('idx_products_category').on(table.category),
 }));
@@ -155,21 +155,21 @@ export const products = pgTable('products', {
 export const invoiceImports = pgTable('invoice_imports', {
   id: serial('id').primaryKey(),
   userId: text('user_id').notNull(),
-  supplierId: text('supplier_id'), 
+  supplierId: text('supplier_id'),
   invoiceNumber: text('invoice_number').notNull(),
   invoiceDate: timestamp('invoice_date'),
-  
+
   status: text('status').default('completed'), // 'completed', 'reverted'
   totalItems: integer('total_items'),
-  
+
   revertedAt: timestamp('reverted_at'),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => ({
   userInvoiceIdx: index('idx_user_invoice').on(table.userId, table.invoiceNumber),
   uniqueImport: uniqueIndex('idx_unique_import').on(
-    table.userId, 
-    table.supplierId, 
-    table.invoiceNumber, 
+    table.userId,
+    table.supplierId,
+    table.invoiceNumber,
     table.invoiceDate
   ),
 }));
@@ -186,14 +186,14 @@ export const sales = pgTable('sales', {
   userId: text('user_id').notNull(),
   saleNumber: text('sale_number'), // Internal Ref / Display Ref
   transactionNumber: text('transaction_number'), // 🆕 Official Fiscal Number (Unique Sequence)
-  
+
   // Client info
   clientId: integer('client_id').references(() => clients.id),
   clientName: text('client_name'),
   clientPhone: text('client_phone'),
   clientMutuelle: text('client_mutuelle'),
   clientAddress: text('client_address'),
-  
+
   // Financial
   totalHT: decimal('total_ht', { precision: 10, scale: 2 }),
   totalTVA: decimal('total_tva', { precision: 10, scale: 2 }),
@@ -201,20 +201,20 @@ export const sales = pgTable('sales', {
   totalNet: decimal('total_net', { precision: 10, scale: 2 }),
   totalPaye: decimal('total_paye', { precision: 10, scale: 2 }).default('0'),
   resteAPayer: decimal('reste_a_payer', { precision: 10, scale: 2 }),
-  
+
   // Status
   status: text('status').$type<'impaye' | 'partiel' | 'paye' | 'brouillon' | 'annule'>().default('impaye'),
   paymentMethod: text('payment_method'),
-  type: text('type').$type<'INVOICE' | 'QUOTE' | 'COMMANDE' | 'VENTE'>().default('VENTE'), 
-  
+  type: text('type').$type<'INVOICE' | 'QUOTE' | 'COMMANDE' | 'VENTE'>().default('VENTE'),
+
   isDeclared: boolean('is_declared').default(false), // 🆕 Dual-Mode Logic
-  
+
   // Complex data (stored as JSON)
   items: json('items').$type<any[]>().notNull(), // Legacy/Denormalized Fallback
   paymentHistory: json('payment_history').$type<any[]>(),
   prescriptionSnapshot: json('prescription_snapshot'),
-  lastPaymentDate: timestamp('last_payment_date'),
-  
+  lastPaymentDate: timestamp('last_payment_date'), // Preserve legacy field for safety
+
   notes: text('notes'),
   date: timestamp('date'),
   createdAt: timestamp('created_at').defaultNow(),
@@ -227,7 +227,7 @@ export const sales = pgTable('sales', {
   idx_sales_user_date: index('idx_sales_user_date').on(table.userId, table.createdAt),
   uniqueSaleNumber: uniqueIndex('idx_sales_unique_number').on(table.userId, table.saleNumber),
   // Fiscal number should be explicitly unique per user (or global if single fiscal entity, but here multi-tenant)
-  uniqueTransactionNumber: uniqueIndex('idx_sales_unique_transaction').on(table.userId, table.transactionNumber), 
+  uniqueTransactionNumber: uniqueIndex('idx_sales_unique_transaction').on(table.userId, table.transactionNumber),
 }));
 
 // ========================================
@@ -236,34 +236,34 @@ export const sales = pgTable('sales', {
 export const saleItems = pgTable('sale_items', {
   id: serial('id').primaryKey(),
   saleId: integer('sale_id').notNull().references(() => sales.id, { onDelete: 'cascade' }),
-  productId: integer('product_id').references(() => products.id), 
-  
+  productId: integer('product_id').references(() => products.id),
+
   // Snapshots from Product (Historical Invariance)
   brand: text('brand'),
-  category: text('category'), 
+  category: text('category'),
   productType: text('product_type').$type<'frame' | 'lens' | 'contact_lens' | 'accessory' | 'service'>(),
-  
+
   // Label on document
   label: text('label').notNull(),
-  
+
   // Quantities
   qty: integer('qty').notNull().default(1),
-  
+
   // Financial Snapshot (Unit)
   unitPriceHT: decimal('unit_price_ht', { precision: 10, scale: 2 }).notNull().default('0'),
   unitPriceTVA: decimal('unit_price_tva', { precision: 10, scale: 2 }).notNull().default('0'),
   unitPriceTTC: decimal('unit_price_ttc', { precision: 10, scale: 2 }).notNull().default('0'),
   tvaRate: decimal('tva_rate', { precision: 5, scale: 2 }).notNull().default('20'),
-  
+
   // Financial Totals (Line)
   lineTotalHT: decimal('line_total_ht', { precision: 10, scale: 2 }).notNull().default('0'),
   lineTotalTVA: decimal('line_total_tva', { precision: 10, scale: 2 }).notNull().default('0'),
   lineTotalTTC: decimal('line_total_ttc', { precision: 10, scale: 2 }).notNull().default('0'),
-  
+
   // Metadata
   isDiscountLine: boolean('is_discount_line').default(false),
   metadata: json('metadata'),
-  
+
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => ({
   saleIdIdx: index('sale_items_sale_id_idx').on(table.saleId),
@@ -276,9 +276,9 @@ export const saleItems = pgTable('sale_items', {
 export const saleLensDetails = pgTable('sale_lens_details', {
   id: serial('id').primaryKey(),
   saleItemId: integer('sale_item_id').notNull().references(() => saleItems.id, { onDelete: 'cascade' }),
-  
+
   eye: text('eye').$type<'OD' | 'OG'>().notNull(),
-  
+
   // Optical Params
   sphere: text('sphere'),
   cylinder: text('cylinder'),
@@ -291,7 +291,7 @@ export const saleLensDetails = pgTable('sale_lens_details', {
   lensType: text('lens_type'), // 'single_vision', 'progressive'
   baseCurve: text('base_curve'),
   prism: text('prism'),
-  
+
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => ({
   saleLensDetailsItemIdIdx: index('sale_lens_details_item_id_idx').on(table.saleItemId),
@@ -303,9 +303,9 @@ export const saleLensDetails = pgTable('sale_lens_details', {
 export const saleContactLensDetails = pgTable('sale_contact_lens_details', {
   id: serial('id').primaryKey(),
   saleItemId: integer('sale_item_id').notNull().references(() => saleItems.id, { onDelete: 'cascade' }),
-  
+
   eye: text('eye').$type<'OD' | 'OG' | 'BOTH'>().notNull(),
-  
+
   // Params
   power: text('power'),
   baseCurve: text('base_curve'),
@@ -314,7 +314,7 @@ export const saleContactLensDetails = pgTable('sale_contact_lens_details', {
   cylinder: text('cylinder'), // Toric params
   axis: text('axis'),
   addition: text('addition'), // Multifocal
-  
+
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => ({
   saleContactItemIdIdx: index('sale_contact_lens_details_item_id_idx').on(table.saleItemId),
@@ -327,24 +327,24 @@ export const devis = pgTable('devis', {
   id: serial('id').primaryKey(),
   firebaseId: text('firebase_id').unique(),
   userId: text('user_id').notNull(),
-  
+
   // Client
   clientId: integer('client_id').references(() => clients.id),
   clientName: text('client_name').notNull(),
   clientPhone: text('client_phone'),
-  
+
   // Items (JSON array)
   items: json('items').$type<any[]>().notNull(),
-  
+
   // Totals
   totalHT: decimal('total_ht', { precision: 10, scale: 2 }).notNull(),
   totalTTC: decimal('total_ttc', { precision: 10, scale: 2 }).notNull(),
-  
+
   // Status
   status: text('status').default('EN_ATTENTE'), // EN_ATTENTE, VALIDE, REFUSE, TRANSFORME
   saleId: integer('sale_id').references(() => sales.id),
   validUntil: timestamp('valid_until'), // 🆕 Added field
-  
+
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
 });
@@ -355,29 +355,29 @@ export const devis = pgTable('devis', {
 export const reservations = pgTable('reservations', {
   id: serial('id').primaryKey(),
   userId: text('user_id').notNull(),
-  
+
   // Client info
   clientId: integer('client_id').references(() => clients.id),
   clientName: text('client_name').notNull(),
-  
+
   // Items 
   items: json('items').$type<any[]>().notNull(), // ReservationItem[]
-  
+
   // Financial
   totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull(),
   depositAmount: decimal('deposit_amount', { precision: 10, scale: 2 }).default('0'),
   remainingAmount: decimal('remaining_amount', { precision: 10, scale: 2 }),
-  
+
   // Status & Metadata
   status: text('status').default('PENDING'), // PENDING, CONFIRMED, COMPLETED, CANCELLED, EXPIRED
   notes: text('notes'),
-  
+
   // Link to Sale (when converted)
   saleId: integer('sale_id').references(() => sales.id),
-  
+
   // Expiry
   expiryDate: timestamp('expiry_date'),
-  
+
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
 }, (table) => ({
@@ -395,16 +395,16 @@ export const stockMovements = pgTable('stock_movements', {
   id: serial('id').primaryKey(),
   firebaseId: text('firebase_id').unique(),
   userId: text('user_id').notNull(),
-  
+
   // Product reference (keep both for migration)
   produitId: text('produit_id'), // Firebase product ID
   productId: integer('product_id').references(() => products.id),
-  
+
   // Movement details
   quantite: integer('quantite').notNull(), // Negative for sales, positive for purchases
   type: text('type').notNull(), // 'Vente', 'Achat', 'Ajustement', 'Retour'
   ref: text('ref'), // Reference to sale/order ID
-  
+
   date: timestamp('date'),
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow(),
@@ -418,10 +418,10 @@ export const settings = pgTable('settings', {
   firebaseId: text('firebase_id').unique(),
   userId: text('user_id').notNull(),
   settingKey: text('setting_key').notNull(), // 'shop', 'global_banner', etc.
-  
+
   // Store as JSON for flexibility
   value: json('value').notNull(),
-  
+
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
 });
@@ -432,14 +432,14 @@ export const settings = pgTable('settings', {
 export const shopProfiles = pgTable('shop_profiles', {
   id: serial('id').primaryKey(),
   userId: text('user_id').notNull(),
-  
+
   shopName: text('shop_name').notNull(),
   address: text('address'),
   phone: text('phone'),
   ice: text('ice'),
   rib: text('rib'),
   logoUrl: text('logo_url'),
-  
+
   // Missing columns restored to prevent data loss
   paymentMethods: text('payment_methods'),
   rc: text('rc'),
@@ -449,9 +449,9 @@ export const shopProfiles = pgTable('shop_profiles', {
   inpe: text('inpe'),
   tvaRate: text('tva_rate'),
   paymentTerms: text('payment_terms'),
-  
+
   isActive: boolean('is_active').default(true),
-  
+
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
 });
@@ -463,13 +463,13 @@ export const prescriptionsLegacy = pgTable('prescriptions_legacy', {
   id: serial('id').primaryKey(),
   firebaseId: text('firebase_id').unique(),
   userId: text('user_id').notNull(),
-  
+
   // Client reference
   clientId: integer('client_id').references(() => clients.id),
-  
+
   // Prescription data (store full prescription as JSON)
   prescriptionData: json('prescription_data').notNull(),
-  
+
   // Metadata
   date: timestamp('date'),
   notes: text('notes'),
@@ -484,13 +484,13 @@ export const contactLensPrescriptions = pgTable('contact_lens_prescriptions', {
   id: serial('id').primaryKey(),
   firebaseId: text('firebase_id').unique(),
   userId: text('user_id').notNull(),
-  
+
   // Client reference
   clientId: integer('client_id').references(() => clients.id),
-  
+
   // Contact lens prescription data (store as JSON)
   prescriptionData: json('prescription_data').notNull(),
-  
+
   // Metadata
   date: timestamp('date'),
   notes: text('notes'),
@@ -505,12 +505,12 @@ export const lensOrders = pgTable('lens_orders', {
   id: serial('id').primaryKey(),
   firebaseId: text('firebase_id').unique(),
   userId: text('user_id').notNull(),
-  
+
   // References
   clientId: integer('client_id').references(() => clients.id),
   prescriptionId: integer('prescription_id').references(() => prescriptionsLegacy.id),
   saleId: integer('sale_id').references(() => sales.id), // Link to the sale when billed
-  
+
   // Order details
   orderType: text('order_type').notNull(), // 'progressive', 'bifocal', 'unifocal', 'contact'
   lensType: text('lens_type').notNull(),
@@ -518,66 +518,66 @@ export const lensOrders = pgTable('lens_orders', {
   supplierOrderId: integer('supplier_order_id').references(() => supplierOrders.id),
   treatment: text('treatment'),
   supplierName: text('supplier_name').notNull(),
-  
+
   // Explicit Prescription Details (Replacing JSON)
   sphereR: text('sphere_r'),
   cylindreR: text('cylindre_r'),
   axeR: text('axe_r'),
   additionR: text('addition_r'),
   hauteurR: text('hauteur_r'),
-  
+
   sphereL: text('sphere_l'),
   cylindreL: text('cylindre_l'),
   axeL: text('axe_l'),
   additionL: text('addition_l'),
   hauteurL: text('hauteur_l'),
-  
+
   ecartPupillaireR: text('ecart_pupillaire_r'),
   ecartPupillaireL: text('ecart_pupillaire_l'),
   diameterR: text('diameter_r'),
   diameterL: text('diameter_l'),
-  
+
   // Keep legacy JSON fields to prevent data loss 🛡️
   rightEye: json('right_eye'),
   leftEye: json('left_eye'),
-  
+
   matiere: text('matiere'),
   indice: text('indice'),
-  
+
   // ========================================
   // PROFESSIONAL PRICING WORKFLOW
   // ========================================
-  
+
   // Prix de Vente Client (fixé à la commande - OBLIGATOIRE)
   sellingPrice: decimal('selling_price', { precision: 10, scale: 2 }).notNull().default('0'),
-  
+
   // Prix d'Achat Estimé (depuis catalogue - optionnel à la commande)
   estimatedBuyingPrice: decimal('estimated_buying_price', { precision: 10, scale: 2 }),
-  
+
   // Prix d'Achat Final (validé à la réception du BL)
   finalBuyingPrice: decimal('final_buying_price', { precision: 10, scale: 2 }),
-  
+
   // Référence BL/Facture Fournisseur
   supplierInvoiceRef: text('supplier_invoice_ref'),
-  
+
   // Marges calculées
   estimatedMargin: decimal('estimated_margin', { precision: 10, scale: 2 }), // sellingPrice - estimatedBuyingPrice
   finalMargin: decimal('final_margin', { precision: 10, scale: 2 }),         // sellingPrice - finalBuyingPrice
-  
+
   // Legacy pricing (kept for backwards compatibility)
   unitPrice: decimal('unit_price', { precision: 10, scale: 2 }).notNull(),
   quantity: integer('quantity').default(1).notNull(),
   totalPrice: decimal('total_price', { precision: 10, scale: 2 }).notNull(),
-  
+
   // Status tracking
   status: text('status').default('pending').notNull(), // 'pending', 'ordered', 'received', 'delivered'
   orderDate: timestamp('order_date').defaultNow(),
   receivedDate: timestamp('received_date'),
   deliveredDate: timestamp('delivered_date'),
-  
+
   // Additional info
   notes: text('notes'),
-  
+
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
 }, (table) => ({
@@ -726,17 +726,17 @@ export const users = pgTable("users", {
   emailVerified: timestamp("emailVerified", { mode: "date" }),
   image: text("image"),
   password: text("password"),
-  
+
   // 🔐 ROLE-BASED ACCESS CONTROL
   role: text("role").$type<"ADMIN" | "USER">()
     .default("USER")
     .notNull(),
-  
+
   // 🔐 ACCOUNT STATUS
   isActive: boolean("is_active")
     .default(true)
     .notNull(),
-  
+
   // 🔐 ACCOUNT LOCKOUT (Native DB Anti-Brute Force)
   failedLoginAttempts: integer("failed_login_attempts")
     .default(0)
@@ -754,7 +754,7 @@ export const users = pgTable("users", {
   subscriptionExpiry: timestamp("subscription_expiry"),
 
   // 💳 FINANCIAL TRACKING
-  paymentMode: text("payment_mode").$type<"subscription" | "lifetime">().default("subscription"), 
+  paymentMode: text("payment_mode").$type<"subscription" | "lifetime">().default("subscription"),
   billingCycle: text("billing_cycle").$type<"monthly" | "yearly">().default("monthly"),
   agreedPrice: decimal("agreed_price", { precision: 10, scale: 2 }),
   trainingPrice: decimal("training_price", { precision: 10, scale: 2 }).default("0"),
@@ -762,7 +762,7 @@ export const users = pgTable("users", {
   amountPaid: decimal("amount_paid", { precision: 10, scale: 2 }).default("0"),
   installmentsCount: integer("installments_count").default(1),
   nextInstallmentDate: timestamp("next_installment_date"),
-  
+
   // 📅 ACTIVITY TRACKING
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -799,12 +799,12 @@ export const sessions = pgTable("sessions", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   expires: timestamp("expires", { mode: "date" }).notNull(),
-  
+
   // 🔍 SESSION SECURITY (New fields)
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
   fingerprint: text("fingerprint"), // SHA-256(IP + UA)
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   lastActivityAt: timestamp("last_activity_at").defaultNow(),
 });
@@ -917,7 +917,7 @@ export const suppliers = pgTable('suppliers', {
   userId: text('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
-  
+
   // Basic Info
   name: text('name').notNull(),
   contactPerson: text('contact_person'),
@@ -925,13 +925,13 @@ export const suppliers = pgTable('suppliers', {
   phone: text('phone'),
   address: text('address'),
   city: text('city'),
-  
+
   // Legal & Fiscal
   ice: text('ice'),
   if: text('if'),
   rc: text('rc'),
   taxId: text('tax_id'),
-  
+
   // Financial
   category: text('category'),
   paymentTerms: text('payment_terms').default('30'),
@@ -947,7 +947,7 @@ export const suppliers = pgTable('suppliers', {
   isActive: boolean('is_active').default(true),
   status: text('status').default('Actif'),
   defaultTaxMode: text('default_tax_mode').default('HT'), // 'HT' or 'TTC'
-  
+
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -959,39 +959,39 @@ export const supplierOrders = pgTable('supplier_orders', {
   id: serial('id').primaryKey(),
   firebaseId: text('firebase_id').unique(),
   userId: text('user_id').notNull(),
-  
+
   // Identity
   orderNumber: text('order_number').unique(), // 🆕 BC-2026-XXXXXX
   supplierId: uuid('supplier_id').references(() => suppliers.id),
   fournisseur: text('fournisseur').notNull(),
   supplierPhone: text('supplier_phone'),
-  
+
   // Items 
   items: json('items').$type<any[]>(),
-  
+
   // Financial
   subTotal: decimal('sub_total', { precision: 10, scale: 2 }),
   tva: decimal('tva', { precision: 10, scale: 2 }),
   discount: decimal('discount', { precision: 10, scale: 2 }),
   shippingCost: decimal('shipping_cost', { precision: 10, scale: 2 }),
-  
+
   montantTotal: decimal('montant_total', { precision: 10, scale: 2 }).notNull(),
   montantPaye: decimal('montant_paye', { precision: 10, scale: 2 }).default('0'),
   resteAPayer: decimal('reste_a_payer', { precision: 10, scale: 2 }),
-  
+
   // Status
   statut: text('statut').default('pending'),
   deliveryStatus: text('delivery_status').default('pending'),
-  
+
   // Dates
   dateCommande: timestamp('date_commande'),
   expectedDelivery: timestamp('expected_delivery'),
   dateReception: timestamp('date_reception'),
   dueDate: timestamp('due_date'),
-  
+
   notes: text('notes'),
   orderReference: text('order_reference'),
-  
+
   createdBy: text('created_by'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
@@ -1003,30 +1003,30 @@ export const supplierOrders = pgTable('supplier_orders', {
 export const supplierOrderItems = pgTable('supplier_order_items', {
   id: serial('id').primaryKey(),
   supplierOrderId: integer('supplier_order_id').references(() => supplierOrders.id, { onDelete: 'cascade' }),
-  
+
   productType: text('product_type'),
   productName: text('product_name'),
   description: text('description'),
-  
+
   // Specific specs
   lensType: text('lens_type'),
   lensMaterial: text('lens_material'),
   lensIndex: text('lens_index'),
   coating: text('coating'),
-  
+
   // Specific specs (Explicit)
   sphere: text('sphere'),
   cylindre: text('cylindre'),
   axe: text('axe'),
   addition: text('addition'),
   hauteur: text('hauteur'),
-  
+
   quantity: integer('quantity').notNull(),
   receivedQuantity: integer('received_quantity').default(0),
-  
+
   unitPrice: decimal('unit_price', { precision: 10, scale: 2 }),
   totalPrice: decimal('total_price', { precision: 10, scale: 2 }),
-  
+
   createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -1037,28 +1037,28 @@ export const supplierPayments = pgTable('supplier_payments', {
   id: uuid('id').defaultRandom().primaryKey(),
   firebaseId: text('firebase_id').unique(),
   userId: text('user_id').notNull(),
-  
+
   paymentNumber: text('payment_number').unique(),
-  
+
   supplierId: uuid('supplier_id').references(() => suppliers.id),
   supplierName: text('supplier_name').notNull(),
-  
+
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
   method: text('method').notNull(),
-  
+
   // Details
   reference: text('reference'),
   chequeNumber: text('cheque_number'),
   bank: text('bank'),
-  
+
   dueDate: timestamp('due_date'),
   status: text('status').default('COMPLETED'),
-  
+
   date: timestamp('date').defaultNow(),
   notes: text('notes'),
-  
+
   createdBy: text('created_by'),
-  
+
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
 });
@@ -1067,12 +1067,12 @@ export const supplierPayments = pgTable('supplier_payments', {
 export const supplierOrderPayments = pgTable('supplier_order_payments', {
   id: serial('id').primaryKey(),
   userId: text('user_id').notNull(),
-  
+
   paymentId: uuid('payment_id').references(() => supplierPayments.id, { onDelete: 'cascade' }),
   orderId: integer('order_id').references(() => supplierOrders.id, { onDelete: 'cascade' }),
-  
+
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
-  
+
   createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -1091,23 +1091,23 @@ export const supplierOrderPayments = pgTable('supplier_order_payments', {
 export const clientTransactions = pgTable('client_transactions', {
   id: serial('id').primaryKey(),
   userId: text('user_id').notNull(),
-  
+
   clientId: integer('client_id').references(() => clients.id, { onDelete: 'cascade' }),
-  
+
   type: text('type').notNull(), // 'SALE', 'PAYMENT', 'RETURN', 'ADJUSTMENT', 'OPENING_BALANCE'
   referenceId: text('reference_id'), // Sale ID, Payment Ref
-  
-  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(), 
+
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
   // Convention: 
   // + Positive = Debit (Client uses credit/buys) -> Increases Balance
   // - Negative = Credit (Client pays) -> Decreases Balance
-  
+
   previousBalance: decimal('previous_balance', { precision: 10, scale: 2 }).notNull(),
   newBalance: decimal('new_balance', { precision: 10, scale: 2 }).notNull(),
-  
+
   date: timestamp('date').defaultNow(),
   notes: text('notes'),
-  
+
   createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -1116,11 +1116,11 @@ export const clientTransactions = pgTable('client_transactions', {
 // ========================================
 
 export const supplierPaymentsRelations = relations(supplierPayments, ({ one, many }) => ({
-    supplier: one(suppliers, {
-        fields: [supplierPayments.supplierId],
-        references: [suppliers.id],
-    }),
-    allocations: many(supplierOrderPayments),
+  supplier: one(suppliers, {
+    fields: [supplierPayments.supplierId],
+    references: [suppliers.id],
+  }),
+  allocations: many(supplierOrderPayments),
 })); // End of relations
 
 // ========================================
@@ -1164,8 +1164,8 @@ export const purchases = pgTable("purchases", {
   supplierName: text("supplier_name").notNull(),
   type: text("type").notNull(),
   reference: text("reference"),
-  totalAmount: decimal("total_amount", { precision: 10, scale:  2 }).notNull(),
-  amountPaid: decimal("amount_paid", { precision: 10, scale:  2 }).default('0'),
+  totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
+  amountPaid: decimal("amount_paid", { precision: 10, scale: 2 }).default('0'),
   status: text("status").default('UNPAID').notNull(),
   date: timestamp("date"),
   dueDate: timestamp("due_date"),
@@ -1176,29 +1176,29 @@ export const purchases = pgTable("purchases", {
 
 
 export const supplierOrderPaymentsRelations = relations(supplierOrderPayments, ({ one }) => ({
-    payment: one(supplierPayments, {
-        fields: [supplierOrderPayments.paymentId],
-        references: [supplierPayments.id],
-    }),
-    order: one(supplierOrders, {
-        fields: [supplierOrderPayments.orderId],
-        references: [supplierOrders.id],
-    }),
+  payment: one(supplierPayments, {
+    fields: [supplierOrderPayments.paymentId],
+    references: [supplierPayments.id],
+  }),
+  order: one(supplierOrders, {
+    fields: [supplierOrderPayments.orderId],
+    references: [supplierOrders.id],
+  }),
 }));
 
 export const supplierOrdersRelations = relations(supplierOrders, ({ one, many }) => ({
-    supplier: one(suppliers, {
-        fields: [supplierOrders.supplierId],
-        references: [suppliers.id],
-    }),
-    payments: many(supplierOrderPayments),
+  supplier: one(suppliers, {
+    fields: [supplierOrders.supplierId],
+    references: [suppliers.id],
+  }),
+  payments: many(supplierOrderPayments),
 }));
 
 export const clientTransactionsRelations = relations(clientTransactions, ({ one }) => ({
-    client: one(clients, {
-        fields: [clientTransactions.clientId],
-        references: [clients.id],
-    }),
+  client: one(clients, {
+    fields: [clientTransactions.clientId],
+    references: [clients.id],
+  }),
 }));
 
 // ========================================
@@ -1207,20 +1207,20 @@ export const clientTransactionsRelations = relations(clientTransactions, ({ one 
 export const expenses = pgTable('expenses', {
   id: serial('id').primaryKey(),
   userId: text('user_id').notNull(), // Multi-tenancy
-  
+
   title: text('title').notNull(),
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
-  
+
   // 'EAU', 'ELECTRICITE', 'LOYER', 'INTERNET', 'SALAIRE', 'AUTRE', 'IMPOT', 'TRANSPORT'
-  category: text('category').notNull().default('AUTRE'), 
-  
+  category: text('category').notNull().default('AUTRE'),
+
   status: text('status').default('PAYE'), // 'PAYE', 'IMPAYE'
   date: timestamp('date').defaultNow().notNull(),
-  
+
   // Metadata
   proofUrl: text('proof_url'), // Link to receipt/invoice image
   notes: text('notes'),
-  
+
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
 }, (table) => ({
@@ -1234,12 +1234,12 @@ export const prescriptions = pgTable('prescriptions', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: text('user_id').notNull(),
   clientId: integer('client_id').references(() => clients.id, { onDelete: 'cascade' }),
-  
+
   // Ordonnance metadata
   prescriptionDate: timestamp('prescription_date'),
   doctorName: text('doctor_name'),
   imageUrl: text('image_url'),
-  
+
   // OD (Œil Droit / Right Eye)
   odSph: real('od_sph'),        // Sphere: -20.00 to +20.00
   odCyl: real('od_cyl'),        // Cylinder: -6.00 to +6.00
@@ -1247,7 +1247,7 @@ export const prescriptions = pgTable('prescriptions', {
   odAdd: real('od_add'),        // Addition: 0 to +4.00
   odPd: real('od_pd'),          // Monocular PD Right
   odHeight: real('od_height'),  // Fitting Height Right
-  
+
   // OS (Œil Gauche / Left Eye)
   osSph: real('os_sph'),
   osCyl: real('os_cyl'),
@@ -1255,14 +1255,15 @@ export const prescriptions = pgTable('prescriptions', {
   osAdd: real('os_add'),
   osPd: real('os_pd'),          // Monocular PD Left
   osHeight: real('os_height'), // Fitting Height Left
-  
+
   // Pupillary Distance (Legacy/Combined)
+
   pd: real('pd'),               // 50-80 mm typical
-  
+
   // Notes & Status
   notes: text('notes'),
   status: text('status').default('pending'), // pending | approved | completed
-  
+
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -1279,35 +1280,35 @@ export const prescriptionsRelations = relations(prescriptions, ({ one }) => ({
 // ========================================
 export const frameReservations = pgTable('frame_reservations', {
   id: serial('id').primaryKey(),
-  
+
   // Note: storeId references users.id as 'stores' table doesn't exist in this project
   storeId: text('store_id').notNull().references(() => users.id),
   clientId: integer('client_id').notNull().references(() => clients.id),
   clientName: text('client_name').notNull(),
-  
+
   status: text('status')
     .$type<'PENDING' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED'>()
     .notNull()
     .default('PENDING'),
-  
+
   items: json('items').$type<{
     productId: number;
     productName: string;
     reference: string | null;
     quantity: number;
   }[]>().notNull(),
-  
+
   reservationDate: timestamp('reservation_date', { mode: 'date' })
     .notNull()
     .defaultNow(),
-  
+
   expiryDate: timestamp('expiry_date', { mode: 'date' }).notNull(),
-  
+
   completedAt: timestamp('completed_at', { mode: 'date' }),
   saleId: integer('sale_id').references(() => sales.id),
-  
+
   notes: text('notes'),
-  
+
   createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { mode: 'date' })
     .notNull()

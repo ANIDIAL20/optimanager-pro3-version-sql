@@ -50,10 +50,10 @@ export function PrescriptionList({ clientId }: PrescriptionListProps) {
   const loadPrescriptions = React.useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const result = await getPrescriptions(clientId);
-      
+
       if (result.success && result.data) {
         setPrescriptions(result.data);
       } else {
@@ -72,7 +72,7 @@ export function PrescriptionList({ clientId }: PrescriptionListProps) {
 
   const handleDelete = async (prescriptionId: string) => {
     // Confirmation handled by AlertDialog
-    
+
     setDeletingId(prescriptionId);
     try {
       const result = await deletePrescription(prescriptionId);
@@ -128,8 +128,13 @@ export function PrescriptionList({ clientId }: PrescriptionListProps) {
                 <TableHead>OG Sphère/Cyl/Axe</TableHead>
                 <TableHead>Addition</TableHead>
                 <TableHead>EP (OD/OG)</TableHead>
+<<<<<<< Updated upstream
                 <TableHead>Hauteur (OD/OG)</TableHead>
                 <TableHead>Prescripteur</TableHead>
+=======
+                <TableHead>H (OD/OG)</TableHead>
+                <TableHead>Docteur</TableHead>
+>>>>>>> Stashed changes
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
@@ -146,42 +151,51 @@ export function PrescriptionList({ clientId }: PrescriptionListProps) {
                     {p.data?.og ? `${p.data.og.sphere || '-'} / ${p.data.og.cylinder || '-'} / ${p.data.og.axis || '-'}°` : '-'}
                   </TableCell>
                   <TableCell>
-                    {p.data?.od?.addition || p.data?.og?.addition 
+                    {p.data?.od?.addition || p.data?.og?.addition
                       ? `OD:${p.data.od?.addition || '-'} | OG:${p.data.og?.addition || '-'}`
                       : '-'}
                   </TableCell>
                   <TableCell>
                     {p.data?.od?.pd || p.data?.og?.pd 
+<<<<<<< Updated upstream
                       ? `${p.data.od?.pd || '-'} | ${p.data.og?.pd || '-'}`
                       : p.data?.pd || '-'}
                   </TableCell>
                   <TableCell>
                     {p.data?.od?.height || p.data?.og?.height 
                       ? `${p.data.od?.height || '-'} | ${p.data.og?.height || '-'}`
+=======
+                      ? `${p.data.od?.pd || '-'} / ${p.data.og?.pd || '-'}`
+                      : p.data?.pd || '-'}
+                  </TableCell>
+                  <TableCell>
+                    {p.data?.od?.hauteur || p.data?.og?.hauteur 
+                      ? `${p.data.od?.hauteur || '-'} / ${p.data.og?.hauteur || '-'}`
+>>>>>>> Stashed changes
                       : '-'}
                   </TableCell>
                   <TableCell>{p.data?.doctorName || '-'}</TableCell>
                   <TableCell>
-                      {/* @ts-ignore */}
-                      <AlertDialog modal={false}>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={deletingId === p.id}
-                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent 
-                          onInteractOutside={(e) => e.preventDefault()}
-                          onOpenAutoFocus={(e) => e.preventDefault()}
-                          onCloseAutoFocus={(e) => {
-                            e.preventDefault();
-                            document.body.style.pointerEvents = 'auto';
-                          }}
+                    {/* @ts-ignore */}
+                    <AlertDialog modal={false}>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={deletingId === p.id}
+                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
                         >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent
+                        onInteractOutside={(e) => e.preventDefault()}
+                        onOpenAutoFocus={(e) => e.preventDefault()}
+                        onCloseAutoFocus={(e) => {
+                          e.preventDefault();
+                          document.body.style.pointerEvents = 'auto';
+                        }}
+                      >
                         <AlertDialogHeader>
                           <AlertDialogTitle>Supprimer l'ordonnance ?</AlertDialogTitle>
                           <AlertDialogDescription>
@@ -190,7 +204,7 @@ export function PrescriptionList({ clientId }: PrescriptionListProps) {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Annuler</AlertDialogCancel>
-                          <AlertDialogAction 
+                          <AlertDialogAction
                             onClick={() => handleDelete(p.id)}
                             className="bg-red-600 hover:bg-red-700 text-white"
                           >
