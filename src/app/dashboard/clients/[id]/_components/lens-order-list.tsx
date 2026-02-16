@@ -139,11 +139,11 @@ export function LensOrderList({ clientId, clientName, mode = 'glasses', onUseOrd
 
       if (result.success && result.data) {
         const allOrders = result.data as LensOrder[];
-        
+
         // Filter based on mode
         const filtered = allOrders.filter(o => {
-            if (mode === 'contacts') return o.orderType === 'contact';
-            return o.orderType !== 'contact';
+          if (mode === 'contacts') return o.orderType === 'contact';
+          return o.orderType !== 'contact';
         });
 
         setOrders(filtered);
@@ -239,7 +239,12 @@ export function LensOrderList({ clientId, clientName, mode = 'glasses', onUseOrd
   // Handle print with PRO design
   const handlePrint = () => {
     if (!selectedOrder) return;
+<<<<<<< Updated upstream
     
+=======
+
+    // Map explicit columns to objects for the SVG helper
+>>>>>>> Stashed changes
     const od = {
       sphere: selectedOrder.sphereR,
       cylinder: selectedOrder.cylindreR,
@@ -262,10 +267,10 @@ export function LensOrderList({ clientId, clientName, mode = 'glasses', onUseOrd
     // Helper to generate SVG for an eye
     const getLensSVG = (side: string, data: any) => {
       if (!data.sphere && !data.cylinder && !data.axis) return '';
-      
+
       const axis = data.axis ? parseInt(data.axis) : 0;
       const hasAxis = !!data.axis;
-      
+
       return `
         <div class="lens-diagram">
           <div class="lens-label">${side === 'OD' ? 'Oeil Droit (OD)' : 'Oeil Gauche (OG)'}</div>
@@ -315,44 +320,47 @@ export function LensOrderList({ clientId, clientName, mode = 'glasses', onUseOrd
           <head>
             <title>Commande - ${selectedOrder.lensType}</title>
             <style>
-              @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-import { BrandLoader } from '@/components/ui/loader-brand';
+              @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
               
               body { 
-                font-family: 'Inter', sans-serif; 
-                padding: 30px; 
-                max-width: 210mm; /* A4 width */
+                font-family: 'Inter', -apple-system, sans-serif; 
+                padding: 40px; 
+                max-width: 210mm;
                 margin: 0 auto; 
-                color: #1e293b;
-                line-height: 1.4;
+                color: #0f172a;
+                line-height: 1.5;
+                background: white;
               }
               
               /* Header */
               .header {
                 display: flex;
                 justify-content: space-between;
-                align-items: start;
-                border-bottom: 2px solid #e2e8f0;
-                padding-bottom: 15px;
-                margin-bottom: 20px;
+                align-items: center;
+                border-bottom: 3px solid #3b82f6;
+                padding-bottom: 20px;
+                margin-bottom: 30px;
               }
-              .company-info img {
-                max-height: 70px;
-                margin-bottom: 8px;
+              .logo-container {
+                width: 150px;
+                height: 80px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: #f8fafc;
+                border-radius: 12px;
+                overflow: hidden;
               }
-              /* ... (keep other styles) */
-              
-              /* Lens Diagrams */
-              .lens-diagrams-container {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 30px;
-                margin-bottom: 20px;
-                padding: 15px;
-                background: #fff;
-                border: 1px solid #e2e8f0;
-                border-radius: 8px;
-                page-break-inside: avoid;
+              .logo-img {
+                max-width: 100%;
+                max-height: 100%;
+                object-fit: contain;
+              }
+              .shop-name {
+                font-size: 20px;
+                font-weight: 800;
+                color: #1e40af;
+                margin-bottom: 4px;
               }
               .lens-diagram {
                 display: flex;
@@ -516,18 +524,24 @@ import { BrandLoader } from '@/components/ui/loader-brand';
             <!-- Header -->
             <div class="header">
               <div class="company-info">
-                ${shopSettings?.logoUrl ? `<img src="${shopSettings.logoUrl}" alt="Logo" />` : ''}
-                <div class="company-details">
-                  <strong>${shopSettings?.shopName || 'Opticien'}</strong><br>
+                <div class="logo-container">
+                    ${shopSettings?.logoUrl ? `<img src="${shopSettings.logoUrl}" class="logo-img" alt="Logo" />` : `<div style="font-weight: 800; color: #3b82f6; font-size: 24px;">${shopSettings?.shopName?.charAt(0) || 'O'}</div>`}
+                </div>
+                <div class="company-details" style="margin-top: 12px;">
+                  <div class="shop-name">${shopSettings?.shopName || 'Opticien'}</div>
                   ${shopSettings?.address ? `${shopSettings.address}<br>` : ''}
-                  ${shopSettings?.phone ? `Tél: ${shopSettings.phone}<br>` : ''}
-                  ${shopSettings?.ice ? `ICE: ${shopSettings.ice}` : ''}
+                  ${shopSettings?.phone ? `<strong>Tél:</strong> ${shopSettings.phone}<br>` : ''}
                 </div>
               </div>
               <div class="order-meta">
                 <h1 class="order-title">Bon de Commande</h1>
-                <div class="order-ref">N° #${selectedOrder.id}</div>
-                <div class="order-ref">Date: ${selectedOrder.orderDate ? format(new Date(selectedOrder.orderDate), 'dd/MM/yyyy') : '-'}</div>
+                <div class="order-ref" style="font-weight: 700; color: #1e293b; font-size: 18px; margin-top: 10px;">REF: #${selectedOrder.id}</div>
+                <div class="order-ref">Émis le: ${selectedOrder.orderDate ? format(new Date(selectedOrder.orderDate), 'dd/MM/yyyy') : '-'}</div>
+                 <div style="margin-top: 15px; display: flex; justify-content: flex-end;">
+                  <div style="padding: 5px 15px; border-radius: 20px; background: #e0f2fe; color: #0369a1; font-weight: 700; font-size: 12px; text-transform: uppercase;">
+                    ${selectedOrder.status}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -651,7 +665,7 @@ import { BrandLoader } from '@/components/ui/loader-brand';
     setIsShareDialogOpen(false);
     toast({ title: 'Impression', description: 'Document prêt à imprimer' });
   };
-   
+
   // ... (rest of component: handleDelete, Table, etc.)
 
 
@@ -680,7 +694,7 @@ import { BrandLoader } from '@/components/ui/loader-brand';
   // Confirm delete
   const confirmDelete = async () => {
     if (!selectedOrder) return;
-    
+
     setDeletingId(selectedOrder.id);
     try {
       const result = await deleteLensOrder(selectedOrder.id.toString());
@@ -704,12 +718,12 @@ import { BrandLoader } from '@/components/ui/loader-brand';
       <Card>
         <CardHeader>
           <CardTitle>
-              {mode === 'contacts' ? 'Historique des Commandes de Lentilles' : 'Historique des Commandes de Verres'}
+            {mode === 'contacts' ? 'Historique des Commandes de Lentilles' : 'Historique des Commandes de Verres'}
           </CardTitle>
           <CardDescription>
-            {mode === 'contacts' 
-                ? 'Liste de toutes les commandes de lentilles pour ce client.' 
-                : 'Liste de toutes les commandes de verres pour ce client.'}
+            {mode === 'contacts'
+              ? 'Liste de toutes les commandes de lentilles pour ce client.'
+              : 'Liste de toutes les commandes de verres pour ce client.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -731,7 +745,7 @@ import { BrandLoader } from '@/components/ui/loader-brand';
           )}
           {!isLoading && !error && orders && orders.length === 0 && (
             <div className="text-center text-muted-foreground py-6">
-              {mode === 'contacts' 
+              {mode === 'contacts'
                 ? 'Aucune commande de lentilles trouvée pour ce client.'
                 : 'Aucune commande de verres trouvée pour ce client.'}
             </div>
@@ -834,7 +848,7 @@ import { BrandLoader } from '@/components/ui/loader-brand';
 
       {/* @ts-ignore */}
       <Dialog modal={false} open={isUpdateDialogOpen} onOpenChange={setIsUpdateDialogOpen}>
-        <DialogContent 
+        <DialogContent
           onInteractOutside={(e) => e.preventDefault()}
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => {
@@ -883,8 +897,8 @@ import { BrandLoader } from '@/components/ui/loader-brand';
       </Dialog>
 
       {/* Receive Order Dialog */}
-      <ReceiveOrderDialog 
-        open={isReceiveDialogOpen} 
+      <ReceiveOrderDialog
+        open={isReceiveDialogOpen}
         onOpenChange={setIsReceiveDialogOpen}
         order={selectedOrder}
         onSuccess={() => {
@@ -895,7 +909,7 @@ import { BrandLoader } from '@/components/ui/loader-brand';
 
       {/* @ts-ignore */}
       <AlertDialog modal={false} open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent 
+        <AlertDialogContent
           onInteractOutside={(e) => e.preventDefault()}
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => {
@@ -928,7 +942,7 @@ import { BrandLoader } from '@/components/ui/loader-brand';
 
       {/* @ts-ignore */}
       <Dialog modal={false} open={isViewDetailsOpen} onOpenChange={setIsViewDetailsOpen}>
-        <DialogContent 
+        <DialogContent
           className="max-w-3xl"
           onInteractOutside={(e) => e.preventDefault()}
           onOpenAutoFocus={(e) => e.preventDefault()}
@@ -972,16 +986,23 @@ import { BrandLoader } from '@/components/ui/loader-brand';
               <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
                 <h4 className="text-sm font-semibold text-slate-900 mb-3 uppercase tracking-wider">Correction Optique</h4>
                 <div className="grid grid-cols-2 gap-6 text-sm">
-                  <div className="space-y-2">
-                    <p className="font-bold text-blue-700 border-b pb-1">Oeil Droit (OD)</p>
-                    <div className="grid grid-cols-2 gap-y-1 text-slate-600">
-                      <span>Sphère:</span> <span className="font-semibold text-slate-900">{selectedOrder.sphereR || '-'}</span>
-                      <span>Cylindre:</span> <span className="font-semibold text-slate-900">{selectedOrder.cylindreR || '-'}</span>
-                      <span>Axe:</span> <span className="font-semibold text-slate-900">{selectedOrder.axeR ? `${selectedOrder.axeR}°` : '-'}</span>
-                      <span>Addition:</span> <span className="font-semibold text-slate-900">{selectedOrder.additionR || '-'}</span>
-                      <span>Hauteur:</span> <span className="font-semibold text-slate-900">{selectedOrder.hauteurR || '-'}</span>
+                  <div className="space-y-3">
+                    <p className="font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                      Oeil Droit (OD)
+                    </p>
+                    <div className="grid grid-cols-2 gap-y-2 gap-x-4 px-2 text-slate-600">
+                      <span>Sphère:</span> <span className="font-bold text-slate-900">{selectedOrder.sphereR || '-'}</span>
+                      <span>Cylindre:</span> <span className="font-bold text-slate-900">{selectedOrder.cylindreR || '-'}</span>
+                      <span>Axe:</span> <span className="font-bold text-slate-900">{selectedOrder.axeR ? `${selectedOrder.axeR}°` : '-'}</span>
+                      <span>Addition:</span> <span className="font-bold text-slate-900">{selectedOrder.additionR || '-'}</span>
+                      <div className="col-span-2 border-t pt-1 mt-1 grid grid-cols-2">
+                        <span className="text-xs text-slate-500 uppercase">EP:</span> <span className="font-bold text-blue-800">{selectedOrder.ecartPupillaireR || '-'}</span>
+                        <span className="text-xs text-slate-500 uppercase">H:</span> <span className="font-bold text-blue-800">{selectedOrder.hauteurR || '-'}</span>
+                      </div>
                     </div>
                   </div>
+<<<<<<< Updated upstream
                   <div className="space-y-2">
                     <p className="font-bold text-blue-700 border-b pb-1">Oeil Gauche (OG)</p>
                     <div className="grid grid-cols-2 gap-y-1 text-slate-600">
@@ -991,6 +1012,22 @@ import { BrandLoader } from '@/components/ui/loader-brand';
                       <span>Addition:</span> <span className="font-semibold text-slate-900">{selectedOrder.additionL || '-'}</span>
                       <span>Hauteur:</span> <span className="font-semibold text-slate-900">{selectedOrder.hauteurL || '-'}</span>
                       <span>EP / Diamètre:</span> <span className="font-semibold text-slate-900">{selectedOrder.ecartPupillaireL || '-'}/{selectedOrder.diameterL || '-'}</span>
+=======
+                  <div className="space-y-3">
+                    <p className="font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
+                      Oeil Gauche (OG)
+                    </p>
+                    <div className="grid grid-cols-2 gap-y-2 gap-x-4 px-2 text-slate-600">
+                      <span>Sphère:</span> <span className="font-bold text-slate-900">{selectedOrder.sphereL || '-'}</span>
+                      <span>Cylindre:</span> <span className="font-bold text-slate-900">{selectedOrder.cylindreL || '-'}</span>
+                      <span>Axe:</span> <span className="font-bold text-slate-900">{selectedOrder.axeL ? `${selectedOrder.axeL}°` : '-'}</span>
+                      <span>Addition:</span> <span className="font-bold text-slate-900">{selectedOrder.additionL || '-'}</span>
+                      <div className="col-span-2 border-t pt-1 mt-1 grid grid-cols-2">
+                        <span className="text-xs text-slate-500 uppercase">EP:</span> <span className="font-bold text-indigo-800">{selectedOrder.ecartPupillaireL || '-'}</span>
+                        <span className="text-xs text-slate-500 uppercase">H:</span> <span className="font-bold text-indigo-800">{selectedOrder.hauteurL || '-'}</span>
+                      </div>
+>>>>>>> Stashed changes
                     </div>
                   </div>
                 </div>
