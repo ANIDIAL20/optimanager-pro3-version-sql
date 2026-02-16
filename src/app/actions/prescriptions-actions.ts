@@ -23,12 +23,14 @@ export interface EyePrescription {
     addition?: string;
     pd?: string;
     height?: string;
+
 }
 
 export interface PrescriptionData {
     od: EyePrescription;
     og: EyePrescription;
-    pd: string;
+    pd?: string;          // Binocular Pupillary Distance (legacy/total)
+    hauteur?: string;     // Montage Height (legacy/total)
     doctorName?: string;
 }
 
@@ -65,10 +67,10 @@ export const getPrescriptions = secureAction(async (userId, user, clientId?: str
                 eq(prescriptions.userId, userId),
                 clientId ? eq(prescriptions.clientId, parseInt(clientId)) : undefined
             ),
-            with: { 
+            with: {
                 client: {
                     columns: { id: true, fullName: true }
-                } 
+                }
             }
         });
 
@@ -81,15 +83,16 @@ export const getPrescriptions = secureAction(async (userId, user, clientId?: str
                     eq(newPrescriptionsTable.userId, userId),
                     clientId ? eq(newPrescriptionsTable.clientId, parseInt(clientId)) : undefined
                 ),
-                 with: { 
+                with: {
                     client: {
                         columns: { id: true, fullName: true }
-                    } 
+                    }
                 }
             });
         } catch (error) {
             console.warn("⚠️ Could not fetch from new prescriptions table:", error);
         }
+
 
         const legacyResults = await legacyQuery;
 
@@ -210,7 +213,7 @@ export const createPrescription = secureAction(async (userId, user, input: Presc
         }).returning();
 
         await logSuccess(userId, 'CREATE', 'prescriptions', result[0].id.toString());
-        
+
         revalidatePath('/dashboard/clients');
         revalidatePath(`/dashboard/clients/${clientId}`);
 
@@ -232,7 +235,7 @@ export const updatePrescription = secureAction(async (userId, user, id: string, 
         const existing = await db.select().from(prescriptions)
             .where(and(eq(prescriptions.id, prescriptionId), eq(prescriptions.userId, userId)))
             .limit(1);
-        
+
         if (existing.length === 0) return { success: false, error: 'Ordonnance introuvable' };
 
         const updateData: any = { updatedAt: new Date() };
@@ -271,12 +274,12 @@ export const deletePrescription = secureAction(async (userId, user, id: string) 
 
         // 2. If not found, try deleting from NEW table (UUID)
         if (!deleted) {
-             const result = await db.delete(newPrescriptionsTable)
+            const result = await db.delete(newPrescriptionsTable)
                 .where(and(eq(newPrescriptionsTable.id, id), eq(newPrescriptionsTable.userId, userId)))
                 .returning();
-             if (result.length > 0) deleted = true;
+            if (result.length > 0) deleted = true;
         }
-        
+
         if (!deleted) return { success: false, error: 'Ordonnance introuvable' };
 
         await logSuccess(userId, 'DELETE', 'prescriptions', id);

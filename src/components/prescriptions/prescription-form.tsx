@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { 
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -24,47 +24,47 @@ interface Props {
   isLoading?: boolean;
 }
 
-export function PrescriptionForm({ 
-  initialData, 
-  onSave, 
+export function PrescriptionForm({
+  initialData,
+  onSave,
   confidence,
-  isLoading = false 
+  isLoading = false
 }: Props) {
   const [data, setData] = useState<PrescriptionData>(
     initialData || {
-      OD: { sph: null, cyl: null, axis: null, add: null },
-      OS: { sph: null, cyl: null, axis: null, add: null },
+      OD: { sph: null, cyl: null, axis: null, add: null, pd: null, hauteur: null },
+      OS: { sph: null, cyl: null, axis: null, add: null, pd: null, hauteur: null },
       PD: null,
       doctorName: undefined,
       date: undefined
     }
   );
-  
+
   const [notes, setNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<any[]>([]);
-  
+
   // Update data when initialData changes
   useEffect(() => {
     if (initialData) {
       setData(initialData);
     }
   }, [initialData]);
-  
+
   // Validate on change
   useEffect(() => {
     const validation = validatePrescription(data);
     setErrors(validation.errors);
   }, [data]);
-  
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     const validation = validatePrescription(data);
     if (!validation.isValid) {
       return;
     }
-    
+
     setIsSaving(true);
     try {
       await onSave(data, notes);
@@ -72,7 +72,7 @@ export function PrescriptionForm({
       setIsSaving(false);
     }
   };
-  
+
   return (
     <TooltipProvider>
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -81,13 +81,13 @@ export function PrescriptionForm({
           <Alert variant="warning">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              {confidence === 'low' 
+              {confidence === 'low'
                 ? 'Certaines valeurs n\'ont pas pu être détectées avec précision. Veuillez vérifier attentivement.'
                 : 'Veuillez vérifier les valeurs détectées.'}
             </AlertDescription>
           </Alert>
         )}
-        
+
         {/* Validation Errors */}
         {errors.length > 0 && (
           <Alert variant="destructive">
@@ -101,7 +101,7 @@ export function PrescriptionForm({
             </AlertDescription>
           </Alert>
         )}
-        
+
         {/* OD (Right Eye) */}
         <div className="space-y-4 p-4 border rounded-lg bg-blue-50/50">
           <div className="flex items-center gap-2">
@@ -115,7 +115,7 @@ export function PrescriptionForm({
               </TooltipContent>
             </Tooltip>
           </div>
-          
+
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {/* SPH */}
             <div>
@@ -144,7 +144,7 @@ export function PrescriptionForm({
                 className="no-spinner"
               />
             </div>
-            
+
             {/* CYL */}
             <div>
               <div className="flex items-center gap-1 mb-1">
@@ -172,7 +172,7 @@ export function PrescriptionForm({
                 className="no-spinner"
               />
             </div>
-            
+
             {/* AXIS */}
             <div>
               <div className="flex items-center gap-1 mb-1">
@@ -201,21 +201,10 @@ export function PrescriptionForm({
                 disabled={!data.OD.cyl || data.OD.cyl === 0}
               />
             </div>
-            
+
             {/* ADD */}
             <div>
-              <div className="flex items-center gap-1 mb-1">
-                <Label htmlFor="od-add">ADD</Label>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Info className="h-3 w-3 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Addition: correction presbytie</p>
-                    <p className="text-xs text-muted-foreground">Range: 0 à +4</p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
+              <Label htmlFor="od-add">ADD</Label>
               <Input
                 id="od-add"
                 type="number"
@@ -229,9 +218,43 @@ export function PrescriptionForm({
                 className="no-spinner"
               />
             </div>
+
+            {/* PD Monocular */}
+            <div>
+              <Label htmlFor="od-pd">EP (monoc)</Label>
+              <Input
+                id="od-pd"
+                type="number"
+                step="0.5"
+                value={data.OD.pd ?? ''}
+                onChange={(e) => setData({
+                  ...data,
+                  OD: { ...data.OD, pd: e.target.value ? parseFloat(e.target.value) : null }
+                })}
+                placeholder="31.5"
+                className="no-spinner"
+              />
+            </div>
+
+            {/* Height */}
+            <div>
+              <Label htmlFor="od-h">Hauteur</Label>
+              <Input
+                id="od-h"
+                type="number"
+                step="1"
+                value={data.OD.hauteur ?? ''}
+                onChange={(e) => setData({
+                  ...data,
+                  OD: { ...data.OD, hauteur: e.target.value ? parseFloat(e.target.value) : null }
+                })}
+                placeholder="18"
+                className="no-spinner"
+              />
+            </div>
           </div>
         </div>
-        
+
         {/* OS (Left Eye) */}
         <div className="space-y-4 p-4 border rounded-lg bg-green-50/50">
           <div className="flex items-center gap-2">
@@ -245,7 +268,7 @@ export function PrescriptionForm({
               </TooltipContent>
             </Tooltip>
           </div>
-          
+
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {/* SPH */}
             <div>
@@ -263,7 +286,7 @@ export function PrescriptionForm({
                 className="no-spinner"
               />
             </div>
-            
+
             {/* CYL */}
             <div>
               <Label htmlFor="os-cyl">CYL</Label>
@@ -280,7 +303,7 @@ export function PrescriptionForm({
                 className="no-spinner"
               />
             </div>
-            
+
             {/* AXIS */}
             <div>
               <Label htmlFor="os-axis">AXIS</Label>
@@ -298,7 +321,7 @@ export function PrescriptionForm({
                 disabled={!data.OS.cyl || data.OS.cyl === 0}
               />
             </div>
-            
+
             {/* ADD */}
             <div>
               <Label htmlFor="os-add">ADD</Label>
@@ -315,9 +338,43 @@ export function PrescriptionForm({
                 className="no-spinner"
               />
             </div>
+
+            {/* PD Monocular */}
+            <div>
+              <Label htmlFor="os-pd">EP (monoc)</Label>
+              <Input
+                id="os-pd"
+                type="number"
+                step="0.5"
+                value={data.OS.pd ?? ''}
+                onChange={(e) => setData({
+                  ...data,
+                  OS: { ...data.OS, pd: e.target.value ? parseFloat(e.target.value) : null }
+                })}
+                placeholder="31.5"
+                className="no-spinner"
+              />
+            </div>
+
+            {/* Height */}
+            <div>
+              <Label htmlFor="os-h">Hauteur</Label>
+              <Input
+                id="os-h"
+                type="number"
+                step="1"
+                value={data.OS.hauteur ?? ''}
+                onChange={(e) => setData({
+                  ...data,
+                  OS: { ...data.OS, hauteur: e.target.value ? parseFloat(e.target.value) : null }
+                })}
+                placeholder="18"
+                className="no-spinner"
+              />
+            </div>
           </div>
         </div>
-        
+
         {/* PD & Metadata */}
         <div className="grid sm:grid-cols-2 gap-4">
           {/* PD */}
@@ -347,7 +404,7 @@ export function PrescriptionForm({
               className="no-spinner"
             />
           </div>
-          
+
           {/* Doctor Name */}
           <div>
             <Label htmlFor="doctor">Nom du médecin (optionnel)</Label>
@@ -363,7 +420,7 @@ export function PrescriptionForm({
             />
           </div>
         </div>
-        
+
         {/* Date */}
         <div>
           <Label htmlFor="date">Date de prescription (optionnel)</Label>
@@ -377,7 +434,7 @@ export function PrescriptionForm({
             })}
           />
         </div>
-        
+
         {/* Notes */}
         <div>
           <Label htmlFor="notes">Notes (optionnel)</Label>
@@ -389,7 +446,7 @@ export function PrescriptionForm({
             rows={3}
           />
         </div>
-        
+
         {/* Submit Button */}
         <Button
           type="submit"
@@ -409,7 +466,7 @@ export function PrescriptionForm({
             </>
           )}
         </Button>
-        
+
         {/* Keyboard hint */}
         <p className="text-xs text-center text-muted-foreground">
           💡 Astuce: Utilisez Tab pour naviguer entre les champs
