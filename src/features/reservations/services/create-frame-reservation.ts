@@ -56,6 +56,7 @@ export async function createFrameReservation(
         productName: product.nom,
         reference: product.reference,
         quantity: item.quantity,
+        unitPrice: parseFloat(product.prixVente.toString()),
       });
     }
     
