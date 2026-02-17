@@ -50,8 +50,8 @@ export function ReadyLensesDashboardWidget() {
     if (lenses.length === 0) return null;
 
     return (
-        <Card className="border-indigo-200 bg-indigo-50/10 shadow-md overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500">
-            <CardHeader className="pb-3 bg-white/50 border-b border-indigo-100">
+        <Card className="border-indigo-200 bg-indigo-50/10 shadow-md overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500 h-full flex flex-col">
+            <CardHeader className="pb-3 bg-white/50 border-b border-indigo-100 shrink-0">
                 <div className="flex items-center justify-between">
                     <div className="space-y-1">
                         <CardTitle className="text-lg font-bold text-indigo-900 flex items-center gap-2">
@@ -67,51 +67,51 @@ export function ReadyLensesDashboardWidget() {
                     </Badge>
                 </div>
             </CardHeader>
-            <CardContent className="p-0">
-                <div className="max-h-[320px] overflow-y-auto">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-indigo-100">
+            <CardContent className="p-0 flex-1">
+                <div className="max-h-[350px] overflow-y-auto scrollbar-thin scrollbar-thumb-indigo-200">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-indigo-100/50">
                         {lenses.map((order) => (
-                            <div key={order.id} className="bg-white p-4 hover:bg-indigo-50/30 transition-colors group">
-                                <div className="flex items-start justify-between gap-4">
+                            <div key={order.id} className="bg-white p-4 hover:bg-slate-50 transition-colors group">
+                                <div className="flex items-start justify-between gap-2">
                                     <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-2 mb-1">
+                                        <div className="flex items-center gap-2 mb-2">
                                             <User className="h-4 w-4 text-slate-400" />
-                                            <p className="font-bold text-slate-900 truncate">
+                                            <p className="font-bold text-slate-900 truncate text-sm">
                                                 {order.client.fullName}
                                             </p>
                                         </div>
                                         <div className="flex items-center gap-2 mb-2">
-                                            <Badge variant="outline" className="text-[10px] bg-slate-50 text-slate-600 uppercase border-slate-200">
+                                            <Badge variant="outline" className="text-[9px] bg-slate-50 text-slate-500 uppercase border-slate-200 font-bold px-1.5">
                                                 {order.lensType}
                                             </Badge>
-                                            <span className="text-xs text-slate-400">•</span>
-                                            <span className="text-[11px] font-bold text-indigo-600">
+                                            <span className="text-slate-300">•</span>
+                                            <span className="text-[11px] font-black text-indigo-700">
                                                 <SensitiveData value={parseFloat(order.sellingPrice)} type="currency" />
                                             </span>
                                         </div>
                                         {order.client.phone && (
-                                            <div className="flex items-center gap-1.5 text-xs text-slate-500 bg-slate-50 w-fit px-2 py-1 rounded-md mb-3">
+                                            <div className="flex items-center gap-1.5 text-[10px] text-slate-500 bg-slate-50 w-fit px-2 py-1 rounded-md">
                                                 <Phone className="h-3 w-3" />
                                                 {order.client.phone}
                                             </div>
                                         )}
                                     </div>
-                                    <div className="flex flex-col gap-2">
+                                    <div className="flex flex-col gap-1.5 shrink-0">
                                         <Button 
                                             size="sm" 
                                             asChild
-                                            className="bg-indigo-600 hover:bg-indigo-700 text-xs shadow-sm h-8"
+                                            className="bg-indigo-600 hover:bg-indigo-700 text-[10px] font-bold shadow-sm h-7 px-2"
                                         >
                                             <Link href={`/dashboard/clients/${order.client.id}?tab=sales`}>
                                                 Livrer au POS
-                                                <ArrowRight className="ml-1.5 h-3 w-3" />
+                                                <ArrowRight className="ml-1 h-3 w-3" />
                                             </Link>
                                         </Button>
                                         <Button 
                                             variant="outline" 
                                             size="sm" 
                                             asChild
-                                            className="h-8 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                                            className="h-7 text-[10px] font-bold border-indigo-100 text-indigo-600 hover:bg-indigo-50"
                                         >
                                             <Link href={`/dashboard/clients/${order.client.id}`}>
                                                 Dossier
