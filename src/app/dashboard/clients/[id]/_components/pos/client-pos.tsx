@@ -72,17 +72,23 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
                     if (res.success && res.data) {
                         const reservation = (res.data as any[]).find(r => r.id.toString() === resId);
                         if (reservation && reservation.status === 'PENDING') {
-                            const newLines = reservation.items.map((item: any) => 
-                                createLineItem(
-                                    item.productId.toString(),
-                                    item.productName,
-                                    item.unitPrice || 0, // In reservation types we had items: {productId, productName, reference, quantity}
-                                    item.quantity,
-                                    'MONTURE'
-                                    // Metadata for reservations could be added here if needed, but 'fromReservation' field handles it currently in pricing.ts type
-                                )
-                            ).map((line: any) => ({ ...line, fromReservation: reservation.id }));
-                            
+                            const newLines = reservation.items
+                                .map((item: any) => {
+                                    const unitPrice =
+                                        typeof item.unitPrice === 'number'
+                                            ? item.unitPrice
+                                            : parseFloat(item.unitPrice ?? '0');
+
+                                    return createLineItem(
+                                        item.productId.toString(),
+                                        item.productName,
+                                        Number.isFinite(unitPrice) ? unitPrice : 0,
+                                        item.quantity,
+                                        'MONTURE'
+                                    );
+                                })
+                                .map((line: any) => ({ ...line, fromReservation: reservation.id }));
+
                             setItems([...cartItems, ...newLines]);
                             toast({ title: "Déjà réservé", description: "Les montures réservées ont été ajoutées au panier." });
                         }

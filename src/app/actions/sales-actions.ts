@@ -6,7 +6,7 @@
 'use server';
 
 import { db } from '@/db';
-import { sales, clients, products, lensOrders, clientTransactions, devis, stockMovements } from '@/db/schema';
+import { sales, saleItems, clients, products, lensOrders, clientTransactions, devis, stockMovements } from '@/db/schema';
 import { eq, and, desc, sql, inArray, or } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure, logAudit } from '@/lib/audit-log';
