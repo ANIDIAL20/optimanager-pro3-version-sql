@@ -139,14 +139,19 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                          const alreadyInCart = cartItems.some(item => item.fromReservation === reservation.id);
                          if (alreadyInCart) return;
 
-                         const newLines = reservation.items.map((item: any) => 
-                             createLineItem(
+                         const newLines = reservation.items.map((item: any) => {
+                             const unitPrice =
+                                 typeof item.unitPrice === 'number'
+                                     ? item.unitPrice
+                                     : parseFloat(item.unitPrice ?? '0');
+
+                             return createLineItem(
                                  item.productId.toString(),
                                  item.productName,
-                                 item.unitPrice || 0, // Fallback if no price
+                                 Number.isFinite(unitPrice) ? unitPrice : 0,
                                  item.quantity
-                             )
-                         ).map((line: any) => ({ 
+                             );
+                         }).map((line: any) => ({ 
                              ...line, 
                              fromReservation: reservation.id 
                          }));
