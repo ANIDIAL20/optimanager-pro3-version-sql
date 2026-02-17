@@ -9,6 +9,7 @@ export interface FrameReservationItem {
   productName: string;
   reference: string | null;
   quantity: number;
+  unitPrice: number;
 }
 
 export interface FrameReservation {

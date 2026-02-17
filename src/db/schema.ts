@@ -1320,6 +1320,7 @@ export const frameReservations = pgTable('frame_reservations', {
     productName: string;
     reference: string | null;
     quantity: number;
+    unitPrice: number;
   }[]>().notNull(),
 
   reservationDate: timestamp('reservation_date', { mode: 'date' })
