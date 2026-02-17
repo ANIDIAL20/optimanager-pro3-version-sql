@@ -177,24 +177,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
       // Safe find using loose assumption (s.id could be number, data.supplierId is string)
       const supplier = suppliers.find(s => s.id?.toString() === data.supplierId);
 
-      // Helper to get nested value safely (handles od/OD and og/OG)
-      const getVal = (eye: 'od' | 'og', field: string) => {
-        const eyeData = fullSelectedPrescription?.data?.[eye] || fullSelectedPrescription?.data?.[eye.toUpperCase()];
-        if (!eyeData) return null;
 
-        if (field === 'pd') return eyeData.pd || eyeData.ecart || null;
-        if (field === 'hauteur') return eyeData.hauteur || eyeData.h || null;
-        if (field === 'addition') return eyeData.addition || eyeData.add || null;
-        if (field === 'sphere') return eyeData.sphere || eyeData.sph || null;
-        if (field === 'cylinder') return eyeData.cylinder || eyeData.cyl || null;
-        if (field === 'axis') return eyeData.axis || eyeData.axe || null;
-        return eyeData[field] || null;
-      };
-
-      const ecartR = getVal('od', 'pd');
-      const ecartL = getVal('og', 'pd');
-      // Total PD from prescription if monocular not found
-      const totalPD = fullSelectedPrescription?.data?.pd || fullSelectedPrescription?.data?.PD || null;
 
       const orderInput: LensOrderInput = {
         clientId: parseInt(clientId),
@@ -206,22 +189,22 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
         supplierName: supplier?.nomCommercial || supplier?.name || 'Unknown',
 
         // Explicit Prescription (Mapping from prescription data object)
-        sphereR: getVal('od', 'sphere')?.toString() || null,
-        cylindreR: getVal('od', 'cylinder')?.toString() || null,
-        axeR: getVal('od', 'axis')?.toString() || null,
-        additionR: getVal('od', 'addition')?.toString() || null,
-        hauteurR: getVal('od', 'hauteur')?.toString() || null,
-
-        sphereL: getVal('og', 'sphere')?.toString() || null,
-        cylindreL: getVal('og', 'cylinder')?.toString() || null,
-        axeL: getVal('og', 'axis')?.toString() || null,
-        additionL: getVal('og', 'addition')?.toString() || null,
-        hauteurL: getVal('og', 'hauteur')?.toString() || null,
-
-        ecartPupillaireR: ecartR?.toString() || totalPD?.toString() || null,
-        ecartPupillaireL: ecartL?.toString() || totalPD?.toString() || null,
-        diameterR: getVal('od', 'diameter')?.toString() || fullSelectedPrescription?.data?.diametre?.toString() || null,
-        diameterL: getVal('og', 'diameter')?.toString() || fullSelectedPrescription?.data?.diametre?.toString() || null,
+        sphereR: fullSelectedPrescription?.data?.od?.sphere?.toString() || null,
+        cylindreR: fullSelectedPrescription?.data?.od?.cylinder?.toString() || null,
+        axeR: fullSelectedPrescription?.data?.od?.axis?.toString() || null,
+        additionR: (fullSelectedPrescription?.data?.od?.addition || fullSelectedPrescription?.data?.od?.add)?.toString() || null,
+        hauteurR: (fullSelectedPrescription?.data?.od?.height || fullSelectedPrescription?.data?.od?.hauteur)?.toString() || null,
+        
+        sphereL: fullSelectedPrescription?.data?.og?.sphere?.toString() || null,
+        cylindreL: fullSelectedPrescription?.data?.og?.cylinder?.toString() || null,
+        axeL: fullSelectedPrescription?.data?.og?.axis?.toString() || null,
+        additionL: (fullSelectedPrescription?.data?.og?.addition || fullSelectedPrescription?.data?.og?.add)?.toString() || null,
+        hauteurL: (fullSelectedPrescription?.data?.og?.height || fullSelectedPrescription?.data?.og?.hauteur)?.toString() || null,
+        
+        ecartPupillaireR: fullSelectedPrescription?.data?.od?.pd?.toString() || null,
+        ecartPupillaireL: fullSelectedPrescription?.data?.og?.pd?.toString() || null,
+        diameterR: fullSelectedPrescription?.data?.od?.diameter?.toString() || null,
+        diameterL: fullSelectedPrescription?.data?.og?.diameter?.toString() || null,
 
 
         matiere: fullSelectedPrescription?.data?.matiere || null,
