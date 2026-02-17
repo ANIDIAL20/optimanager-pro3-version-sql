@@ -239,12 +239,8 @@ export function LensOrderList({ clientId, clientName, mode = 'glasses', onUseOrd
   // Handle print with PRO design
   const handlePrint = () => {
     if (!selectedOrder) return;
-<<<<<<< Updated upstream
-    
-=======
 
     // Map explicit columns to objects for the SVG helper
->>>>>>> Stashed changes
     const od = {
       sphere: selectedOrder.sphereR,
       cylinder: selectedOrder.cylindreR,
@@ -1002,17 +998,6 @@ export function LensOrderList({ clientId, clientName, mode = 'glasses', onUseOrd
                       </div>
                     </div>
                   </div>
-<<<<<<< Updated upstream
-                  <div className="space-y-2">
-                    <p className="font-bold text-blue-700 border-b pb-1">Oeil Gauche (OG)</p>
-                    <div className="grid grid-cols-2 gap-y-1 text-slate-600">
-                      <span>Sphère:</span> <span className="font-semibold text-slate-900">{selectedOrder.sphereL || '-'}</span>
-                      <span>Cylindre:</span> <span className="font-semibold text-slate-900">{selectedOrder.cylindreL || '-'}</span>
-                      <span>Axe:</span> <span className="font-semibold text-slate-900">{selectedOrder.axeL ? `${selectedOrder.axeL}°` : '-'}</span>
-                      <span>Addition:</span> <span className="font-semibold text-slate-900">{selectedOrder.additionL || '-'}</span>
-                      <span>Hauteur:</span> <span className="font-semibold text-slate-900">{selectedOrder.hauteurL || '-'}</span>
-                      <span>EP / Diamètre:</span> <span className="font-semibold text-slate-900">{selectedOrder.ecartPupillaireL || '-'}/{selectedOrder.diameterL || '-'}</span>
-=======
                   <div className="space-y-3">
                     <p className="font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
@@ -1027,7 +1012,6 @@ export function LensOrderList({ clientId, clientName, mode = 'glasses', onUseOrd
                         <span className="text-xs text-slate-500 uppercase">EP:</span> <span className="font-bold text-indigo-800">{selectedOrder.ecartPupillaireL || '-'}</span>
                         <span className="text-xs text-slate-500 uppercase">H:</span> <span className="font-bold text-indigo-800">{selectedOrder.hauteurL || '-'}</span>
                       </div>
->>>>>>> Stashed changes
                     </div>
                   </div>
                 </div>

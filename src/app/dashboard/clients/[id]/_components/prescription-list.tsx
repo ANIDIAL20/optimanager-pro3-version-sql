@@ -128,13 +128,9 @@ export function PrescriptionList({ clientId }: PrescriptionListProps) {
                 <TableHead>OG Sphère/Cyl/Axe</TableHead>
                 <TableHead>Addition</TableHead>
                 <TableHead>EP (OD/OG)</TableHead>
-<<<<<<< Updated upstream
-                <TableHead>Hauteur (OD/OG)</TableHead>
-                <TableHead>Prescripteur</TableHead>
-=======
                 <TableHead>H (OD/OG)</TableHead>
                 <TableHead>Docteur</TableHead>
->>>>>>> Stashed changes
+
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
@@ -157,21 +153,13 @@ export function PrescriptionList({ clientId }: PrescriptionListProps) {
                   </TableCell>
                   <TableCell>
                     {p.data?.od?.pd || p.data?.og?.pd 
-<<<<<<< Updated upstream
-                      ? `${p.data.od?.pd || '-'} | ${p.data.og?.pd || '-'}`
-                      : p.data?.pd || '-'}
-                  </TableCell>
-                  <TableCell>
-                    {p.data?.od?.height || p.data?.og?.height 
-                      ? `${p.data.od?.height || '-'} | ${p.data.og?.height || '-'}`
-=======
                       ? `${p.data.od?.pd || '-'} / ${p.data.og?.pd || '-'}`
                       : p.data?.pd || '-'}
                   </TableCell>
                   <TableCell>
                     {p.data?.od?.hauteur || p.data?.og?.hauteur 
                       ? `${p.data.od?.hauteur || '-'} / ${p.data.og?.hauteur || '-'}`
->>>>>>> Stashed changes
+
                       : '-'}
                   </TableCell>
                   <TableCell>{p.data?.doctorName || '-'}</TableCell>

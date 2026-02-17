@@ -6,7 +6,21 @@ export const saleItemSchema = z.object({
   name: z.string().min(1, "Nom du produit requis"),
   quantity: z.number().min(1, "Quantité minimum 1"),
   price: z.number().min(0, "Prix invalide"),
-  total: z.number().min(0)
+  total: z.number().min(0),
+  
+  // Metadata for PDF
+  brand: z.string().optional(),
+  model: z.string().optional(),
+  reference: z.string().optional(),
+  
+  // Lens Details
+  lensDetails: z.array(z.object({
+    eye: z.enum(['OD', 'OG']),
+    sphere: z.string().optional(),
+    cylinder: z.string().optional(),
+    axis: z.string().optional(),
+    addition: z.string().optional(),
+  })).optional().or(z.null()),
 });
 
 export const saleSchema = z.object({

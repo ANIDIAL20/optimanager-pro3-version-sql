@@ -6,11 +6,12 @@
 'use server';
 
 import { db } from '@/db';
-import { devis, sales, products, stockMovements } from '@/db/schema';
+import { devis, sales, products, stockMovements, shopProfiles } from '@/db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure, logAudit } from '@/lib/audit-log';
 import { calculateLineItem } from '@/lib/tva-helpers';
+import { getDocumentSettings } from '@/lib/document-settings';
 
 // ========================================
 // TYPE DEFINITIONS
@@ -38,6 +39,9 @@ export interface DevisItem {
     totalTTC?: number;
     
     unitPrice?: number; // Alias for priceUnitaire
+    
+    // Lens Details
+    lensDetails?: any[];
 }
 
 export interface Devis {
@@ -210,6 +214,11 @@ export const createDevis = secureAction(async (userId, user, data: CreateDevisIn
             };
         }));
 
+        const profile = await db.query.shopProfiles.findFirst({
+            where: eq(shopProfiles.userId, userId)
+        });
+        const currentSettings = await getDocumentSettings(profile?.id || 0);
+
         const newDevis = {
             userId,
             clientId: data.clientId ? parseInt(data.clientId) : null,
@@ -221,6 +230,8 @@ export const createDevis = secureAction(async (userId, user, data: CreateDevisIn
             status: data.status || 'EN_ATTENTE',
             validUntil: data.validUntil,
             createdAt: new Date(),
+            documentSettingsSnapshot: currentSettings,
+            templateVersionUsed: currentSettings.version
         };
 
          const inserted = await db.insert(devis).values(newDevis).returning();
@@ -373,12 +384,19 @@ export const convertDevisToSale = secureAction(async (userId, user, devisId: str
                 marque: item.marque,
                 modele: item.modele,
                 couleur: item.couleur,
-                quantity: item.quantite,
                 unitPrice: item.prixUnitaire,
+                quantity: item.quantite,
                 total: item.quantite * item.prixUnitaire,
+                lensDetails: item.lensDetails,
             }));
 
             const saleNumber = `SALE-${Date.now().toString().slice(-8)}`;
+
+            // 2b. Fetch Settings for New Sale Snapshot
+            const profile = await tx.query.shopProfiles.findFirst({
+                where: eq(shopProfiles.userId, userId)
+            });
+            const currentSettings = await getDocumentSettings(profile?.id || 0);
 
             const newSale = {
                 userId,
@@ -397,7 +415,9 @@ export const convertDevisToSale = secureAction(async (userId, user, devisId: str
                 paymentHistory: [],
                 type: 'commande',
                 createdAt: new Date(),
-                date: new Date()
+                date: new Date(),
+                documentSettingsSnapshot: currentSettings,
+                templateVersionUsed: currentSettings.version
             };
 
             const insertedSale = await tx.insert(sales).values(newSale).returning();

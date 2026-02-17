@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, boolean, decimal, integer, json, primaryKey, uuid, index, real, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, timestamp, boolean, decimal, integer, json, jsonb, primaryKey, uuid, index, real, uniqueIndex } from 'drizzle-orm/pg-core';
 import type { AdapterAccount } from "next-auth/adapters";
 import { relations, sql } from 'drizzle-orm';
 
@@ -213,7 +213,14 @@ export const sales = pgTable('sales', {
   items: json('items').$type<any[]>().notNull(), // Legacy/Denormalized Fallback
   paymentHistory: json('payment_history').$type<any[]>(),
   prescriptionSnapshot: json('prescription_snapshot'),
-  lastPaymentDate: timestamp('last_payment_date'), // Preserve legacy field for safety
+  lastPaymentDate: timestamp('last_payment_date'),
+
+  // 🆕 Document Customization Snapshot
+  templateVersionUsed: integer('template_version_used'),
+
+  templateSnapshot: jsonb('template_snapshot'),
+  // 🆕 Document Customization Snapshot (User Requested)
+  documentSettingsSnapshot: jsonb('document_settings_snapshot'),
 
   notes: text('notes'),
   date: timestamp('date'),
@@ -344,6 +351,12 @@ export const devis = pgTable('devis', {
   status: text('status').default('EN_ATTENTE'), // EN_ATTENTE, VALIDE, REFUSE, TRANSFORME
   saleId: integer('sale_id').references(() => sales.id),
   validUntil: timestamp('valid_until'), // 🆕 Added field
+  
+  // 🆕 Document Customization Snapshot
+  templateVersionUsed: integer('template_version_used'),
+  templateSnapshot: jsonb('template_snapshot'),
+  documentSettingsSnapshot: jsonb('document_settings_snapshot'),
+
 
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
@@ -439,6 +452,12 @@ export const shopProfiles = pgTable('shop_profiles', {
   ice: text('ice'),
   rib: text('rib'),
   logoUrl: text('logo_url'),
+  
+  // 🆕 Document Settings
+  documentSettings: jsonb('document_settings').notNull().default({}),
+  documentSettingsVersion: integer('document_settings_version').notNull().default(1),
+  documentSettingsUpdatedAt: timestamp('document_settings_updated_at', { withTimezone: true }),
+
 
   // Missing columns restored to prevent data loss
   paymentMethods: text('payment_methods'),
@@ -993,6 +1012,11 @@ export const supplierOrders = pgTable('supplier_orders', {
   orderReference: text('order_reference'),
 
   createdBy: text('created_by'),
+  
+  // 🆕 Document Customization Snapshot
+  templateVersionUsed: integer('template_version_used'),
+  templateSnapshot: jsonb('template_snapshot'),
+
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
 });

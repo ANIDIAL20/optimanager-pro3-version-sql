@@ -15,6 +15,8 @@ import { getGlobalBanner } from "@/app/actions/adminActions";
 import { Analytics } from "@vercel/analytics/react";
 import { ErrorBoundary } from "@/components/error-boundary";
 
+import QueryProvider from "@/providers/query-provider";
+
 export const metadata: Metadata = {
   title: "OptiManager Pro",
   description: "Advanced Optician Management System",
@@ -52,14 +54,16 @@ export default async function RootLayout({
       >
         <SessionProvider refetchInterval={5 * 60} refetchOnWindowFocus={false}>
           <ErrorBoundary>
-            <LoadingProvider>
-              <PrivacyProvider>
-                <UnifiedLoader />
-                <AppShell banner={banner}>
-                  {children}
-                </AppShell>
-              </PrivacyProvider>
-            </LoadingProvider>
+            <QueryProvider>
+              <LoadingProvider>
+                <PrivacyProvider>
+                  <UnifiedLoader />
+                  <AppShell banner={banner}>
+                    {children}
+                  </AppShell>
+                </PrivacyProvider>
+              </LoadingProvider>
+            </QueryProvider>
           </ErrorBoundary>
         </SessionProvider>
         <Toaster />
