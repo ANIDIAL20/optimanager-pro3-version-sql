@@ -1,4 +1,4 @@
-'use client';
+// 'use client'; // Converted to Server Component
 export const dynamic = "force-dynamic";
 import * as React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -10,17 +10,28 @@ import {
   Palette, 
   HardHat, 
   Stethoscope, 
-  Drill, 
   CreditCard, 
   DatabaseBackup,
-  Wrench
+  Wrench,
+  FileText,
+  ShieldCheck // Helper icon
 } from 'lucide-react';
 import { ShopProfileForm } from '@/components/settings/shop-profile-form';
 import { ManageSettings } from '@/components/settings/manage-settings';
 import { DataBackup } from '@/components/settings/data-backup';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { DocumentSettingsForm } from '@/components/settings/document-settings-form';
+import { getShopProfile } from '@/app/actions/shop-actions';
 
-export default function ParametresPage() {
+// Helper icon component definition moved outside or kept if simple
+// Since this is a server component, simple functional components are fine.
+
+export default async function ParametresPage() {
+  // 1. Fetch data on the server
+  const shopProfile = await getShopProfile();
+
+  // We should allow rendering the page even if profile is missing, 
+  // to allow the user to access the "Shop Profile" tab to Create it.
+  
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
       {/* Header Section */}
@@ -44,6 +55,11 @@ export default function ParametresPage() {
               Établissement
             </TabsTrigger>
             
+            <TabsTrigger value="documents" className="gap-2 px-4 py-2 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              <FileText className="h-4 w-4" />
+              Modèles Documents
+            </TabsTrigger>
+
             <TabsTrigger value="brands" className="gap-2 px-4 py-2 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">
               <Tag className="h-4 w-4" />
               Marques
@@ -91,9 +107,26 @@ export default function ParametresPage() {
           </TabsList>
         </div>
 
-        {/* 1. Shop Profile */}
+        {/* 1. Shop Profile - Always Renders to allow creation */}
         <TabsContent value="shop" className="space-y-6 focus-visible:outline-none">
           <ShopProfileForm />
+        </TabsContent>
+
+        {/* 1b. Document Settings - Only Renders if Profile Exists */}
+        <TabsContent value="documents" className="focus-visible:outline-none">
+          {shopProfile && shopProfile.id ? (
+            <DocumentSettingsForm shopId={shopProfile.id} initialShopProfile={shopProfile} />
+          ) : (
+            <div className="flex flex-col items-center justify-center p-12 text-center space-y-3 bg-white rounded-xl border border-dashed border-slate-300">
+               <div className="bg-slate-100 p-3 rounded-full">
+                 <Building2 className="h-6 w-6 text-slate-400" />
+               </div>
+               <h3 className="font-semibold text-slate-900">Profil Boutique requis</h3>
+               <p className="text-slate-500 max-w-sm">
+                 Veuillez d'abord configurer les informations de votre établissement dans l'onglet "Établissement" avant de personnaliser vos documents, puis rechargez la page.
+               </p>
+            </div>
+          )}
         </TabsContent>
 
         {/* 2. Inventory Catalogs */}
@@ -179,23 +212,4 @@ export default function ParametresPage() {
   );
 }
 
-// Helper icons
-function ShieldCheck(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
-      <path d="m9 12 2 2 4-4" />
-    </svg>
-  );
-}
+

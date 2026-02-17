@@ -1,263 +1,262 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Page, Text, View, Document, StyleSheet, Image, Font } from '@react-pdf/renderer';
 import { format, addDays, isValid } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { formatCurrencyToWords } from '@/lib/format-number-to-words';
+import { DocumentSettings, DEFAULT_DOCUMENT_SETTINGS } from '@/lib/document-settings-types';
 
-// Styles (CSS for PDF)
-const styles = StyleSheet.create({
-  page: { padding: 30, fontSize: 10, fontFamily: 'Helvetica', color: '#333', lineHeight: 1.4 },
-  
-  // Header Section
-  header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  companyInfo: { width: '60%' },
-  companyName: { fontSize: 18, fontWeight: 'bold', color: '#1a365d', marginBottom: 4 },
-  legalInfo: { fontSize: 8, color: '#666', marginTop: 4 },
-  logo: { width: 80, height: 80, objectFit: 'contain' },
-  
-  // Document Title & Client
-  titleSection: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20, borderBottom: '1 solid #eee', paddingBottom: 10 },
-  docTitleBase: { fontSize: 20, fontWeight: 'bold', textTransform: 'uppercase' },
-  clientBox: { border: '1 solid #e2e8f0', padding: 10, borderRadius: 4, width: '45%' },
-  label: { fontSize: 8, color: '#718096', marginBottom: 2 },
-  value: { fontSize: 10, fontWeight: 'bold' },
-
-  // Table
-  table: { marginTop: 10 },
-  tableHeader: { flexDirection: 'row', backgroundColor: '#f7fafc', borderBottom: '1 solid #cbd5e0', padding: 8 },
-  tableRow: { flexDirection: 'column', borderBottom: '1 solid #eee', paddingVertical: 8 }, 
-  tableRowReturned: { flexDirection: 'column', borderBottom: '1 solid #eee', paddingVertical: 8, opacity: 0.6, backgroundColor: '#fff5f5' },
-  
-  rowMain: { flexDirection: 'row', paddingHorizontal: 8 }, 
-  colDesc: { width: '40%' },
-  colBrand: { width: '15%' },
-  colQty: { width: '10%', textAlign: 'center' },
-  colPrice: { width: '15%', textAlign: 'right' },
-  colTotal: { width: '20%', textAlign: 'right' },
-  
-  badgeReturned: { color: '#e53e3e', fontSize: 7, fontWeight: 'bold', marginTop: 2 },
-
-  // Optical Grid (The Magic Part 👓)
-  opticalGrid: { marginLeft: 20, marginTop: 6, marginBottom: 4, padding: 6, backgroundColor: '#f8f9fa', borderRadius: 4, border: '1 solid #e9ecef' },
-  opticalHeader: { flexDirection: 'row', borderBottom: '1 solid #dee2e6', paddingBottom: 4, marginBottom: 4 },
-  opticalRow: { flexDirection: 'row', marginBottom: 2 },
-  optColEye: { width: '10%', fontWeight: 'bold', fontSize: 8 },
-  optColVal: { width: '15%', fontSize: 8, textAlign: 'center' },
-  optLabel: { width: '15%', fontSize: 7, color: '#666', textAlign: 'center' },
-
-  // Totals
-  totalsSection: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 20 },
-  totalBox: { width: '40%' },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, borderBottom: '1 solid #eee' },
-  totalRowFinal: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, marginTop: 4 },
-  totalLabel: { fontSize: 10 },
-  totalValue: { fontSize: 10, fontWeight: 'bold' },
-  totalFinal: { fontSize: 12, fontWeight: 'bold' },
-  
-  // Footer & Signatures
-  signatureSection: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 30, borderTop: '1 solid #eee', paddingTop: 20 },
-  signatureBox: { width: '45%', height: 60, border: '1 solid #cbd5e0', borderRadius: 4, padding: 8 },
-  footer: { position: 'absolute', bottom: 30, left: 30, right: 30, textAlign: 'center', fontSize: 8, color: '#a0aec0', borderTop: '1 solid #eee', paddingTop: 10 },
-});
-
+// Helper for formatting currency
 const formatMoney = (amount: number) => 
   new Intl.NumberFormat('fr-MA', { style: 'currency', currency: 'MAD' }).format(amount);
 
+// Helper for radius
+export const safeRadius = (value: unknown, fallback = 4) => {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
 interface PdfDocumentTemplateProps {
-    type: 'devis' | 'facture';
+    type: 'devis' | 'facture' | 'bc' | 'bl';
     data: {
         document: any;
         client: any;
-        settings: any;
+        settings: any; // Shop Profile (static info)
+        documentSettings?: DocumentSettings; // Dynamic Design (colors, layout) (Legacy path)
     };
+    documentSettings?: DocumentSettings; // 🆕 Direct Prop (Preferred path)
 }
 
-export const PdfDocumentTemplate = ({ type, data }: PdfDocumentTemplateProps) => {
-  const { document: doc, client, settings } = data;
-  
-  // 🔥 UNIFIED LOGIC: Switch between Devis and Facture
-  const isQuote = type === 'devis' || doc.type === 'QUOTE';
-  const docTitle = isQuote ? 'DEVIS' : 'FACTURE';
-  const primaryColor = isQuote ? '#718096' : '#2c5282'; // Grey for Quotes, Blue for Invoices
-  
-  // Define allItems for the audit trail
-  const allItems = doc.items || [];
-  
+export const PdfDocumentTemplate = ({ type, data, documentSettings }: PdfDocumentTemplateProps) => {
+  // Robust check/fallback
+  if (!data) {
+    return (
+        <Document>
+            <Page size="A4" style={{ padding: 40 }}>
+                <Text>Données du document manquantes.</Text>
+            </Page>
+        </Document>
+    );
+  }
 
-  const formatDateSafe = (dateVal: any) => {
-    try {
-        if (!dateVal) return format(new Date(), 'dd/MM/yyyy');
-        const date = typeof dateVal === 'string' ? new Date(dateVal) : dateVal;
-        if (!isValid(date)) return format(new Date(), 'dd/MM/yyyy');
-        return format(date, 'dd/MM/yyyy', { locale: fr });
-    } catch (e) {
-        return format(new Date(), 'dd/MM/yyyy');
-    }
+  // extract from data for legacy support, or use prop
+  const { document: doc, client, settings, documentSettings: dataSettings } = data;
+  
+  // Merge defaults
+  const effectiveSettings = documentSettings || dataSettings; // Prop wins
+
+  const docConfig = useMemo(() => {
+    const inputDefaults = effectiveSettings?.default || {};
+    return { ...DEFAULT_DOCUMENT_SETTINGS.default, ...inputDefaults };
+  }, [effectiveSettings, type]);
+
+  const { 
+      primaryColor, secondaryColor, fontFamily, layout, 
+      showFooter, footerText, showLogo, logoPosition, borderRadius,
+      showAddress, showPhone, showEmail, showIce, showRc, showRib 
+  } = docConfig;
+  const r = safeRadius(borderRadius, 4);
+  const radiusCorners = {
+      borderTopLeftRadius: r, borderTopRightRadius: r,
+      borderBottomLeftRadius: r, borderBottomRightRadius: r,
   };
 
-  const totalTTC = Number(doc.totalTTC || doc.totalAmount || 0);
-  const dateObj = doc.date || doc.createdAt ? new Date(doc.date || doc.createdAt) : new Date();
+  // Styles
+  const styles = useMemo(() => StyleSheet.create({
+    page: { padding: 30, fontSize: 10, fontFamily: fontFamily || 'Helvetica', color: '#1a202c', lineHeight: 1.4 },
+    header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
+    logoContainer: { width: '100%', flexDirection: 'row', justifyContent: logoPosition === 'center' ? 'center' : (logoPosition === 'right' ? 'flex-end' : 'flex-start'), marginBottom: 10 },
+    logo: { width: 80, height: 80, objectFit: 'contain' },
+    companyInfo: { width: '50%' },
+    companyName: { fontSize: 18, fontWeight: 'bold', color: primaryColor, marginBottom: 4 },
+    legalInfo: { fontSize: 8, color: '#718096', marginTop: 4 },
+    // ... (rest of styles logic is fine, using existing styles)
+    
+    // Title Section
+    titleSection: { 
+        flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20, 
+        borderBottomWidth: 1, borderBottomColor: secondaryColor, paddingBottom: 10 
+    },
+    docTitle: { fontSize: 20, fontWeight: 'bold', color: primaryColor, textTransform: 'uppercase' },
+    
+    // Client Box
+    clientBox: { 
+        width: '45%', padding: 10, borderWidth: 1, borderColor: '#e2e8f0', ...radiusCorners,
+        backgroundColor: layout === 'modern' ? '#f8fafc' : 'transparent' 
+    },
+    label: { fontSize: 8, color: '#718096', marginBottom: 2 },
+    value: { fontSize: 10, fontWeight: 'bold' },
+
+    // Table
+    table: { marginTop: 10, width: '100%' },
+    tableHeader: { 
+        flexDirection: 'row', 
+        backgroundColor: layout === 'minimalist' ? 'transparent' : secondaryColor, 
+        color: layout === 'minimalist' ? '#000' : '#fff', 
+        padding: 8,
+        borderTopLeftRadius: layout === 'modern' ? r : 0, 
+        borderTopRightRadius: layout === 'modern' ? r : 0,
+        fontWeight: 'bold'
+    },
+    tableRow: { flexDirection: 'column', borderBottomWidth: 1, borderBottomColor: '#edf2f7', paddingVertical: 8 },
+    rowMain: { flexDirection: 'row', paddingHorizontal: 8 },
+    
+    colDesc: { width: '30%' },
+    colBrand: { width: '15%' },
+    colModel: { width: '15%' },
+    colQty: { width: '10%', textAlign: 'center' },
+    colPrice: { width: '15%', textAlign: 'right' },
+    colTotal: { width: '15%', textAlign: 'right' },
+
+    // Optical Details
+    opticalGrid: { marginLeft: 10, marginTop: 4, padding: 4, backgroundColor: '#f8fafc', ...radiusCorners },
+    opticalRow: { flexDirection: 'row', marginBottom: 2, alignItems: 'center' },
+    optLabel: { width: '18%', fontSize: 8, color: '#718096' },
+    optVal: { fontSize: 8, fontWeight: 'bold', color: '#2d3748' },
+
+    // Totals
+    totalsSection: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 20 },
+    totalBox: { width: '40%' },
+    totalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
+    totalFinal: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderTopWidth: 2, borderTopColor: primaryColor, marginTop: 4 },
+    
+    // Footer
+    footer: { position: 'absolute', bottom: 30, left: 30, right: 30, textAlign: 'center', fontSize: 8, color: '#a0aec0', borderTopWidth: 1, borderTopColor: '#edf2f7', paddingTop: 10 },
+    signatureSection: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 40, borderTopWidth: 1, borderTopColor: '#edf2f7', paddingTop: 20 },
+    signatureBox: { width: '45%', height: 60, borderWidth: 1, borderColor: '#cbd5e0', ...radiusCorners, padding: 8 }
+  }), [docConfig, r]);
+
+  const docTitle = type === 'devis' ? 'DEVIS' : (type === 'bc' ? 'BON DE COMMANDE' : 'FACTURE');
+  const dateObj = doc.date ? new Date(doc.date) : new Date();
+  
+  const formatDateSafe = (date: any) => {
+      try { return isValid(new Date(date)) ? format(new Date(date), 'dd/MM/yyyy') : '-'; } catch { return '-'; }
+  };
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         
-        {/* --- HEADER (Company Info) --- */}
+        {/* Header */}
         <View style={styles.header}>
-          <View style={styles.companyInfo}>
-            <Text style={[styles.companyName, { color: primaryColor }]}>{settings?.storeName || settings?.shopName || 'OptiManager Pro'}</Text>
-            <Text>{settings?.address || 'Adresse du magasin'}</Text>
-            <Text>{settings?.phone || ''} {settings?.email ? `| ${settings.email}` : ''}</Text>
-            <Text style={styles.legalInfo}>
-                {settings?.ice && `ICE: ${settings.ice} | `} 
-                {settings?.rc && `RC: ${settings.rc} | `} 
-                {settings?.if && `IF: ${settings.if} | `} 
-                {settings?.patente && `Patente: ${settings.patente}`}
-            </Text>
-          </View>
-          {settings?.logoUrl && <Image style={styles.logo} src={settings.logoUrl} />}
+            <View style={styles.companyInfo}>
+                <Text style={styles.companyName}>{settings?.storeName || 'Opticien'}</Text>
+                
+                {(showAddress !== false) && settings?.address && (
+                    <Text>{settings.address}</Text>
+                )}
+                
+                <View style={{flexDirection: 'row', flexWrap: 'wrap'}}>
+                   {(showPhone !== false) && settings?.phone && <Text>{settings.phone} </Text>}
+                   {(showEmail !== false) && settings?.email && <Text>| {settings.email}</Text>}
+                </View>
+
+                <View style={{ marginTop: 4 }}>
+                   {(showIce !== false) && settings?.ice && <Text style={styles.legalInfo}>ICE: {settings.ice}</Text>}
+                   {(showRc !== false) && settings?.rc && <Text style={styles.legalInfo}>RC: {settings.rc}</Text>}
+                   {(showRib !== false) && settings?.rib && <Text style={styles.legalInfo}>RIB: {settings.rib}</Text>}
+                </View>
+            </View>
+            {showLogo && settings?.logoUrl && <Image style={styles.logo} src={settings.logoUrl} />}
         </View>
 
-        {/* --- TITLE & CLIENT --- */}
+        {/* Title */}
         <View style={styles.titleSection}>
-          <View>
-            <Text style={[styles.docTitleBase, { color: primaryColor }]}>{docTitle} N° {doc.saleNumber || doc.invoiceNumber || String(doc.id).substring(0,8).toUpperCase()}</Text>
-            <Text style={styles.label}>Date: {formatDateSafe(doc.date || doc.createdAt)}</Text>
-            {isQuote && (
-                <Text style={{ fontSize: 9, color: '#e53e3e', marginTop: 4 }}>
-                    Valable jusqu'au: {isValid(addDays(dateObj, 15)) ? format(addDays(dateObj, 15), 'dd/MM/yyyy', { locale: fr }) : formatDateSafe(addDays(new Date(), 15))}
-                </Text>
-            )}
-          </View>
-          <View style={styles.clientBox}>
-            <Text style={styles.label}>CLIENT</Text>
-            <Text style={styles.value}>{client?.fullName || client?.name || doc.clientName || 'Client Passage'}</Text>
-            {(client?.phone || doc.clientPhone) && <Text style={{fontSize: 9}}>{client?.phone || doc.clientPhone}</Text>}
-            {(client?.mutuelle || client?.assuranceId) && <Text style={{fontSize: 9, color: '#4a5568'}}>Mutuelle: {client?.mutuelle || client?.assuranceId}</Text>}
-          </View>
+            <View>
+                <Text style={styles.docTitle}>{docTitle} N° {doc.saleNumber || doc.id}</Text>
+                <Text style={styles.label}>Date: {formatDateSafe(doc.date || doc.createdAt)}</Text>
+            </View>
+            <View style={styles.clientBox}>
+                <Text style={styles.label}>CLIENT</Text>
+                <Text style={styles.value}>{client?.fullName?.toUpperCase() || 'CLIENT PASSAGE'}</Text>
+                {client?.phone && <Text style={{fontSize: 9}}>{client.phone}</Text>}
+            </View>
         </View>
 
-        {/* --- TABLE ITEMS --- */}
+        {/* Items Table */}
         <View style={styles.table}>
-          {/* Header */}
-          <View style={styles.tableHeader}>
-            <Text style={[styles.colDesc, {fontWeight: 'bold'}]}>Désignation</Text>
-            <Text style={[styles.colBrand, {fontWeight: 'bold'}]}>Marque</Text>
-            <Text style={[styles.colQty, {fontWeight: 'bold'}]}>Qté</Text>
-            <Text style={[styles.colPrice, {fontWeight: 'bold'}]}>P.U. (TTC)</Text>
-            <Text style={[styles.colTotal, {fontWeight: 'bold'}]}>Total (TTC)</Text>
-          </View>
+            <View style={styles.tableHeader}>
+                <Text style={styles.colDesc}>Désignation</Text>
+                <Text style={styles.colBrand}>Marque</Text>
+                <Text style={styles.colModel}>Modèle</Text>
+                <Text style={styles.colQty}>Qte</Text>
+                <Text style={styles.colPrice}>P.U.</Text>
+                <Text style={styles.colTotal}>Total</Text>
+            </View>
+            {(doc.items || []).map((item: any, i: number) => {
+                const totalItem = Number(item.lineTotalTTC || 0);
+                const unitPrice = Number(item.unitPriceTTC || 0);
+                // Optical detals check
+                const od = Array.isArray(item.lensDetails) ? item.lensDetails.find((d: any) => d.eye === 'OD') : null;
+                const og = Array.isArray(item.lensDetails) ? item.lensDetails.find((d: any) => d.eye === 'OG') : null;
 
-          {/* Rows */}
-          {allItems.map((item: any, i: number) => {
-            const unitTTC = Number(item.unitPriceTTC || item.unitPrice || item.prixVente || 0);
-            const lineTTC = Number(item.lineTotalTTC || item.totalTTC || (unitTTC * (item.quantity || item.qty)));
-            
-            // ✅ CHECK FOR RETURNED/CANCELED
-            const isReturned = (item.quantity || item.qty) <= 0 || item.status === 'returned';
-            
-            const od = Array.isArray(item.lensDetails) ? item.lensDetails.find((ld: any) => ld.eye === 'OD') : null;
-            const og = Array.isArray(item.lensDetails) ? item.lensDetails.find((ld: any) => ld.eye === 'OG') : null;
-            const isLens = item.productType === 'lens' || item.type === 'VERRE';
-
-            return (
-                <View key={i} style={isReturned ? styles.tableRowReturned : styles.tableRow} wrap={false}>
-                    <View style={styles.rowMain}>
-                        <View style={styles.colDesc}>
-                            <Text>{item.productName || item.label || item.nomProduit}</Text>
-                            {isReturned && <Text style={styles.badgeReturned}>(RETOURNÉ / ANNULÉ)</Text>}
-                        </View>
-                        <Text style={styles.colBrand}>{item.brand || item.marque || '-'}</Text>
-                        <Text style={styles.colQty}>{item.quantity || item.qty}</Text>
-                        <Text style={styles.colPrice}>{formatMoney(unitTTC)}</Text>
-                        <Text style={styles.colTotal}>{formatMoney(lineTTC)}</Text>
-                    </View>
-
-                    {/* 👓 SUB-ROW: Optical Details (Only for non-returned) */}
-                    {!isReturned && isLens && (od || og) && (
-                        <View style={styles.opticalGrid}>
-                            <View style={styles.opticalHeader}>
-                                <Text style={styles.optColEye}>Oeil</Text>
-                                <Text style={styles.optLabel}>Sphère</Text>
-                                <Text style={styles.optLabel}>Cylindre</Text>
-                                <Text style={styles.optLabel}>Axe</Text>
-                                <Text style={styles.optLabel}>Add</Text>
-                                <Text style={styles.optLabel}>Traitement</Text>
+                return (
+                    <View key={i} style={styles.tableRow} wrap={false}>
+                        <View style={styles.rowMain}>
+                            <View style={styles.colDesc}>
+                                <Text>{item.productName || item.label}</Text>
+                                {item.reference && <Text style={{fontSize: 8, color: '#718096', marginTop: 2}}>Réf: {item.reference}</Text>}
                             </View>
-                            {od && (
-                                <View style={styles.opticalRow}>
-                                <Text style={styles.optColEye}>OD</Text>
-                                <Text style={styles.optColVal}>{od.sphere || '-'}</Text>
-                                <Text style={styles.optColVal}>{od.cylinder || '-'}</Text>
-                                <Text style={styles.optColVal}>{od.axis ? od.axis + '°' : '-'}</Text>
-                                <Text style={styles.optColVal}>{od.addition || '-'}</Text>
-                                <Text style={styles.optColVal}>{od.treatment || '-'}</Text>
-                                </View>
-                            )}
-                            {og && (
-                                <View style={styles.opticalRow}>
-                                <Text style={styles.optColEye}>OG</Text>
-                                <Text style={styles.optColVal}>{og.sphere || '-'}</Text>
-                                <Text style={styles.optColVal}>{og.cylinder || '-'}</Text>
-                                <Text style={styles.optColVal}>{og.axis ? og.axis + '°' : '-'}</Text>
-                                <Text style={styles.optColVal}>{og.addition || '-'}</Text>
-                                <Text style={styles.optColVal}>{og.treatment || '-'}</Text>
-                                </View>
-                            )}
+                            <Text style={styles.colBrand}>{item.brand || '-'}</Text>
+                            <Text style={styles.colModel}>{item.model || '-'}</Text>
+                            <Text style={styles.colQty}>{item.quantity}</Text>
+                            <Text style={styles.colPrice}>{formatMoney(unitPrice)}</Text>
+                            <Text style={styles.colTotal}>{formatMoney(totalItem)}</Text>
                         </View>
-                    )}
-                </View>
-            );
-          })}
+                        
+                        {/* Lens Details */}
+                        {(od || og) && (
+                            <View style={styles.opticalGrid}>
+                                {od && (
+                                    <View style={styles.opticalRow}>
+                                        <Text style={[styles.optVal, {width: '8%', color: primaryColor}]}>OD</Text>
+                                        <Text style={styles.optLabel}>Sph: <Text style={styles.optVal}>{od.sphere}</Text></Text>
+                                        <Text style={styles.optLabel}>Cyl: <Text style={styles.optVal}>{od.cylinder}</Text></Text>
+                                        {od.axis && <Text style={styles.optLabel}>Axe: <Text style={styles.optVal}>{od.axis}°</Text></Text>}
+                                        {od.addition && <Text style={styles.optLabel}>Add: <Text style={styles.optVal}>{od.addition}</Text></Text>}
+                                    </View>
+                                )}
+                                {og && (
+                                    <View style={styles.opticalRow}>
+                                        <Text style={[styles.optVal, {width: '8%', color: primaryColor}]}>OG</Text>
+                                        <Text style={styles.optLabel}>Sph: <Text style={styles.optVal}>{og.sphere}</Text></Text>
+                                        <Text style={styles.optLabel}>Cyl: <Text style={styles.optVal}>{og.cylinder}</Text></Text>
+                                        {og.axis && <Text style={styles.optLabel}>Axe: <Text style={styles.optVal}>{og.axis}°</Text></Text>}
+                                        {og.addition && <Text style={styles.optLabel}>Add: <Text style={styles.optVal}>{og.addition}</Text></Text>}
+                                    </View>
+                                )}
+                            </View>
+                        )}
+                    </View>
+                );
+            })}
         </View>
 
-        {/* --- TOTALS SECTION --- */}
+        {/* Totals */}
         <View style={styles.totalsSection}>
-          <View style={styles.totalBox}>
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Total HT:</Text>
-              <Text style={styles.totalValue}>{formatMoney(Number(doc.totalHT || 0))}</Text>
-            </View>
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>TVA:</Text>
-              <Text style={styles.totalValue}>{formatMoney(Number(doc.totalTVA || 0))}</Text>
-            </View>
-            
-            <View style={[styles.totalRowFinal, { borderTopColor: primaryColor }]}>
-              <Text style={[styles.totalFinal, { color: primaryColor }]}>NET À PAYER:</Text>
-              <Text style={[styles.totalFinal, { color: primaryColor }]}>{formatMoney(totalTTC)}</Text>
-            </View>
-
-            {doc.resteAPayer > 0 && !isQuote && (
-                <View style={[styles.totalRow, { borderBottom: 'none' }]}>
-                    <Text style={[styles.totalLabel, {color: '#dc2626'}]}>Reste à payer:</Text>
-                    <Text style={[styles.totalValue, {color: '#dc2626'}]}>{formatMoney(Number(doc.resteAPayer))}</Text>
+            <View style={styles.totalBox}>
+                <View style={styles.totalRow}>
+                    <Text>Total HT</Text>
+                    <Text style={{fontWeight: 'bold'}}>{formatMoney(Number(doc.totalHT || 0))}</Text>
                 </View>
-            )}
-          </View>
+                <View style={styles.totalRow}>
+                    <Text>Total TVA</Text>
+                    <Text style={{fontWeight: 'bold'}}>{formatMoney(Number(doc.totalTVA || 0))}</Text>
+                </View>
+                <View style={styles.totalFinal}>
+                    <Text style={{fontSize: 12, fontWeight: 'bold', color: primaryColor}}>NET À PAYER</Text>
+                    <Text style={{fontSize: 12, fontWeight: 'bold', color: primaryColor}}>{formatMoney(Number(doc.totalTTC || 0))}</Text>
+                </View>
+            </View>
         </View>
 
-        {/* --- FOOTER (Conditional) --- */}
-        {isQuote ? (
-          <View style={styles.signatureSection}>
-            <View style={styles.signatureBox}>
-              <Text style={{fontSize: 8, fontWeight: 'bold', marginBottom: 10}}>Bon pour accord (Client)</Text>
-              <Text style={{fontSize: 7, color: '#aaa'}}>Date et signature</Text>
+        {/* Footer */}
+        {showFooter && (
+            <View style={styles.footer}>
+                <Text>Arrêté la présente facture à la somme de : {formatCurrencyToWords(Number(doc.totalTTC || 0))}</Text>
+                {footerText && <Text style={{marginTop: 4}}>{footerText}</Text>}
+                <Text style={{marginTop: 4}}>Merci de votre confiance.</Text>
             </View>
-            <View style={styles.signatureBox}>
-              <Text style={{fontSize: 8, fontWeight: 'bold', marginBottom: 10}}>L'Opticien</Text>
-              <Text style={{fontSize: 7, color: '#aaa'}}>Cachet et signature</Text>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.footer}>
-            <Text>Arrêté la présente facture à la somme de : {formatCurrencyToWords(totalTTC)}</Text>
-            <Text style={{marginTop: 5, fontStyle: 'italic'}}>Merci de votre confiance</Text>
-            {settings?.rib && <Text style={{marginTop: 5}}>RIB: {settings.rib}</Text>}
-            <Text style={{marginTop: 5, fontSize: 7, color: '#cbd5e0'}}>Généré par OptiManager Pro</Text>
-          </View>
         )}
-
       </Page>
     </Document>
   );

@@ -206,24 +206,6 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
         supplierName: supplier?.nomCommercial || supplier?.name || 'Unknown',
 
         // Explicit Prescription (Mapping from prescription data object)
-<<<<<<< Updated upstream
-        sphereR: fullSelectedPrescription?.data?.od?.sphere?.toString() || null,
-        cylindreR: fullSelectedPrescription?.data?.od?.cylinder?.toString() || null,
-        axeR: fullSelectedPrescription?.data?.od?.axis?.toString() || null,
-        additionR: (fullSelectedPrescription?.data?.od?.addition || fullSelectedPrescription?.data?.od?.add)?.toString() || null,
-        hauteurR: (fullSelectedPrescription?.data?.od?.height || fullSelectedPrescription?.data?.od?.hauteur)?.toString() || null,
-        
-        sphereL: fullSelectedPrescription?.data?.og?.sphere?.toString() || null,
-        cylindreL: fullSelectedPrescription?.data?.og?.cylinder?.toString() || null,
-        axeL: fullSelectedPrescription?.data?.og?.axis?.toString() || null,
-        additionL: (fullSelectedPrescription?.data?.og?.addition || fullSelectedPrescription?.data?.og?.add)?.toString() || null,
-        hauteurL: (fullSelectedPrescription?.data?.og?.height || fullSelectedPrescription?.data?.og?.hauteur)?.toString() || null,
-        
-        ecartPupillaireR: fullSelectedPrescription?.data?.od?.pd?.toString() || null,
-        ecartPupillaireL: fullSelectedPrescription?.data?.og?.pd?.toString() || null,
-        diameterR: fullSelectedPrescription?.data?.od?.diameter?.toString() || null,
-        diameterL: fullSelectedPrescription?.data?.og?.diameter?.toString() || null,
-=======
         sphereR: getVal('od', 'sphere')?.toString() || null,
         cylindreR: getVal('od', 'cylinder')?.toString() || null,
         axeR: getVal('od', 'axis')?.toString() || null,
@@ -240,7 +222,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
         ecartPupillaireL: ecartL?.toString() || totalPD?.toString() || null,
         diameterR: getVal('od', 'diameter')?.toString() || fullSelectedPrescription?.data?.diametre?.toString() || null,
         diameterL: getVal('og', 'diameter')?.toString() || fullSelectedPrescription?.data?.diametre?.toString() || null,
->>>>>>> Stashed changes
+
 
         matiere: fullSelectedPrescription?.data?.matiere || null,
         indice: fullSelectedPrescription?.data?.indice || null,
@@ -361,30 +343,6 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                   <Eye className="h-4 w-4 text-blue-600" />
                   <h4 className="text-sm font-semibold text-slate-900">Détails de la correction</h4>
                 </div>
-<<<<<<< Updated upstream
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-                    <div>
-                        <span className="font-semibold text-blue-700 block mb-2 border-b border-blue-100 pb-1">Œil Droit (OD)</span>
-                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-2 gap-x-4 text-slate-600">
-                            <div>Sph: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.od?.sphere || '-'}</span></div>
-                            <div>Cyl: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.od?.cylinder || '-'}</span></div>
-                            <div>Axe: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.od?.axis || '-'}</span>°</div>
-                            <div>Add: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.od?.addition || fullSelectedPrescription.data?.od?.add || '-'}</span></div>
-                            <div>EP: <span className="font-bold text-blue-700">{fullSelectedPrescription.data?.od?.pd || '-'}</span></div>
-                            <div>H: <span className="font-bold text-blue-700">{fullSelectedPrescription.data?.od?.height || fullSelectedPrescription.data?.od?.hauteur || '-'}</span></div>
-                        </div>
-                    </div>
-                    <div>
-                        <span className="font-semibold text-blue-700 block mb-2 border-b border-blue-100 pb-1">Œil Gauche (OG)</span>
-                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-2 gap-x-4 text-slate-600">
-                            <div>Sph: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.og?.sphere || '-'}</span></div>
-                            <div>Cyl: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.og?.cylinder || '-'}</span></div>
-                            <div>Axe: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.og?.axis || '-'}</span>°</div>
-                            <div>Add: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.og?.addition || fullSelectedPrescription.data?.og?.add || '-'}</span></div>
-                            <div>EP: <span className="font-bold text-blue-700">{fullSelectedPrescription.data?.og?.pd || '-'}</span></div>
-                            <div>H: <span className="font-bold text-blue-700">{fullSelectedPrescription.data?.og?.height || fullSelectedPrescription.data?.og?.hauteur || '-'}</span></div>
-                        </div>
-=======
                 <div className="grid grid-cols-2 gap-4 text-sm mt-2">
                   <div className="bg-white p-3 rounded border border-slate-200">
                     <span className="font-semibold text-blue-700 block mb-2 border-b pb-1">Œil Droit (OD)</span>
@@ -408,7 +366,6 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                       <div className="pt-1 border-t col-span-2 mt-1"></div>
                       <div>EP: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.pd || fullSelectedPrescription.data?.pd || '-'}</span></div>
                       <div>H: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.hauteur || '-'}</span></div>
->>>>>>> Stashed changes
                     </div>
                   </div>
                 </div>
@@ -456,7 +413,6 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
             )}
 
             {mode === 'contacts' && (
-<<<<<<< Updated upstream
                <FormField
                   control={form.control}
                   name="lensType"
@@ -470,21 +426,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                     </FormItem>
                   )}
                 />
-=======
-              <FormField
-                control={form.control}
-                name="lensType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Marque de Lentilles / Modèle</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: Acuvue Oasys, Biofinity..." {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
->>>>>>> Stashed changes
+
             )}
 
 

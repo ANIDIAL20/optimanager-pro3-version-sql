@@ -94,30 +94,8 @@ export function QuoteActions({ devis, shopSettings, client }: QuoteActionsProps)
                         <span>Imprimer</span>
                     </DropdownMenuItem>
 
-                    <DropdownMenuItem onClick={async (e) => {
-                        e.preventDefault();
-                        try {
-                            const { pdf } = await import('@react-pdf/renderer');
-                            const { PdfDocumentTemplate } = await import('@/components/documents/pdf-document-template');
-                            
-                            const blob = await pdf(
-                                <PdfDocumentTemplate 
-                                    type="devis" 
-                                    data={{ document: devis, client, settings: shopSettings }} 
-                                />
-                            ).toBlob();
-                            
-                            const url = URL.createObjectURL(blob);
-                            const link = document.createElement('a');
-                            link.href = url;
-                            link.download = `Devis-${devis.id?.slice(0, 8) || 'Sans-ID'}.pdf`;
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
-                        } catch (err) {
-                            console.error('PDF Error:', err);
-                            toast({ title: 'Erreur PDF', description: "Impossible de générer le fichier.", variant: 'destructive' });
-                        }
+                    <DropdownMenuItem onClick={() => {
+                        window.open(`/api/devis/${devis.id}/pdf`, '_blank');
                     }}>
                         <Download className="mr-2 h-4 w-4" />
                         <span>Télécharger (PDF)</span>

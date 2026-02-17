@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "cross-env NODE_OPTIONS='--dns-result-order=ipv4first' next dev --turbopack",
+    "dev": "cross-env NODE_OPTIONS='--dns-result-order=ipv4first' next dev",
+    "dev:turbo": "cross-env NODE_OPTIONS='--dns-result-order=ipv4first' next dev --turbopack",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
     "build": "cross-env NODE_ENV=production next build",

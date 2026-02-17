@@ -51,12 +51,30 @@ type ShopProfileInput = z.infer<typeof shopProfileSchema>;
     try {
       // Use Query Builder instead of Relational Query for stability
       const [profile] = await db
-        .select()
+        .select({
+            id: shopProfiles.id,
+            userId: shopProfiles.userId,
+            shopName: shopProfiles.shopName,
+            address: shopProfiles.address,
+            phone: shopProfiles.phone,
+            ice: shopProfiles.ice,
+            rib: shopProfiles.rib,
+            logoUrl: shopProfiles.logoUrl,
+            documentSettings: shopProfiles.documentSettings,
+            documentSettingsVersion: shopProfiles.documentSettingsVersion,
+            documentSettingsUpdatedAt: shopProfiles.documentSettingsUpdatedAt,
+            isActive: shopProfiles.isActive,
+            // Omitted potentially problematic legacy columns temporarily
+            // rc: shopProfiles.rc,
+            // if: shopProfiles.if,
+            // ... 
+        })
         .from(shopProfiles)
         .where(eq(shopProfiles.userId, session.user.id))
         .limit(1);
     
-      return profile || null;
+      console.log('[getShopProfile] profile.id=', profile?.id); // DEBUG: Ensure ID is returned
+      return profile as any || null; // Cast as any temporarily to bypass strict typing during debug
     } catch (error: any) {
         console.error("❌ getShopProfile ERROR:", error);
         // Log all properties of the error
