@@ -220,10 +220,6 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
         ecartPupillaireL: fullSelectedPrescription?.data?.og?.pd?.toString() || null,
         diameterR: fullSelectedPrescription?.data?.od?.diameter?.toString() || null,
         diameterL: fullSelectedPrescription?.data?.og?.diameter?.toString() || null,
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/nouvelle-modif
 
         matiere: fullSelectedPrescription?.data?.matiere || null,
         indice: fullSelectedPrescription?.data?.indice || null,
@@ -364,31 +360,6 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                   <Eye className="h-4 w-4 text-blue-600" />
                   <h4 className="text-sm font-semibold text-slate-900">Détails de la correction</h4>
                 </div>
-<<<<<<< HEAD
-                <div className="grid grid-cols-2 gap-4 text-sm mt-2">
-                  <div className="bg-white p-3 rounded border border-slate-200">
-                    <span className="font-semibold text-blue-700 block mb-2 border-b pb-1">Œil Droit (OD)</span>
-                    <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-slate-600">
-                      <div>Sph: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.od?.sphere || '-'}</span></div>
-                      <div>Cyl: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.od?.cylinder || '-'}</span></div>
-                      <div>Axe: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.od?.axis || '-'}</span></div>
-                      <div>Add: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.od?.addition || '-'}</span></div>
-                      <div className="pt-1 border-t col-span-2 mt-1"></div>
-                      <div>EP: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.od?.pd || fullSelectedPrescription.data?.pd || '-'}</span></div>
-                      <div>H: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.od?.hauteur || '-'}</span></div>
-                    </div>
-                  </div>
-                  <div className="bg-white p-3 rounded border border-slate-200">
-                    <span className="font-semibold text-blue-700 block mb-2 border-b pb-1">Œil Gauche (OG)</span>
-                    <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-slate-600">
-                      <div>Sph: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.sphere || '-'}</span></div>
-                      <div>Cyl: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.cylinder || '-'}</span></div>
-                      <div>Axe: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.axis || '-'}</span></div>
-                      <div>Add: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.addition || '-'}</span></div>
-                      <div className="pt-1 border-t col-span-2 mt-1"></div>
-                      <div>EP: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.pd || fullSelectedPrescription.data?.pd || '-'}</span></div>
-                      <div>H: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.hauteur || '-'}</span></div>
-=======
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
                   <div>
                     <span className="font-semibold text-blue-700 block mb-2 border-b border-blue-100 pb-1">Œil Droit (OD)</span>
@@ -410,7 +381,6 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                       <div>Add: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.og?.addition || fullSelectedPrescription.data?.og?.add || '-'}</span></div>
                       <div>EP: <span className="font-bold text-blue-700">{fullSelectedPrescription.data?.og?.pd || '-'}</span></div>
                       <div>H: <span className="font-bold text-blue-700">{fullSelectedPrescription.data?.og?.height || fullSelectedPrescription.data?.og?.hauteur || '-'}</span></div>
->>>>>>> origin/nouvelle-modif
                     </div>
                   </div>
                 </div>
@@ -458,22 +428,6 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
             )}
 
             {mode === 'contacts' && (
-<<<<<<< HEAD
-               <FormField
-                  control={form.control}
-                  name="lensType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Marque de Lentilles / Modèle</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Ex: Acuvue Oasys, Biofinity..." {...field} value={field.value ?? ''} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-=======
               <FormField
                 control={form.control}
                 name="lensType"
@@ -487,7 +441,6 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                   </FormItem>
                 )}
               />
->>>>>>> origin/nouvelle-modif
             )}
 
 
