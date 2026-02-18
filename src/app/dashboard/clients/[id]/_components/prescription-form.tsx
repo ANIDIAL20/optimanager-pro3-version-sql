@@ -55,17 +55,10 @@ const PrescriptionSchema = z.object({
   ogBc: z.string().optional(),
   ogDia: z.string().optional(),
 
-<<<<<<< Updated upstream
   odEcartPupillaire: z.string().optional(),
   ogEcartPupillaire: z.string().optional(),
   odHauteurMontage: z.string().optional(),
   ogHauteurMontage: z.string().optional(),
-=======
-  odEcart: z.string().optional(),
-  ogEcart: z.string().optional(),
-  odHauteur: z.string().optional(),
-  ogHauteur: z.string().optional(),
->>>>>>> Stashed changes
   pontage: z.string().optional(),
   branches: z.string().optional(),
   diametre: z.string().optional(),
@@ -97,17 +90,10 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
       ogAddition: '',
       ogBc: '',
       ogDia: '',
-<<<<<<< Updated upstream
       odEcartPupillaire: '',
       ogEcartPupillaire: '',
       odHauteurMontage: '',
       ogHauteurMontage: '',
-=======
-      odEcart: '',
-      ogEcart: '',
-      odHauteur: '',
-      ogHauteur: '',
->>>>>>> Stashed changes
       pontage: '',
       branches: '',
       diametre: '',
@@ -129,31 +115,20 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
           cylinder: data.odCylindre || '',
           axis: data.odAxe || '',
           addition: data.odAddition || '',
-<<<<<<< Updated upstream
           pd: data.odEcartPupillaire || '',
           height: data.odHauteurMontage || ''
-=======
-          pd: data.odEcart || '',
-          hauteur: data.odHauteur || ''
->>>>>>> Stashed changes
         },
         og: {
           sphere: data.ogSphere || '',
           cylinder: data.ogCylindre || '',
           axis: data.ogAxe || '',
           addition: data.ogAddition || '',
-<<<<<<< Updated upstream
           pd: data.ogEcartPupillaire || '',
           height: data.ogHauteurMontage || ''
         },
-        pd: data.odEcartPupillaire && data.ogEcartPupillaire 
-          ? (parseFloat(data.odEcartPupillaire) + parseFloat(data.ogEcartPupillaire)).toString() 
+        pd: data.odEcartPupillaire && data.ogEcartPupillaire
+          ? (parseFloat(data.odEcartPupillaire) + parseFloat(data.ogEcartPupillaire)).toString()
           : '',
-=======
-          pd: data.ogEcart || '',
-          hauteur: data.ogHauteur || ''
-        },
->>>>>>> Stashed changes
         doctorName: data.prescripteur
       };
 
@@ -351,7 +326,6 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
             </div>
             <div className="space-y-4">
               <h3 className="font-headline text-lg">Mesures de Montage</h3>
-<<<<<<< Updated upstream
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 <FormField control={form.control} name="pontage" render={({ field }) => (
                   <FormItem><FormLabel>Pontage</FormLabel><FormControl><Input placeholder="e.g., 17" {...field} value={field.value ?? ''} /></FormControl></FormItem>
@@ -362,48 +336,6 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
                 <FormField control={form.control} name="diametre" render={({ field }) => (
                   <FormItem><FormLabel>Diamètre Verre</FormLabel><FormControl><Input placeholder="e.g., 70" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                 )} />
-=======
-              <div className="rounded-lg border p-4 bg-slate-50/30">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* EP Section */}
-                  <div className="space-y-3">
-                    <FormLabel className="text-base font-semibold text-blue-700">Écart Pupillaire (EP)</FormLabel>
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField control={form.control} name="odEcart" render={({ field }) => (
-                        <FormItem><FormLabel className="text-xs">OD (Droit)</FormLabel><FormControl><Input placeholder="ex. 31" {...field} /></FormControl></FormItem>
-                      )} />
-                      <FormField control={form.control} name="ogEcart" render={({ field }) => (
-                        <FormItem><FormLabel className="text-xs">OG (Gauche)</FormLabel><FormControl><Input placeholder="ex. 31" {...field} /></FormControl></FormItem>
-                      )} />
-                    </div>
-                  </div>
-
-                  {/* Hauteur Section */}
-                  <div className="space-y-3">
-                    <FormLabel className="text-base font-semibold text-blue-700">Hauteur Montage (H)</FormLabel>
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField control={form.control} name="odHauteur" render={({ field }) => (
-                        <FormItem><FormLabel className="text-xs">OD (Droit)</FormLabel><FormControl><Input placeholder="ex. 18" {...field} /></FormControl></FormItem>
-                      )} />
-                      <FormField control={form.control} name="ogHauteur" render={({ field }) => (
-                        <FormItem><FormLabel className="text-xs">OG (Gauche)</FormLabel><FormControl><Input placeholder="ex. 18" {...field} /></FormControl></FormItem>
-                      )} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6 pt-6 border-t">
-                  <FormField control={form.control} name="pontage" render={({ field }) => (
-                    <FormItem><FormLabel>Pontage</FormLabel><FormControl><Input placeholder="ex. 17" {...field} /></FormControl></FormItem>
-                  )} />
-                  <FormField control={form.control} name="branches" render={({ field }) => (
-                    <FormItem><FormLabel>Branches</FormLabel><FormControl><Input placeholder="ex. 145" {...field} /></FormControl></FormItem>
-                  )} />
-                  <FormField control={form.control} name="diametre" render={({ field }) => (
-                    <FormItem><FormLabel>Diamètre Verre</FormLabel><FormControl><Input placeholder="ex. 70" {...field} /></FormControl></FormItem>
-                  )} />
-                </div>
->>>>>>> Stashed changes
               </div>
             </div>
 

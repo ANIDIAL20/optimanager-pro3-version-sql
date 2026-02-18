@@ -239,12 +239,7 @@ export function LensOrderList({ clientId, clientName, mode = 'glasses', onUseOrd
   // Handle print with PRO design
   const handlePrint = () => {
     if (!selectedOrder) return;
-<<<<<<< Updated upstream
-    
-=======
-
     // Map explicit columns to objects for the SVG helper
->>>>>>> Stashed changes
     const od = {
       sphere: selectedOrder.sphereR,
       cylinder: selectedOrder.cylindreR,
@@ -797,7 +792,7 @@ export function LensOrderList({ clientId, clientName, mode = 'glasses', onUseOrd
                             </DropdownMenuItem>
                           )}
                           {order.status === 'received' && (
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               onClick={() => {
                                 if (onUseOrder) {
                                   onUseOrder(order.id);
@@ -808,7 +803,7 @@ export function LensOrderList({ clientId, clientName, mode = 'glasses', onUseOrd
                                   window.history.replaceState({}, '', url);
                                   window.location.reload();
                                 }
-                              }} 
+                              }}
                               className="text-emerald-600 focus:text-emerald-600 font-bold"
                             >
                               <ShoppingBag className="mr-2 h-4 w-4" />
@@ -1002,7 +997,6 @@ export function LensOrderList({ clientId, clientName, mode = 'glasses', onUseOrd
                       </div>
                     </div>
                   </div>
-<<<<<<< Updated upstream
                   <div className="space-y-2">
                     <p className="font-bold text-blue-700 border-b pb-1">Oeil Gauche (OG)</p>
                     <div className="grid grid-cols-2 gap-y-1 text-slate-600">
@@ -1012,29 +1006,13 @@ export function LensOrderList({ clientId, clientName, mode = 'glasses', onUseOrd
                       <span>Addition:</span> <span className="font-semibold text-slate-900">{selectedOrder.additionL || '-'}</span>
                       <span>Hauteur:</span> <span className="font-semibold text-slate-900">{selectedOrder.hauteurL || '-'}</span>
                       <span>EP / Diamètre:</span> <span className="font-semibold text-slate-900">{selectedOrder.ecartPupillaireL || '-'}/{selectedOrder.diameterL || '-'}</span>
-=======
-                  <div className="space-y-3">
-                    <p className="font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
-                      Oeil Gauche (OG)
-                    </p>
-                    <div className="grid grid-cols-2 gap-y-2 gap-x-4 px-2 text-slate-600">
-                      <span>Sphère:</span> <span className="font-bold text-slate-900">{selectedOrder.sphereL || '-'}</span>
-                      <span>Cylindre:</span> <span className="font-bold text-slate-900">{selectedOrder.cylindreL || '-'}</span>
-                      <span>Axe:</span> <span className="font-bold text-slate-900">{selectedOrder.axeL ? `${selectedOrder.axeL}°` : '-'}</span>
-                      <span>Addition:</span> <span className="font-bold text-slate-900">{selectedOrder.additionL || '-'}</span>
-                      <div className="col-span-2 border-t pt-1 mt-1 grid grid-cols-2">
-                        <span className="text-xs text-slate-500 uppercase">EP:</span> <span className="font-bold text-indigo-800">{selectedOrder.ecartPupillaireL || '-'}</span>
-                        <span className="text-xs text-slate-500 uppercase">H:</span> <span className="font-bold text-indigo-800">{selectedOrder.hauteurL || '-'}</span>
-                      </div>
->>>>>>> Stashed changes
                     </div>
                   </div>
                 </div>
                 <div className="mt-4 pt-4 border-t grid grid-cols-2 gap-4 text-sm">
-                   <div className="space-y-1">
-                      <p><span className="text-slate-500">EP / Diamètre OD:</span> <span className="font-medium">{selectedOrder.ecartPupillaireR || '-'}/{selectedOrder.diameterR || '-'}</span></p>
-                   </div>
+                  <div className="space-y-1">
+                    <p><span className="text-slate-500">EP / Diamètre OD:</span> <span className="font-medium">{selectedOrder.ecartPupillaireR || '-'}/{selectedOrder.diameterR || '-'}</span></p>
+                  </div>
                 </div>
                 {(selectedOrder.matiere || selectedOrder.indice) && (
                   <div className="mt-4 pt-4 border-t grid grid-cols-2 gap-4 text-sm">

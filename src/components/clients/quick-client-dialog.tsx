@@ -69,8 +69,8 @@ export function QuickClientDialog({
         async function fetchMutuelles() {
             try {
                 const result = await getInsurances();
-                if (Array.isArray(result)) {
-                    setMutuellesList(result);
+                if (result.success && Array.isArray(result.data)) {
+                    setMutuellesList(result.data);
                 }
             } catch (error) {
                 console.error('Error fetching mutuelles:', error);
@@ -121,6 +121,7 @@ export function QuickClientDialog({
                     telephone1: data.telephone1,
                     cni: data.cni || '',
                     ville: data.ville || '',
+                    mutuelle: data.mutuelle || '',
                     sexe: 'Homme',
                     creditBalance: 0,
                     lastVisit: new Date().toISOString(),
@@ -217,44 +218,46 @@ export function QuickClientDialog({
                         />
                     </div>
 
-                    <FormField
-                        control={form.control}
-                        name="ville"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Ville</FormLabel>
-                                <FormControl>
-                                    <Input placeholder="Casablanca" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
+                    <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                            control={form.control}
+                            name="ville"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Ville</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="Casablanca" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
 
-                    <FormField
-                        control={form.control}
-                        name="mutuelle"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Mutuelle</FormLabel>
-                                <SearchableSelect
-                                    options={[
-                                        { label: 'Aucune', value: 'AUCUNE' },
-                                        ...mutuellesList.map((m) => ({
-                                            label: m.name,
-                                            value: m.name,
-                                        }))
-                                    ]}
-                                    value={field.value}
-                                    onChange={field.onChange}
-                                    placeholder="Sélectionner..."
-                                    searchPlaceholder="Rechercher une mutuelle..."
-                                    disabled={isLoadingMutuelles}
-                                />
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
+                        <FormField
+                            control={form.control}
+                            name="mutuelle"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Mutuelle</FormLabel>
+                                    <SearchableSelect
+                                        options={[
+                                            { label: 'Aucune', value: 'AUCUNE' },
+                                            ...(Array.isArray(mutuellesList) ? mutuellesList : []).map((m) => ({
+                                                label: m.name,
+                                                value: m.name,
+                                            }))
+                                        ]}
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                        placeholder="Sélectionner..."
+                                        searchPlaceholder="Rechercher une mutuelle..."
+                                        disabled={isLoadingMutuelles}
+                                    />
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    </div>
 
                     <DialogFooter className="gap-2 sm:gap-0">
                         <Button type="button" variant="outline" onClick={() => setOpen(false)}>

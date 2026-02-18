@@ -35,7 +35,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { InteractionHistory } from './_components/interaction-history';
 import { ArrowLeft, MessageSquare } from 'lucide-react';
 import { useBreadcrumbStore } from '@/hooks/use-breadcrumb-store';
-import { getClientReservationsAction } from '@/app/actions/reservation-actions';
+
 import { ClientReservationsTab } from '@/features/reservations/components/client-reservations-tab';
 import type { FrameReservation } from '@/features/reservations/types/reservation.types';
 import { Tag } from 'lucide-react';
@@ -55,7 +55,7 @@ export default function ClientDetailView({ initialClient, initialReservations }:
 
     const client = initialClient;
     const reservations = initialReservations;
-    
+
     // State to pass reservation to POS when clicking "Utiliser"
     const [reservationToProcess, setReservationToProcess] = React.useState<number | null>(null);
     const [orderToProcess, setOrderToProcess] = React.useState<number | null>(null);
@@ -63,7 +63,7 @@ export default function ClientDetailView({ initialClient, initialReservations }:
     // Refresh key for other tabs that might still need manual refresh triggers
     const [refreshKey, setRefreshKey] = React.useState(0);
     const { setLabel } = useBreadcrumbStore();
-    
+
     // Update breadcrumb label with client name
     React.useEffect(() => {
         if (client) {
@@ -123,7 +123,7 @@ export default function ClientDetailView({ initialClient, initialReservations }:
                         Aperçu
                     </TabsTrigger>
                     <TabsTrigger value="sales" className="gap-2">
-                        <DollarSign className="h-4 w-4"/>
+                        <DollarSign className="h-4 w-4" />
                         Point de Vente
                     </TabsTrigger>
                     <TabsTrigger value="prescriptions" className="gap-2">
@@ -159,9 +159,9 @@ export default function ClientDetailView({ initialClient, initialReservations }:
 
                 {/* Point de Vente Tab */}
                 <TabsContent value="sales" className="space-y-6">
-                    <ClientPOSTab 
-                        client={client} 
-                        clientId={id} 
+                    <ClientPOSTab
+                        client={client}
+                        clientId={id}
                         initialReservationId={reservationToProcess}
                         initialOrderId={orderToProcess}
                     />
@@ -196,10 +196,10 @@ export default function ClientDetailView({ initialClient, initialReservations }:
                 <TabsContent value="lens-orders" className="space-y-6">
                     <LensOrderForm clientId={id} mode="glasses" onSuccess={() => setRefreshKey(prev => prev + 1)} />
                     <Separator />
-                    <LensOrderList 
-                        key={`lens-orders-${refreshKey}`} 
-                        mode="glasses" 
-                        clientId={id} 
+                    <LensOrderList
+                        key={`lens-orders-${refreshKey}`}
+                        mode="glasses"
+                        clientId={id}
                         clientName={`${client?.prenom || ''} ${client?.nom || ''}`}
                         onUseOrder={handleUseOrder}
                     />
@@ -244,8 +244,8 @@ export default function ClientDetailView({ initialClient, initialReservations }:
 
                 {/* Reservations Tab */}
                 <TabsContent value="reservations">
-                    <ClientReservationsTab 
-                        clientId={parseInt(id)} 
+                    <ClientReservationsTab
+                        clientId={parseInt(id)}
                         reservations={reservations}
                         onUseReservation={handleUseReservation}
                     />
