@@ -59,10 +59,6 @@ const PrescriptionSchema = z.object({
   ogEcartPupillaire: z.string().optional(),
   odHauteurMontage: z.string().optional(),
   ogHauteurMontage: z.string().optional(),
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/nouvelle-modif
   pontage: z.string().optional(),
   branches: z.string().optional(),
   diametre: z.string().optional(),
@@ -98,10 +94,6 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
       ogEcartPupillaire: '',
       odHauteurMontage: '',
       ogHauteurMontage: '',
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/nouvelle-modif
       pontage: '',
       branches: '',
       diametre: '',
@@ -137,10 +129,6 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
         pd: data.odEcartPupillaire && data.ogEcartPupillaire
           ? (parseFloat(data.odEcartPupillaire) + parseFloat(data.ogEcartPupillaire)).toString()
           : '',
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/nouvelle-modif
         doctorName: data.prescripteur
       };
 
@@ -348,10 +336,6 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
                 <FormField control={form.control} name="diametre" render={({ field }) => (
                   <FormItem><FormLabel>Diamètre Verre</FormLabel><FormControl><Input placeholder="e.g., 70" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                 )} />
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/nouvelle-modif
               </div>
             </div>
 
