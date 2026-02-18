@@ -26,6 +26,7 @@ export interface DashboardStats {
         status: string;
         resteAPayer?: number;
     }>;
+    pendingPaymentsCount: number;
     pendingReservations: any[]; // List of PENDING frame reservations
 }
 
@@ -73,7 +74,7 @@ export const getDashboardStats = secureAction(async (userId, user) => {
             db.select().from(frameReservations).where(and(
                 eq(frameReservations.storeId, userId),
                 eq(frameReservations.status, 'PENDING')
-            )).catch((err) => {
+            )).catch((err: any) => {
                 console.warn("⚠️ Dashboard: Missing frame_reservations table, skipping."); 
                 return []; 
             }),
@@ -91,6 +92,15 @@ export const getDashboardStats = secureAction(async (userId, user) => {
         // Total count (Quickly count without fetching)
         const totalSalesCountResult = await db.select({ count: sql`count(*)` }).from(sales).where(eq(sales.userId, userId));
         const totalSalesCount = Number(totalSalesCountResult[0]?.count || 0);
+
+        // Count Pending Payments (Sales where reste_a_payer > 0)
+        const pendingPaymentsResult = await db.select({ count: sql`count(*)` })
+            .from(sales)
+            .where(and(
+                eq(sales.userId, userId),
+                sql`CAST(reste_a_payer AS NUMERIC) > 0.01`
+            ));
+        const pendingPaymentsCount = Number(pendingPaymentsResult[0]?.count || 0);
 
         // 4. Process Stock Alerts
         const stockAlertItems = qLowStock.map((p: any) => ({
@@ -131,6 +141,7 @@ export const getDashboardStats = secureAction(async (userId, user) => {
             globalRevenue,
             todaySalesCount,
             totalSalesCount,
+            pendingPaymentsCount,
             stockAlerts: qLowStock.length, // Rough estimate based on limit/results
             stockAlertItems,
             recentActivity,

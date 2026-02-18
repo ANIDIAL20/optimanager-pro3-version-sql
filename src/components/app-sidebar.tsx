@@ -36,15 +36,15 @@ import {
 
 import { UserProfile } from "@/components/user-profile";
 import { RemindersBadge } from "@/components/reminders/reminders-badge";
+import { useMode } from "@/contexts/mode-context";
 
 import Image from 'next/image';
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const pathname = usePathname();
     const { data: session } = useSession();
+    const { isBasicMode, isExpertMode, toggleMode } = useMode();
     const user = session?.user;
-    // const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL; // Deprecated
-    // const isAdmin = user?.email === ADMIN_EMAIL; // Deprecated
 
     return (
         <Sidebar collapsible="icon" {...props}>
@@ -77,7 +77,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
             <SidebarContent>
                 <SidebarMenu>
-
                     {/* Dashboard */}
                     <SidebarMenuItem>
                         <SidebarMenuButton asChild isActive={pathname === '/dashboard'} tooltip="Tableau de bord">
@@ -99,89 +98,23 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     </SidebarMenuItem>
 
                     <SidebarMenuItem>
-                        <SidebarMenuButton asChild isActive={pathname.startsWith('/suppliers')} tooltip="Fournisseurs">
-                            <Link href="/suppliers">
-                                <Truck className="size-5" strokeWidth={1.5} />
-                                <span>Fournisseurs</span>
+                        <SidebarMenuButton asChild isActive={pathname === '/dashboard/ventes'} tooltip="Ventes">
+                            <Link href="/dashboard/ventes">
+                                <Receipt className="size-5" strokeWidth={1.5} />
+                                <span>Ventes</span>
                             </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
 
-                </SidebarMenu>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton asChild isActive={pathname === '/produits'} tooltip="Stock & Produits">
+                            <Link href="/produits">
+                                <Package className="size-5" strokeWidth={1.5} />
+                                <span>Stock & Produits</span>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
 
-                {/* GESTION STOCK */}
-                <SidebarGroup>
-                    <SidebarGroupLabel>Gestion Stock</SidebarGroupLabel>
-                    <SidebarGroupContent>
-                        <SidebarMenu>
-                            <SidebarMenuItem>
-                                <SidebarMenuButton asChild isActive={pathname === '/produits'} tooltip="Stock & Produits">
-                                    <Link href="/produits">
-                                        <Package className="size-5" strokeWidth={1.5} />
-                                        <span>Stock & Produits</span>
-                                    </Link>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-
-
-                        </SidebarMenu>
-                    </SidebarGroupContent>
-                </SidebarGroup>
-
-                {/* GESTION COMMERCIALE */}
-                <SidebarGroup>
-                    <SidebarGroupLabel>Gestion Commerciale</SidebarGroupLabel>
-                    <SidebarGroupContent>
-                        <SidebarMenu>
-                            <SidebarMenuItem>
-                                <SidebarMenuButton asChild isActive={pathname === '/dashboard/devis'} tooltip="Devis">
-                                    <Link href="/dashboard/devis">
-                                        <FileText className="size-5" strokeWidth={1.5} />
-                                        <span>Devis</span>
-                                    </Link>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-
-                            <SidebarMenuItem>
-                                <SidebarMenuButton asChild isActive={pathname === '/dashboard/ventes'} tooltip="Ventes">
-                                    <Link href="/dashboard/ventes">
-                                        <Receipt className="size-5" strokeWidth={1.5} />
-                                        <span>Ventes</span>
-                                    </Link>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-                        </SidebarMenu>
-                    </SidebarGroupContent>
-                </SidebarGroup>
-
-                {/* COMPTABILITÉ */}
-                <SidebarGroup>
-                    <SidebarGroupLabel>Comptabilité</SidebarGroupLabel>
-                    <SidebarGroupContent>
-                        <SidebarMenu>
-                            <SidebarMenuItem>
-                                <SidebarMenuButton asChild isActive={pathname.startsWith('/expenses')} tooltip="Les Charges">
-                                    <Link href="/expenses">
-                                        <Banknote className="size-5" strokeWidth={1.5} />
-                                        <span>Les Charges</span>
-                                    </Link>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-
-                            <SidebarMenuItem>
-                                <SidebarMenuButton asChild isActive={pathname === '/dashboard/compta'} tooltip="Exports & Rapports">
-                                    <Link href="/dashboard/compta">
-                                        <FileSpreadsheet className="size-5" strokeWidth={1.5} />
-                                        <span>Exports & Rapports</span>
-                                    </Link>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-                        </SidebarMenu>
-                    </SidebarGroupContent>
-                </SidebarGroup>
-
-                {/* PARAMETRES */}
-                <SidebarMenu>
                     <SidebarMenuItem>
                         <SidebarMenuButton asChild isActive={pathname === '/dashboard/rappels'} tooltip="Rappels">
                             <Link href="/dashboard/rappels">
@@ -191,24 +124,75 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                             </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
+                </SidebarMenu>
 
-                    <SidebarMenuItem>
-                        <SidebarMenuButton asChild isActive={pathname === '/dashboard/parametres'} tooltip="Paramètres">
-                            <Link href="/dashboard/parametres">
-                                <Settings className="size-5" strokeWidth={1.5} />
-                                <span>Paramètres</span>
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
+                {/* Expert Section */}
+                {isExpertMode && (
+                    <>
+                        <div className="sidebar-divider" />
+                        <div className="sidebar-section-title group-data-[collapsible=icon]:hidden">
+                            Mode Expert
+                        </div>
 
-                    {/* Admin Link (Role Based) */}
-                    {user?.role === 'ADMIN' && (
+                        <SidebarGroup className="p-0">
+                            <SidebarMenu>
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton asChild isActive={pathname.startsWith('/suppliers')} tooltip="Fournisseurs">
+                                        <Link href="/suppliers">
+                                            <Truck className="size-5" strokeWidth={1.5} />
+                                            <span>Fournisseurs</span>
+                                        </Link>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/devis'} tooltip="Devis">
+                                        <Link href="/dashboard/devis">
+                                            <FileText className="size-5" strokeWidth={1.5} />
+                                            <span>Devis</span>
+                                        </Link>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton asChild isActive={pathname.startsWith('/expenses')} tooltip="Les Charges">
+                                        <Link href="/expenses">
+                                            <Banknote className="size-5" strokeWidth={1.5} />
+                                            <span>Les Charges</span>
+                                        </Link>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/compta'} tooltip="Exports & Rapports">
+                                        <Link href="/dashboard/compta">
+                                            <FileSpreadsheet className="size-5" strokeWidth={1.5} />
+                                            <span>Exports & Rapports</span>
+                                        </Link>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton asChild isActive={pathname === '/dashboard/parametres'} tooltip="Paramètres">
+                                        <Link href="/dashboard/parametres">
+                                            <Settings className="size-5" strokeWidth={1.5} />
+                                            <span>Paramètres</span>
+                                        </Link>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+                            </SidebarMenu>
+                        </SidebarGroup>
+                    </>
+                )}
+
+                {/* Admin Link (Role Based) */}
+                {user?.role === 'ADMIN' && (
+                    <SidebarMenu className="mt-auto">
                         <SidebarMenuItem>
                             <SidebarMenuButton
                                 asChild
                                 isActive={pathname?.startsWith('/admin')}
                                 tooltip="Admin Panel"
-                                className="mt-auto"
                             >
                                 <Link href="/admin">
                                     <ShieldCheck className="size-5" strokeWidth={1.5} />
@@ -216,12 +200,25 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                 </Link>
                             </SidebarMenuButton>
                         </SidebarMenuItem>
-                    )}
-
-                </SidebarMenu>
+                    </SidebarMenu>
+                )}
             </SidebarContent>
 
             <SidebarFooter>
+                <div className="group-data-[collapsible=icon]:hidden px-2 pb-2">
+                    <div className="mode-toggle">
+                        <span className="mode-label">
+                            {isBasicMode ? '🟢 Mode Basique' : '🔵 Mode Expert'}
+                        </span>
+                        <button 
+                            onClick={toggleMode}
+                            className="toggle-button"
+                            title="Changer le mode"
+                        >
+                            {isBasicMode ? 'Activer Mode Expert →' : '← Mode Basique'}
+                        </button>
+                    </div>
+                </div>
                 <UserProfile />
             </SidebarFooter>
 

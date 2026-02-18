@@ -20,7 +20,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { CreditCard, History } from 'lucide-react';
+import { CreditCard, History, Wallet } from 'lucide-react';
 import { addPayment } from '@/app/actions/sales-actions';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -110,29 +110,29 @@ export function PaymentDialog({ order, open, onOpenChange, onPaymentSuccess }: P
         setIsSubmitting(true);
 
         try {
-             // Use Server Action
-             const result = await addPayment(order.id, {
-                 amount: paymentAmount,
-                 method,
-                 note
-             }) as any;
+            // Use Server Action
+            const result = await addPayment(order.id, {
+                amount: paymentAmount,
+                method,
+                note
+            }) as any;
 
-             if (result.success) {
-                 toast({
-                     title: '✅ Paiement enregistré',
-                     description: `${paymentAmount.toFixed(2)} MAD ajouté avec succès.`,
-                 });
+            if (result.success) {
+                toast({
+                    title: '✅ Paiement enregistré',
+                    description: `${paymentAmount.toFixed(2)} MAD ajouté avec succès.`,
+                });
 
-                 onOpenChange(false);
-                 router.refresh();
-                 if (onPaymentSuccess) onPaymentSuccess();
-             } else {
-                 toast({
-                     variant: 'destructive',
-                     title: 'Erreur',
-                     description: result.error || 'Impossible d\'enregistrer le paiement',
-                 });
-             }
+                onOpenChange(false);
+                router.refresh();
+                if (onPaymentSuccess) onPaymentSuccess();
+            } else {
+                toast({
+                    variant: 'destructive',
+                    title: 'Erreur',
+                    description: result.error || 'Impossible d\'enregistrer le paiement',
+                });
+            }
 
         } catch (error: any) {
             console.error('Payment error:', error);
@@ -150,7 +150,7 @@ export function PaymentDialog({ order, open, onOpenChange, onPaymentSuccess }: P
         <>
             {/* @ts-ignore */}
             <Dialog modal={false} open={open} onOpenChange={onOpenChange}>
-                <DialogContent 
+                <DialogContent
                     className="max-w-4xl max-h-[85vh] overflow-y-auto"
                     onInteractOutside={(e) => e.preventDefault()}
                     onOpenAutoFocus={(e) => e.preventDefault()}
@@ -189,7 +189,14 @@ export function PaymentDialog({ order, open, onOpenChange, onPaymentSuccess }: P
                                                 >
                                                     <div className="flex-1">
                                                         <p className="font-medium text-slate-900">
-                                                            Tranche {index + 1}
+                                                            {payment.note?.toLowerCase().includes('avance') || payment.method === 'Advance' || index === 0 && Number(order.totalPaye) > 0 && payment.amount === Number(order.totalPaye) ? (
+                                                                <span className="flex items-center gap-1.5 text-blue-600">
+                                                                    <Wallet className="h-3.5 w-3.5" />
+                                                                    Avance
+                                                                </span>
+                                                            ) : (
+                                                                `Paiement #${index + 1}`
+                                                            )}
                                                         </p>
                                                         <p className="text-xs text-slate-500">
                                                             {format(new Date(payment.date), 'dd MMM yyyy HH:mm', { locale: fr })}
@@ -249,7 +256,7 @@ export function PaymentDialog({ order, open, onOpenChange, onPaymentSuccess }: P
                             {/* Payment Method */}
                             <div className="space-y-2">
                                 <Label htmlFor="method">Méthode de paiement</Label>
-                                <Select modal={false} value={method} onValueChange={setMethod}>
+                                <Select value={method} onValueChange={setMethod}>
                                     <SelectTrigger id="method">
                                         <SelectValue />
                                     </SelectTrigger>
