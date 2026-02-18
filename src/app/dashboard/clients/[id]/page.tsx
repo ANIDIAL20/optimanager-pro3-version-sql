@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import ClientDetailView from './client-view';
 import { getClient } from '@/app/actions/clients-actions';
-import { getClientReservationsAction } from '@/app/actions/reservation-actions';
+import { getClientReservations } from '@/features/reservations/queries/get-client-reservations';
 import type { Client } from '@/lib/types';
 import type { FrameReservation } from '@/features/reservations/types/reservation.types';
 
@@ -10,9 +10,9 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   const { id } = await params;
 
   // Parallel data fetching
-  const [clientResult, reservationsResult] = await Promise.all([
+  const [clientResult, reservations] = await Promise.all([
     getClient(id),
-    getClientReservationsAction(id)
+    getClientReservations(parseInt(id))
   ]);
 
   if (!clientResult.success || !clientResult.client) {
@@ -26,21 +26,19 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   const nom = nameParts.length > 1 ? nameParts.slice(1).join(' ') : c.name;
 
   const adaptedClient: Client = {
-      ...c,
-      id: c.id!, 
-      nom,
-      prenom,
-      telephone1: c.phone || '', 
+    ...c,
+    id: c.id!,
+    nom,
+    prenom,
+    telephone1: c.phone || '',
   } as unknown as Client;
 
-  const initialReservations = (reservationsResult.success && reservationsResult.data) 
-    ? (reservationsResult.data as FrameReservation[]) 
-    : [];
+  const initialReservations = reservations;
 
   return (
-    <ClientDetailView 
-      initialClient={adaptedClient} 
-      initialReservations={initialReservations} 
+    <ClientDetailView
+      initialClient={adaptedClient}
+      initialReservations={initialReservations}
     />
   );
 }

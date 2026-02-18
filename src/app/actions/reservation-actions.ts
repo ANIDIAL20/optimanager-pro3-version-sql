@@ -1,97 +1,45 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { secureAction } from '@/lib/secure-action';
 import { createFrameReservation } from '@/features/reservations/services/create-frame-reservation';
 import { completeFrameReservation } from '@/features/reservations/services/complete-frame-reservation';
 import { cancelFrameReservation } from '@/features/reservations/services/cancel-frame-reservation';
-import type {
-  CreateFrameReservationInput,
-  CompleteFrameReservationInput,
-  CancelFrameReservationInput,
-} from '@/features/reservations/types/reservation.types';
-
-import { auth } from '@/auth';
+import { getClientReservations } from '@/features/reservations/queries/get-client-reservations';
+import { revalidatePath } from 'next/cache';
 
 /**
- * Server Action pour créer une réservation
+ * Action sécurisée pour créer une réservation
  */
-export async function createFrameReservationAction(
-  input: CreateFrameReservationInput
-) {
-  try {
-    const session = await auth();
-    if (!session?.user?.id) {
-        throw new Error("Authentification requise");
-    }
-
-    // Override storeId with the actual user ID to satisfy FK constraint
-    const reservationInput = {
+export const createFrameReservationAction = secureAction(async (userId, user, input: any) => {
+    const result = await createFrameReservation({
         ...input,
-        storeId: session.user.id
-    };
-
-    const reservation = await createFrameReservation(reservationInput);
-    
-    // Revalidation des chemins pour mettre à jour l'UI
-    revalidatePath(`/dashboard/clients/${input.clientId}`);
-    revalidatePath('/produits');
-    
-    return { success: true, data: reservation };
-  } catch (error: any) {
-    console.error('Error creating reservation:', error);
-    return { success: false, error: error.message };
-  }
-}
+        storeId: userId // On impose l'ID de l'utilisateur connecté
+    });
+    revalidatePath('/dashboard/clients');
+    return result;
+});
 
 /**
- * Server Action pour compléter une réservation (conversion en vente)
+ * Action sécurisée pour compléter une réservation
  */
-export async function completeFrameReservationAction(
-  input: CompleteFrameReservationInput
-) {
-  try {
-    const reservation = await completeFrameReservation(input);
-    
-    revalidatePath(`/dashboard/clients/${reservation.clientId}`);
-    revalidatePath('/produits');
-    
-    return { success: true, data: reservation };
-  } catch (error: any) {
-    console.error('Error completing reservation:', error);
-    return { success: false, error: error.message };
-  }
-}
+export const completeFrameReservationAction = secureAction(async (userId, user, input: any) => {
+    const result = await completeFrameReservation(input);
+    revalidatePath('/dashboard/clients');
+    return result;
+});
 
 /**
- * Server Action pour annuler une réservation
+ * Action sécurisée pour annuler une réservation
  */
-export async function cancelFrameReservationAction(
-  input: CancelFrameReservationInput
-) {
-  try {
-    const reservation = await cancelFrameReservation(input);
-    
-    revalidatePath(`/dashboard/clients/${reservation.clientId}`);
-    revalidatePath('/produits');
-    
-    return { success: true, data: reservation };
-  } catch (error: any) {
-    console.error('Error cancelling reservation:', error);
-    return { success: false, error: error.message };
-  }
-}
+export const cancelFrameReservationAction = secureAction(async (userId, user, input: any) => {
+    const result = await cancelFrameReservation(input);
+    revalidatePath('/dashboard/clients');
+    return result;
+});
 
 /**
- * Server Action pour récupérer les réservations d'un client
+ * Action sécurisée pour récupérer les réservations d'un client
  */
-export async function getClientReservationsAction(clientId: string) {
-  try {
-    const { getClientReservations } = await import('@/features/reservations/queries/get-client-reservations');
-    const reservations = await getClientReservations(parseInt(clientId));
-    return { success: true, data: reservations };
-  } catch (error: any) {
-    console.error('❌ ERROR in getClientReservationsAction:', error);
-    if (error.stack) console.error(error.stack);
-    return { success: false, error: error.message };
-  }
-}
+export const getClientReservationsAction = secureAction(async (userId, user, clientId: number) => {
+    return await getClientReservations(clientId);
+});

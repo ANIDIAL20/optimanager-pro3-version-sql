@@ -9,7 +9,10 @@ const schema = { ...schemaFile, ...schemaDir };
 // ✅ Essential for Transactions support in Node.js environment
 neonConfig.webSocketConstructor = ws;
 
-if (!process.env.DATABASE_URL) {
+// ✅ Client-side guard: do not evaluate database in browser
+const isBrowser = typeof window !== 'undefined';
+
+if (!isBrowser && !process.env.DATABASE_URL) {
   throw new Error("❌ DATABASE_URL mafih walou! T2akked anna .env.local fih lien d Neon.");
 }
 
@@ -32,7 +35,8 @@ function createDbConnection() {
 // ✅ Use global cache in development, fresh instance in production
 const globalForDb = globalThis as unknown as { __db_v6: any };
 
-export const db =
-  process.env.NODE_ENV === 'production'
+export const db = isBrowser
+  ? null as any // Return empty in browser
+  : (process.env.NODE_ENV === 'production'
     ? createDbConnection()
-    : (globalForDb.__db_v6 = globalForDb.__db_v6 ?? createDbConnection());
+    : (globalForDb.__db_v6 = globalForDb.__db_v6 ?? createDbConnection()));
