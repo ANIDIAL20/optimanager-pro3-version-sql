@@ -25,7 +25,7 @@ import {
   insurances
 } from '@/db/schema';
 import { auth } from '@/auth';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { gzip, gunzip } from 'node:zlib';
 import { promisify } from 'node:util';
 import { revalidatePath } from 'next/cache';
@@ -79,7 +79,7 @@ export async function exportUserData() {
       db.select().from(prescriptions).where(eq(prescriptions.userId, userId)),
       db.select().from(contactLensPrescriptions).where(eq(contactLensPrescriptions.userId, userId)),
       db.select().from(lensOrders).where(eq(lensOrders.userId, userId)),
-      db.select().from(suppliers).where(eq(suppliers.userId, userId)),
+      db.execute(sql`SELECT id, user_id, name, email, phone, address, city, ice, "if", rc, tax_id, category, payment_terms, payment_method, bank, rib, notes, status, current_balance, created_at, updated_at FROM suppliers WHERE user_id = ${userId}`).then(res => res.rows || []),
       db.select().from(shopProfiles).where(eq(shopProfiles.userId, userId)),
       db.select().from(settings).where(eq(settings.userId, userId)),
       db.select().from(stockMovements).where(eq(stockMovements.userId, userId)),

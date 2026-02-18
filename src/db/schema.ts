@@ -1,6 +1,7 @@
 import { pgTable, serial, text, timestamp, boolean, decimal, integer, json, jsonb, primaryKey, uuid, index, real, uniqueIndex } from 'drizzle-orm/pg-core';
 import type { AdapterAccount } from "next-auth/adapters";
 import { relations, sql } from 'drizzle-orm';
+export { suppliers, supplierOrders, supplierPayments, supplierOrderPayments } from './schema/suppliers.schema';
 
 // ========================================
 // 1. CLIENTS TABLE (Déjà migré)
@@ -926,100 +927,8 @@ export const insurances = pgTable('insurances', {
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
 });
 
-// ========================================
-// ========================================
-// 5. SUPPLIERS TABLE
-// ========================================
+// Modular schemas used: ./schema/suppliers.schema.ts, ./schema/supplier-orders.schema.ts, ./schema/supplier-payments.schema.ts
 
-export const suppliers = pgTable('suppliers', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-
-  // Basic Info
-  name: text('name').notNull(),
-  contactPerson: text('contact_person'),
-  email: text('email'),
-  phone: text('phone'),
-  address: text('address'),
-  city: text('city'),
-
-  // Legal & Fiscal
-  ice: text('ice'),
-  if: text('if'),
-  rc: text('rc'),
-  taxId: text('tax_id'),
-
-  // Financial
-  category: text('category'),
-  paymentTerms: text('payment_terms').default('30'),
-  creditLimit: decimal('credit_limit', { precision: 10, scale: 2 }).default('0'),
-  currentBalance: decimal('current_balance', { precision: 10, scale: 2 }).default('0'),
-  paymentMethod: text('payment_method'),
-  bank: text('bank'),
-  rib: text('rib'),
-
-  // Metadata
-  notes: text('notes'),
-  rating: text('rating'),
-  isActive: boolean('is_active').default(true),
-  status: text('status').default('Actif'),
-  defaultTaxMode: text('default_tax_mode').default('HT'), // 'HT' or 'TTC'
-
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
-});
-
-// ========================================
-// 6. SUPPLIER ORDERS TABLE
-// ========================================
-export const supplierOrders = pgTable('supplier_orders', {
-  id: serial('id').primaryKey(),
-  firebaseId: text('firebase_id').unique(),
-  userId: text('user_id').notNull(),
-
-  // Identity
-  orderNumber: text('order_number').unique(), // 🆕 BC-2026-XXXXXX
-  supplierId: uuid('supplier_id').references(() => suppliers.id),
-  fournisseur: text('fournisseur').notNull(),
-  supplierPhone: text('supplier_phone'),
-
-  // Items 
-  items: json('items').$type<any[]>(),
-
-  // Financial
-  subTotal: decimal('sub_total', { precision: 10, scale: 2 }),
-  tva: decimal('tva', { precision: 10, scale: 2 }),
-  discount: decimal('discount', { precision: 10, scale: 2 }),
-  shippingCost: decimal('shipping_cost', { precision: 10, scale: 2 }),
-
-  montantTotal: decimal('montant_total', { precision: 10, scale: 2 }).notNull(),
-  montantPaye: decimal('montant_paye', { precision: 10, scale: 2 }).default('0'),
-  resteAPayer: decimal('reste_a_payer', { precision: 10, scale: 2 }),
-
-  // Status
-  statut: text('statut').default('pending'),
-  deliveryStatus: text('delivery_status').default('pending'),
-
-  // Dates
-  dateCommande: timestamp('date_commande'),
-  expectedDelivery: timestamp('expected_delivery'),
-  dateReception: timestamp('date_reception'),
-  dueDate: timestamp('due_date'),
-
-  notes: text('notes'),
-  orderReference: text('order_reference'),
-
-  createdBy: text('created_by'),
-  
-  // 🆕 Document Customization Snapshot
-  templateVersionUsed: integer('template_version_used'),
-  templateSnapshot: jsonb('template_snapshot'),
-
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-});
 
 // ========================================
 // 7. SUPPLIER ORDER ITEMS
@@ -1057,48 +966,10 @@ export const supplierOrderItems = pgTable('supplier_order_items', {
 // ========================================
 // 8. SUPPLIER PAYMENTS
 // ========================================
-export const supplierPayments = pgTable('supplier_payments', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  firebaseId: text('firebase_id').unique(),
-  userId: text('user_id').notNull(),
-
-  paymentNumber: text('payment_number').unique(),
-
-  supplierId: uuid('supplier_id').references(() => suppliers.id),
-  supplierName: text('supplier_name').notNull(),
-
-  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
-  method: text('method').notNull(),
-
-  // Details
-  reference: text('reference'),
-  chequeNumber: text('cheque_number'),
-  bank: text('bank'),
-
-  dueDate: timestamp('due_date'),
-  status: text('status').default('COMPLETED'),
-
-  date: timestamp('date').defaultNow(),
-  notes: text('notes'),
-
-  createdBy: text('created_by'),
-
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-});
-
-// Link Payments to Orders
-export const supplierOrderPayments = pgTable('supplier_order_payments', {
-  id: serial('id').primaryKey(),
-  userId: text('user_id').notNull(),
-
-  paymentId: uuid('payment_id').references(() => supplierPayments.id, { onDelete: 'cascade' }),
-  orderId: integer('order_id').references(() => supplierOrders.id, { onDelete: 'cascade' }),
-
-  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
-
-  createdAt: timestamp('created_at').defaultNow(),
-});
+/*
+export const supplierPayments = ...
+export const supplierOrderPayments = ...
+*/
 
 
 
@@ -1139,6 +1010,7 @@ export const clientTransactions = pgTable('client_transactions', {
 // RELATIONS UPDATES
 // ========================================
 
+/*
 export const supplierPaymentsRelations = relations(supplierPayments, ({ one, many }) => ({
   supplier: one(suppliers, {
     fields: [supplierPayments.supplierId],
@@ -1146,6 +1018,7 @@ export const supplierPaymentsRelations = relations(supplierPayments, ({ one, man
   }),
   allocations: many(supplierOrderPayments),
 })); // End of relations
+*/
 
 // ========================================
 // 9. LEGACY TABLES (Preserved for Data Safety)
@@ -1199,6 +1072,7 @@ export const purchases = pgTable("purchases", {
 });
 
 
+/*
 export const supplierOrderPaymentsRelations = relations(supplierOrderPayments, ({ one }) => ({
   payment: one(supplierPayments, {
     fields: [supplierOrderPayments.paymentId],
@@ -1209,14 +1083,11 @@ export const supplierOrderPaymentsRelations = relations(supplierOrderPayments, (
     references: [supplierOrders.id],
   }),
 }));
+*/
 
-export const supplierOrdersRelations = relations(supplierOrders, ({ one, many }) => ({
-  supplier: one(suppliers, {
-    fields: [supplierOrders.supplierId],
-    references: [suppliers.id],
-  }),
-  payments: many(supplierOrderPayments),
-}));
+/*
+export const supplierOrdersRelations = ...
+*/
 
 export const clientTransactionsRelations = relations(clientTransactions, ({ one }) => ({
   client: one(clients, {

@@ -1,9 +1,8 @@
 import React, { useMemo } from 'react';
-import { Page, Text, View, Document, StyleSheet, Image, Font } from '@react-pdf/renderer';
-import { format, addDays, isValid } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { Page, Text, View, Document, StyleSheet, Image } from '@react-pdf/renderer';
+import { format, isValid } from 'date-fns';
 import { formatCurrencyToWords } from '@/lib/format-number-to-words';
-import { DocumentSettings, DEFAULT_DOCUMENT_SETTINGS } from '@/lib/document-settings-types';
+import { DEFAULT_DOCUMENT_SETTINGS, type DocType, type DocumentSettings, type DocumentSettingsBase } from '@/types/document-settings-types';
 
 // Helper for formatting currency
 const formatMoney = (amount: number) => 
@@ -16,17 +15,17 @@ export const safeRadius = (value: unknown, fallback = 4) => {
 };
 
 interface PdfDocumentTemplateProps {
-    type: 'devis' | 'facture' | 'bc' | 'bl';
-    data: {
-        document: any;
-        client: any;
-        settings: any; // Shop Profile (static info)
-        documentSettings?: DocumentSettings; // Dynamic Design (colors, layout) (Legacy path)
-    };
-    documentSettings?: DocumentSettings; // 🆕 Direct Prop (Preferred path)
+  docType: DocType;
+  data: {
+    document: any;
+    client: any;
+    settings: any;
+    documentSettings?: DocumentSettings;
+  };
+  documentSettings?: DocumentSettingsBase | null;
 }
 
-export const PdfDocumentTemplate = ({ type, data, documentSettings }: PdfDocumentTemplateProps) => {
+export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocumentTemplateProps) => {
   // Robust check/fallback
   if (!data) {
     return (
@@ -40,37 +39,77 @@ export const PdfDocumentTemplate = ({ type, data, documentSettings }: PdfDocumen
 
   // extract from data for legacy support, or use prop
   const { document: doc, client, settings, documentSettings: dataSettings } = data;
-  
-  // Merge defaults
-  const effectiveSettings = documentSettings || dataSettings; // Prop wins
 
-  const docConfig = useMemo(() => {
-    const inputDefaults = effectiveSettings?.default || {};
-    return { ...DEFAULT_DOCUMENT_SETTINGS.default, ...inputDefaults };
-  }, [effectiveSettings, type]);
+  const legacyResolved = useMemo(() => {
+    const legacy = dataSettings as any;
+    if (!legacy) return null;
 
-  const { 
-      primaryColor, secondaryColor, fontFamily, layout, 
-      showFooter, footerText, showLogo, logoPosition, borderRadius,
-      showAddress, showPhone, showEmail, showIce, showRc, showRib 
-  } = docConfig;
+    const base = {
+      ...DEFAULT_DOCUMENT_SETTINGS.default,
+      ...(legacy.default || {}),
+    };
+
+    const legacyOverride = legacy.overrides?.[docType] || {};
+    return {
+      ...base,
+      ...legacyOverride,
+    } as DocumentSettingsBase;
+  }, [dataSettings, docType]);
+
+  const resolvedSettings: DocumentSettingsBase =
+    documentSettings ?? legacyResolved ?? DEFAULT_DOCUMENT_SETTINGS.default;
+
+  const {
+    primaryColor,
+    secondaryColor,
+    fontFamily,
+    fontSize,
+    borderRadius,
+    logoPosition,
+    language,
+    showLogo,
+    showFooter,
+    footerText,
+    showAddress,
+    showPhone,
+    showEmail,
+    showIce,
+    showRc,
+    showRib,
+    showWatermark,
+    watermarkText,
+    showSignature,
+    showPageNumber,
+  } = resolvedSettings;
+
   const r = safeRadius(borderRadius, 4);
   const radiusCorners = {
       borderTopLeftRadius: r, borderTopRightRadius: r,
       borderBottomLeftRadius: r, borderBottomRightRadius: r,
   };
 
+  const mappedFontFamily = useMemo(() => {
+    if (fontFamily === 'Arial' || fontFamily === 'Roboto') return 'Helvetica';
+    if (fontFamily === 'Times New Roman') return 'Times-Roman';
+    return fontFamily;
+  }, [fontFamily]);
+
+  const mappedFontSize = useMemo(() => {
+    if (fontSize === 'small') return 9;
+    if (fontSize === 'large') return 11;
+    return 10;
+  }, [fontSize]);
+
   // Styles
   const styles = useMemo(() => StyleSheet.create({
-    page: { padding: 30, fontSize: 10, fontFamily: fontFamily || 'Helvetica', color: '#1a202c', lineHeight: 1.4 },
+    page: { padding: 30, fontSize: mappedFontSize, fontFamily: mappedFontFamily || 'Helvetica', color: '#1a202c', lineHeight: 1.4 },
     header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
     logoContainer: { width: '100%', flexDirection: 'row', justifyContent: logoPosition === 'center' ? 'center' : (logoPosition === 'right' ? 'flex-end' : 'flex-start'), marginBottom: 10 },
     logo: { width: 80, height: 80, objectFit: 'contain' },
     companyInfo: { width: '50%' },
     companyName: { fontSize: 18, fontWeight: 'bold', color: primaryColor, marginBottom: 4 },
     legalInfo: { fontSize: 8, color: '#718096', marginTop: 4 },
-    // ... (rest of styles logic is fine, using existing styles)
-    
+
     // Title Section
     titleSection: { 
         flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20, 
@@ -81,7 +120,7 @@ export const PdfDocumentTemplate = ({ type, data, documentSettings }: PdfDocumen
     // Client Box
     clientBox: { 
         width: '45%', padding: 10, borderWidth: 1, borderColor: '#e2e8f0', ...radiusCorners,
-        backgroundColor: layout === 'modern' ? '#f8fafc' : 'transparent' 
+        backgroundColor: secondaryColor || 'transparent',
     },
     label: { fontSize: 8, color: '#718096', marginBottom: 2 },
     value: { fontSize: 10, fontWeight: 'bold' },
@@ -90,11 +129,11 @@ export const PdfDocumentTemplate = ({ type, data, documentSettings }: PdfDocumen
     table: { marginTop: 10, width: '100%' },
     tableHeader: { 
         flexDirection: 'row', 
-        backgroundColor: layout === 'minimalist' ? 'transparent' : secondaryColor, 
-        color: layout === 'minimalist' ? '#000' : '#fff', 
+        backgroundColor: secondaryColor,
+        color: '#fff',
         padding: 8,
-        borderTopLeftRadius: layout === 'modern' ? r : 0, 
-        borderTopRightRadius: layout === 'modern' ? r : 0,
+        borderTopLeftRadius: r,
+        borderTopRightRadius: r,
         fontWeight: 'bold'
     },
     tableRow: { flexDirection: 'column', borderBottomWidth: 1, borderBottomColor: '#edf2f7', paddingVertical: 8 },
@@ -122,12 +161,58 @@ export const PdfDocumentTemplate = ({ type, data, documentSettings }: PdfDocumen
     // Footer
     footer: { position: 'absolute', bottom: 30, left: 30, right: 30, textAlign: 'center', fontSize: 8, color: '#a0aec0', borderTopWidth: 1, borderTopColor: '#edf2f7', paddingTop: 10 },
     signatureSection: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 40, borderTopWidth: 1, borderTopColor: '#edf2f7', paddingTop: 20 },
-    signatureBox: { width: '45%', height: 60, borderWidth: 1, borderColor: '#cbd5e0', ...radiusCorners, padding: 8 }
-  }), [docConfig, r]);
+    signatureBox: { width: '45%', height: 60, borderWidth: 1, borderColor: '#cbd5e0', ...radiusCorners, padding: 8 },
+    watermark: {
+      position: 'absolute',
+      top: '45%',
+      left: 0,
+      right: 0,
+      textAlign: 'center',
+      fontSize: 64,
+      color: secondaryColor || '#94a3b8',
+      opacity: 0.15,
+      transform: [{ rotate: '-20deg' }],
+    },
+    pageNumber: {
+      position: 'absolute',
+      fontSize: 8,
+      bottom: 12,
+      right: 30,
+      color: '#94a3b8',
+    },
+  }), [mappedFontFamily, mappedFontSize, primaryColor, secondaryColor, logoPosition, r, radiusCorners]);
 
-  const docTitle = type === 'devis' ? 'DEVIS' : (type === 'bc' ? 'BON DE COMMANDE' : 'FACTURE');
-  const dateObj = doc.date ? new Date(doc.date) : new Date();
-  
+  const docTitles: Record<DocType, Record<'fr' | 'ar' | 'en', string>> = {
+    facture: { fr: 'FACTURE', ar: 'فاتورة', en: 'INVOICE' },
+    devis: { fr: 'DEVIS', ar: 'عرض سعر', en: 'QUOTE' },
+    bc: { fr: 'BON DE COMMANDE', ar: 'طلب شراء', en: 'PURCHASE ORDER' },
+    bl: { fr: 'BON DE LIVRAISON', ar: 'وصل توصيل', en: 'DELIVERY NOTE' },
+  };
+
+  const titleLang = (language === 'ar' || language === 'en') ? language : 'fr';
+  const docTitle = docTitles[docType][titleLang];
+
+  const amountInWordsLabel = useMemo(() => {
+    if (titleLang === 'ar') {
+      return docType === 'devis'
+        ? 'حُدِّد هذا العرض بمبلغ:'
+        : 'حُدِّدت هذه الوثيقة بمبلغ:';
+    }
+    if (titleLang === 'en') {
+      return docType === 'devis'
+        ? 'This quote is drawn up for the total amount of:'
+        : 'This document is drawn up for the total amount of:';
+    }
+    // fr
+    return docType === 'devis'
+      ? 'Arrêté le présent devis à la somme de :'
+      : docType === 'facture'
+        ? 'Arrêté la présente facture à la somme de :'
+        : docType === 'bc'
+          ? 'Arrêté le présent bon de commande à la somme de :'
+          : 'Arrêté le présent bon de livraison à la somme de :';
+  }, [docType, titleLang]);
+
   const formatDateSafe = (date: any) => {
       try { return isValid(new Date(date)) ? format(new Date(date), 'dd/MM/yyyy') : '-'; } catch { return '-'; }
   };
@@ -135,28 +220,38 @@ export const PdfDocumentTemplate = ({ type, data, documentSettings }: PdfDocumen
   return (
     <Document>
       <Page size="A4" style={styles.page}>
+
+        {showWatermark && (
+          <Text style={styles.watermark} fixed>
+            {watermarkText || 'CONFIDENTIEL'}
+          </Text>
+        )}
         
         {/* Header */}
         <View style={styles.header}>
             <View style={styles.companyInfo}>
                 <Text style={styles.companyName}>{settings?.storeName || 'Opticien'}</Text>
                 
-                {(showAddress !== false) && settings?.address && (
+                {showAddress && settings?.address && (
                     <Text>{settings.address}</Text>
                 )}
                 
                 <View style={{flexDirection: 'row', flexWrap: 'wrap'}}>
-                   {(showPhone !== false) && settings?.phone && <Text>{settings.phone} </Text>}
-                   {(showEmail !== false) && settings?.email && <Text>| {settings.email}</Text>}
+                   {showPhone && settings?.phone && <Text>{settings.phone} </Text>}
+                   {showEmail && settings?.email && <Text>| {settings.email}</Text>}
                 </View>
 
                 <View style={{ marginTop: 4 }}>
-                   {(showIce !== false) && settings?.ice && <Text style={styles.legalInfo}>ICE: {settings.ice}</Text>}
-                   {(showRc !== false) && settings?.rc && <Text style={styles.legalInfo}>RC: {settings.rc}</Text>}
-                   {(showRib !== false) && settings?.rib && <Text style={styles.legalInfo}>RIB: {settings.rib}</Text>}
+                   {showIce && settings?.ice && <Text style={styles.legalInfo}>ICE: {settings.ice}</Text>}
+                   {showRc && settings?.rc && <Text style={styles.legalInfo}>RC: {settings.rc}</Text>}
+                   {showRib && settings?.rib && <Text style={styles.legalInfo}>RIB: {settings.rib}</Text>}
                 </View>
             </View>
-            {showLogo && settings?.logoUrl && <Image style={styles.logo} src={settings.logoUrl} />}
+            {showLogo && settings?.logoUrl && (
+              <View style={{ flexDirection: 'row', justifyContent: logoPosition === 'center' ? 'center' : (logoPosition === 'right' ? 'flex-end' : 'flex-start'), width: '50%' }}>
+                <Image style={styles.logo} src={settings.logoUrl} />
+              </View>
+            )}
         </View>
 
         {/* Title */}
@@ -252,10 +347,28 @@ export const PdfDocumentTemplate = ({ type, data, documentSettings }: PdfDocumen
         {/* Footer */}
         {showFooter && (
             <View style={styles.footer}>
-                <Text>Arrêté la présente facture à la somme de : {formatCurrencyToWords(Number(doc.totalTTC || 0))}</Text>
+                <Text>{amountInWordsLabel} {formatCurrencyToWords(Number(doc.totalTTC || 0))}</Text>
                 {footerText && <Text style={{marginTop: 4}}>{footerText}</Text>}
-                <Text style={{marginTop: 4}}>Merci de votre confiance.</Text>
             </View>
+        )}
+
+        {showSignature && (
+          <View style={styles.signatureSection}>
+            <View style={styles.signatureBox}>
+              <Text style={styles.label}>{titleLang === 'ar' ? 'التوقيع' : (titleLang === 'en' ? 'Signature' : 'Signature')}</Text>
+            </View>
+            <View style={styles.signatureBox}>
+              <Text style={styles.label}>{titleLang === 'ar' ? 'الختم' : (titleLang === 'en' ? 'Stamp' : 'Cachet')}</Text>
+            </View>
+          </View>
+        )}
+
+        {showPageNumber && (
+          <Text
+            style={styles.pageNumber}
+            render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}
+            fixed
+          />
         )}
       </Page>
     </Document>

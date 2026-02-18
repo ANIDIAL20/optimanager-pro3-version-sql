@@ -1,0 +1,2 @@
+--- Attempting Insert via Drizzle directly ---
+✅ Drizzle insert succeeded: 14afe800-3784-4339-8476-ec9f5b1774c8

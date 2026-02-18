@@ -1,0 +1,22 @@
+
+--- Table Triggers ---
+[
+  {
+    "tgname": "RI_ConstraintTrigger_a_213034"
+  },
+  {
+    "tgname": "RI_ConstraintTrigger_a_213035"
+  },
+  {
+    "tgname": "RI_ConstraintTrigger_c_213046"
+  },
+  {
+    "tgname": "RI_ConstraintTrigger_c_213047"
+  },
+  {
+    "tgname": "RI_ConstraintTrigger_c_442374"
+  },
+  {
+    "tgname": "RI_ConstraintTrigger_c_442375"
+  }
+]

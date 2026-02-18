@@ -36,6 +36,17 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "tests",
+    "scripts",
+    "docs",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "check_all_columns.ts",
+    "debug-metadata.ts",
+    "inspect_db.ts",
+    "inspect_db_deep.ts",
+    "list_tables.ts",
+    "test-db.ts"
   ]
 }

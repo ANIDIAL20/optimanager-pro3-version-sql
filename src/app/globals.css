@@ -88,7 +88,7 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-  
+
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
@@ -97,4 +97,18 @@
 /* Fix for Radix UI Popover z-index - ensures dropdowns appear above dialogs/sheets */
 [data-radix-popper-content-wrapper] {
   z-index: 9999 !important;
+}
+
+/* 🛡️ Zombie Overlay / Pointer Locking Fix */
+/* This ensures that if a modal leaves the body locked, we can still interact with the page 
+   if no actual overlay is visible. */
+body[style*="pointer-events: none"] {
+  pointer-events: auto !important;
+}
+
+/* Ensure modas still work by making THEIR content interactive */
+[role="dialog"],
+[role="alertdialog"],
+[data-radix-portal] {
+  pointer-events: auto !important;
 }

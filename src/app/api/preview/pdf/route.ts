@@ -19,7 +19,7 @@ export async function POST(req: Request) {
 
         // IMPORTANT: no JSX in route.ts
         const element = React.createElement(PdfDocumentTemplate, {
-            type,
+            docType: type,
             data,
             // @ts-ignore - Explicitly requested by user pattern, even if redundant
             documentSettings, 

@@ -26,6 +26,16 @@ import { useToast } from "@/hooks/use-toast";
 import { deleteSupplier } from "@/app/actions/supplier-actions";
 import { useRouter } from "next/navigation";
 import type { Supplier } from "@/lib/types";
+import { Wallet, PlusCircle } from "lucide-react";
+import { 
+    Dialog, 
+    DialogContent, 
+    DialogHeader, 
+    DialogTitle, 
+    DialogTrigger 
+} from "@/components/ui/dialog";
+import { SupplierPaymentForm } from "@/components/suppliers/payment-form";
+import { SupplierOrderForm } from "@/components/suppliers/order-form";
 
 interface SupplierActionsProps {
     supplierId: string;
@@ -35,6 +45,8 @@ interface SupplierActionsProps {
 
 export function SupplierActions({ supplierId, supplierName, variant = "dropdown" }: SupplierActionsProps) {
     const [open, setOpen] = useState(false);
+    const [paymentOpen, setPaymentOpen] = useState(false);
+    const [orderOpen, setOrderOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const { toast } = useToast();
     const router = useRouter();
@@ -73,6 +85,42 @@ export function SupplierActions({ supplierId, supplierName, variant = "dropdown"
     if (variant === "header") {
         return (
             <div className="flex gap-2">
+                {/* Ajouter Commande */}
+                <Dialog open={orderOpen} onOpenChange={setOrderOpen}>
+                    <DialogTrigger asChild>
+                        <Button variant="outline" className="border-blue-200 hover:bg-blue-50 text-blue-700">
+                            <PlusCircle className="mr-2 h-4 w-4" /> Commande
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl">
+                        <DialogHeader>
+                            <DialogTitle>Nouvelle Commande Fournisseur</DialogTitle>
+                        </DialogHeader>
+                        <SupplierOrderForm 
+                            supplierId={supplierId} 
+                            onSuccess={() => setOrderOpen(false)} 
+                        />
+                    </DialogContent>
+                </Dialog>
+
+                {/* Ajouter Paiement */}
+                <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
+                    <DialogTrigger asChild>
+                        <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                            <Wallet className="mr-2 h-4 w-4" /> Paiement
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl">
+                        <DialogHeader>
+                            <DialogTitle>Enregistrer un Paiement</DialogTitle>
+                        </DialogHeader>
+                        <SupplierPaymentForm 
+                            supplierId={supplierId} 
+                            onSuccess={() => setPaymentOpen(false)} 
+                        />
+                    </DialogContent>
+                </Dialog>
+
                 <Button variant="outline" asChild>
                     <Link href={`/suppliers/${supplierId}/edit`}>
                         <Pencil className="mr-2 h-4 w-4" /> Modifier

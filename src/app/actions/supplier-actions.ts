@@ -56,53 +56,60 @@ export const getSuppliersList = secureActionWithResponse(async (userId, user) =>
     console.log('⚡ [v2] Fetching suppliers list for user:', userId);
 
     try {
-      const results = await db.select()
-        .from(suppliers)
-        .where(eq(suppliers.userId, userId))
-        .orderBy(desc(suppliers.createdAt));
+      console.log('⚡ [getSuppliersList] Fetching with SELECT * for user:', userId);
+      const results = await db.execute(sql`
+        SELECT * FROM suppliers 
+        WHERE user_id = ${userId}
+        ORDER BY created_at DESC
+      `);
       
-      const mappedItems = results.map((row: any) => {
+      const rows = results.rows || [];
+      if (rows.length > 0) {
+        console.log(`✅ [getSuppliersList] Fetched ${rows.length} rows. Sample keys:`, Object.keys(rows[0]).join(', '));
+      }
+      
+      const mappedItems = rows.map((row: any) => {
         const contactInfo = parseContactInfo(row.notes);
         return {
           id: row.id,
-          userId: row.userId,
-          name: row.name,
-          email: row.email,
-          phone: row.phone,
-          address: row.address,
-          city: row.city,
-          ice: row.ice,
-          if: row.if,
-          rc: row.rc,
-          taxId: row.taxId,
-          category: row.category,
-          paymentTerms: row.paymentTerms,
-          paymentMethod: row.paymentMethod,
-          bank: row.bank,
-          rib: row.rib,
+          userId: row.user_id,
+          name: row.name || row.nomCommercial || '',
+          email: row.email || '',
+          phone: row.phone || row.telephone || '',
+          address: row.address || row.adresse || '',
+          city: row.city || row.ville || '',
+          ice: row.ice || '',
+          if: row.if || '',
+          rc: row.rc || '',
+          taxId: row.tax_id || row.taxId || '',
+          category: row.category || '',
+          paymentTerms: row.payment_terms || row.delaiPaiement || '30',
+          paymentMethod: row.payment_method || row.modePaiement || '',
+          bank: row.bank || row.banque || '',
+          rib: row.rib || '',
           notes: contactInfo.cleanNotes,
-          status: row.status,
-          createdAt: row.createdAt ? (typeof row.createdAt === 'string' ? row.createdAt : row.createdAt.toISOString()) : null,
-          updatedAt: row.updatedAt ? (typeof row.updatedAt === 'string' ? row.updatedAt : row.updatedAt.toISOString()) : null,
-          nomCommercial: row.name,
-          telephone: row.phone,
-          typeProduits: row.category ? row.category.split(', ') : [],
-          adresse: row.address,
-          ville: row.city,
-          delaiPaiement: row.paymentTerms,
-          modePaiement: row.paymentMethod,
-          banque: row.bank,
-          contactNom: contactInfo.nom,
-          contactTelephone: contactInfo.tel,
-          contactEmail: contactInfo.email,
-          defaultTaxMode: row.defaultTaxMode,
-          currentBalance: Number(row.currentBalance || 0),
+          status: row.status || 'Actif',
+          createdAt: row.created_at || row.createdAt,
+          updatedAt: row.updated_at || row.updatedAt,
+          nomCommercial: row.name || row.nomCommercial || '',
+          telephone: row.phone || row.telephone || '',
+          typeProduits: (row.category || '').split(', ').filter(Boolean),
+          adresse: row.address || row.adresse || '',
+          ville: row.city || row.ville || '',
+          delaiPaiement: row.payment_terms || row.delaiPaiement || '30',
+          modePaiement: row.payment_method || row.modePaiement || '',
+          banque: row.bank || row.banque || '',
+          contactNom: contactInfo.nom || '',
+          contactTelephone: contactInfo.tel || '',
+          contactEmail: contactInfo.email || '',
+          defaultTaxMode: row.default_tax_mode || 'HT',
+          currentBalance: Number(row.current_balance || row.currentBalance || 0),
         };
       });
 
       return mappedItems;
     } catch (error: any) {
-      console.error('[getSuppliersList] CRITICAL ERROR:', error);
+      console.error('[getSuppliersList] CRITICAL SQL ERROR:', error);
       throw new Error(`Erreur récupération fournisseurs: ${error.message}`);
     }
   }, { userId });
@@ -115,54 +122,81 @@ export const getSupplier = secureAction(async (userId, user, id: string) => {
   noStore();
 
   try {
-    const [row] = await db.select()
-      .from(suppliers)
-      .where(and(eq(suppliers.id, id), eq(suppliers.userId, userId)))
-      .limit(1);
+    console.log(`🔍 [getSupplier] Fetching with explicit casting for ${id}`);
+    
+    // We use explicit casting to ::uuid and ::text to avoid PG type mismatch errors
+    let results;
+    try {
+      results = await db.execute(sql`
+        SELECT * FROM suppliers 
+        WHERE id = ${id}::uuid AND user_id = ${userId}::text
+        LIMIT 1
+      `);
+    } catch (sqlErr: any) {
+      console.warn('⚠️ [getSupplier] Initial attempt failed, trying without casting...', sqlErr.message);
+      // Fallback for different schema versions
+      results = await db.execute(sql`
+        SELECT * FROM suppliers 
+        WHERE (id = ${id} OR id::text = ${id}) AND (user_id = ${userId} OR user_id::text = ${userId})
+        LIMIT 1
+      `);
+    }
 
-    if (!row) return null;
+    const rows = results.rows || [];
+    if (rows.length === 0) {
+      console.warn(`⚠️ [getSupplier] No supplier found with ID ${id}`);
+      return null;
+    }
 
-    // Map single item
+    const row = rows[0] as any;
+    console.log(`✅ [getSupplier] Successfully fetched row. Columns available:`, Object.keys(row).join(', '));
+
+    // Map the row safely, using fallbacks for missing columns
     const contactInfo = parseContactInfo(row.notes);
+    
     return {
         id: row.id,
-        userId: row.userId,
-        name: row.name,
-        email: row.email,
-        phone: row.phone,
-        address: row.address,
-        city: row.city,
-        ice: row.ice,
-        if: row.if,
-        rc: row.rc,
-        taxId: row.taxId,
-        category: row.category,
-        paymentTerms: row.paymentTerms,
-        paymentMethod: row.paymentMethod,
-        bank: row.bank,
-        rib: row.rib,
+        userId: row.user_id,
+        name: row.name || row.nomCommercial || '',
+        email: row.email || '',
+        phone: row.phone || row.telephone || '',
+        address: row.address || row.adresse || '',
+        city: row.city || row.ville || '',
+        ice: row.ice || '',
+        if: row.if || '',
+        rc: row.rc || '',
+        taxId: row.tax_id || row.taxId || '',
+        category: row.category || '',
+        paymentTerms: row.payment_terms || row.delaiPaiement || '30',
+        paymentMethod: row.payment_method || row.modePaiement || '',
+        bank: row.bank || row.banque || '',
+        rib: row.rib || '',
         notes: contactInfo.cleanNotes,
-        status: row.status,
-        createdAt: row.createdAt ? (typeof row.createdAt === 'string' ? row.createdAt : row.createdAt.toISOString()) : null,
-        updatedAt: row.updatedAt ? (typeof row.updatedAt === 'string' ? row.updatedAt : row.updatedAt.toISOString()) : null,
+        status: row.status || 'Actif',
+        createdAt: row.created_at || row.createdAt,
+        updatedAt: row.updated_at || row.updatedAt,
         
-        // UI Keys
-        nomCommercial: row.name,
-        telephone: row.phone,
-        typeProduits: row.category ? row.category.split(', ') : [],
-        adresse: row.address,
-        ville: row.city,
-        delaiPaiement: row.paymentTerms,
-        modePaiement: row.paymentMethod,
-        banque: row.bank,
-        contactNom: contactInfo.nom,
-        contactTelephone: contactInfo.tel,
-        contactEmail: contactInfo.email,
-        defaultTaxMode: row.defaultTaxMode,
+        // UI compatibility keys
+        nomCommercial: row.name || row.nomCommercial || '',
+        telephone: row.phone || row.telephone || '',
+        typeProduits: (row.category || '').split(', ').filter(Boolean),
+        adresse: row.address || row.adresse || '',
+        ville: row.city || row.ville || '',
+        delaiPaiement: row.payment_terms || row.delaiPaiement || '30',
+        modePaiement: row.payment_method || row.modePaiement || '',
+        banque: row.bank || row.banque || '',
+        contactNom: contactInfo.nom || '',
+        contactTelephone: contactInfo.tel || '',
+        contactEmail: contactInfo.email || '',
+        defaultTaxMode: row.default_tax_mode || 'HT',
     };
   } catch (error: any) {
-    console.error('💥 Error fetching supplier:', error);
-    throw new Error(`Erreur lors de la récupération du fournisseur: ${error.message}`);
+    console.error('💥 [getSupplier] CRITICAL SQL ERROR:', error);
+    // Log more details if available
+    if (error.hint) console.error('Hint:', error.hint);
+    if (error.detail) console.error('Detail:', error.detail);
+    
+    throw new Error(`Erreur lors de la récupération du fournisseur (DB): ${error.message}`);
   }
 });
 

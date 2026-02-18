@@ -5,6 +5,7 @@ import * as schemaFile from './schema';
 import * as schemaDir from './schema/index';
 
 const schema = { ...schemaFile, ...schemaDir };
+// Schema re-evaluation trigger: v6.1 - Fixed supplier table name
 
 // ✅ Essential for Transactions support in Node.js environment
 neonConfig.webSocketConstructor = ws;

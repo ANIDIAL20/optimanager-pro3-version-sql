@@ -1,0 +1,22 @@
+
+--- Unique Constraints Details ---
+[
+  {
+    "index_name": "supplier_payments_pkey",
+    "column_name": "id",
+    "is_unique": true,
+    "indnullsnotdistinct": false
+  },
+  {
+    "index_name": "supplier_payments_firebase_id_unique",
+    "column_name": "firebase_id",
+    "is_unique": true,
+    "indnullsnotdistinct": false
+  },
+  {
+    "index_name": "supplier_payments_payment_number_unique",
+    "column_name": "payment_number",
+    "is_unique": true,
+    "indnullsnotdistinct": false
+  }
+]

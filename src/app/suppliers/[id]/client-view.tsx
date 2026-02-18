@@ -13,10 +13,12 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { useBreadcrumbStore } from '@/hooks/use-breadcrumb-store';
-import { AlertCircle, ArrowLeft, Truck, FileText, LayoutDashboard } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Truck, FileText, LayoutDashboard, Package } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SupplierStatement } from './statement';
+import { SupplierProductsTab } from './products-tab';
 import {
     Table,
     TableBody,
@@ -229,6 +231,9 @@ export default function SupplierView({ supplier, orders = [], payments = [], err
                     <TabsTrigger value="history" className="px-4 py-2 flex items-center gap-2">
                         <FileText className="h-4 w-4" /> Historique (Relevé)
                     </TabsTrigger>
+                    <TabsTrigger value="products" className="px-4 py-2 flex items-center gap-2">
+                        <Package className="h-4 w-4" /> Catalogue Produits
+                    </TabsTrigger>
                 </TabsList>
 
                 {/* OVERVIEW TAB */}
@@ -279,55 +284,12 @@ export default function SupplierView({ supplier, orders = [], payments = [], err
 
                 {/* HISTORY (RELEVE) TAB */}
                 <TabsContent value="history">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Relevé de Compte</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Date</TableHead>
-                                        <TableHead>Type</TableHead>
-                                        <TableHead>Référence (BC/BL)</TableHead>
-                                        <TableHead>Détails</TableHead>
-                                        <TableHead className="text-right">Débit (Achat)</TableHead>
-                                        <TableHead className="text-right">Crédit (Paiement)</TableHead>
-                                        <TableHead className="text-right">Solde</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {history.length === 0 ? (
-                                        <TableRow>
-                                            <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Aucune transaction trouvée.</TableCell>
-                                        </TableRow>
-                                    ) : (
-                                        history.map((row) => (
-                                            <TableRow key={`${row.type}-${row.id}`}>
-                                                <TableCell>{format(row.date, 'dd/MM/yyyy', { locale: fr })}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant={row.type === 'ACHAT' ? 'outline' : 'default'} className={row.type === 'PAIEMENT' ? 'bg-emerald-600' : ''}>
-                                                        {row.type}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="font-medium">{row.ref}</TableCell>
-                                                <TableCell className="text-sm text-muted-foreground">{row.details}</TableCell>
-                                                <TableCell className="text-right font-mono">
-                                                    {row.debit > 0 ? <SensitiveData value={row.debit} type="currency" /> : '-'}
-                                                </TableCell>
-                                                <TableCell className="text-right font-mono text-emerald-600">
-                                                     {row.credit > 0 ? <SensitiveData value={row.credit} type="currency" /> : '-'}
-                                                </TableCell>
-                                                <TableCell className="text-right font-bold font-mono">
-                                                     <SensitiveData value={row.balance} type="currency" />
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
+                    <SupplierStatement supplierId={s.id} />
+                </TabsContent>
+
+                {/* PRODUCTS CATALOGUE TAB */}
+                <TabsContent value="products">
+                    <SupplierProductsTab supplierName={s.nomCommercial} />
                 </TabsContent>
             </Tabs>
 

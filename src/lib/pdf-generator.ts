@@ -2,14 +2,15 @@
 import React from 'react';
 import { renderToStream } from '@react-pdf/renderer'; // Note: Using renderToStream for better performance in Node/Next
 import { PdfDocumentTemplate } from '@/components/documents/pdf-document-template';
-import { resolveDocumentSettings } from '@/lib/document-settings';
-import type { DocumentSettings } from '@/lib/document-settings-types';
+import { resolveDocumentSettings, resolveSettingsForDocType } from '@/lib/document-settings';
+import type { DocType } from '@/types/document-settings-types';
 
 export interface GeneratePDFOptions {
-  type: 'facture' | 'devis';
+  type: DocType;
   data: any;
   shopId: number;
   snapshot?: any;
+  forceLatest?: boolean; // ✅ UPDATED - ignore snapshot and use latest settings
 }
 
 /**
@@ -21,9 +22,15 @@ export async function generateDocumentPDFStream({
   data,
   shopId,
   snapshot,
+  forceLatest = false,
 }: GeneratePDFOptions): Promise<NodeJS.ReadableStream> {
   // Cascade: snapshot -> current -> defaults
-  const effectiveSettings = await resolveDocumentSettings(shopId, snapshot);
+  // ✅ UPDATED
+  const effectiveSettings = await resolveDocumentSettings(
+    shopId,
+    forceLatest ? null : snapshot
+  );
+  const resolvedForDocType = resolveSettingsForDocType(effectiveSettings, type);
 
   console.log(`[PDF_GENERATOR] Type: ${type}, ShopId: ${shopId}`);
   console.log(`[PDF_GENERATOR] Snapshot exists: ${!!snapshot}`);
@@ -33,9 +40,9 @@ export async function generateDocumentPDFStream({
   // Create React element (no JSX in Node.js context)
   // @ts-ignore
   const element = React.createElement(PdfDocumentTemplate, {
-    type,
+    docType: type,
     data,
-    documentSettings: effectiveSettings,
+    documentSettings: resolvedForDocType,
   });
 
   // Generate Stream

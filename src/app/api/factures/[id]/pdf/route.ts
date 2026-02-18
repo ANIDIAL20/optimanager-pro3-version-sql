@@ -12,6 +12,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // ✅ UPDATED
+    const forceLatest = new URL(req.url).searchParams.get('latest') === 'true';
+
     const session = await auth();
     if (!session?.user?.id) {
       return new NextResponse('Unauthorized', { status: 401 });
@@ -95,7 +98,8 @@ export async function GET(
         type: 'facture',
         data: templateData,
         shopId: profile.id,
-        snapshot: sale.documentSettingsSnapshot
+        snapshot: sale.documentSettingsSnapshot,
+        forceLatest,
     });
     
     // 7. Return Response
