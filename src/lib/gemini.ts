@@ -2,29 +2,39 @@
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-if (!process.env.GEMINI_API_KEY) {
+const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+
+export const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
+
+function notConfigured(): never {
   throw new Error('❌ GEMINI_API_KEY is missing');
 }
 
-export const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
 // ✅ For text (prescriptions text extraction)
-export const textModel = genAI.getGenerativeModel({ 
-  model: "models/gemini-2.5-flash",
-  generationConfig: {
-    temperature: 0.1,
-    maxOutputTokens: 2048
-  }
-});
+export const textModel = genAI
+  ? genAI.getGenerativeModel({
+      model: "models/gemini-2.5-flash",
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 2048,
+      },
+    })
+  : ({
+      generateContent: async () => notConfigured(),
+    } as any);
 
 // ✅ For images (invoice scanning)
-export const visionModel = genAI.getGenerativeModel({ 
-  model: "models/gemini-2.5-flash", 
-  generationConfig: {
-    temperature: 0.1,
-    maxOutputTokens: 2048
-  }
-});
+export const visionModel = genAI
+  ? genAI.getGenerativeModel({
+      model: "models/gemini-2.5-flash",
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 2048,
+      },
+    })
+  : ({
+      generateContent: async () => notConfigured(),
+    } as any);
 
 // Aliases
 export const invoiceModel = visionModel;

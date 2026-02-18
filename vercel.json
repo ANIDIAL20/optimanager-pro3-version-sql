@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/refresh-views",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
