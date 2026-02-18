@@ -10,6 +10,13 @@ const schema = { ...schemaFile, ...schemaDir };
 // ✅ Essential for Transactions support in Node.js environment
 neonConfig.webSocketConstructor = ws;
 
+// ✅ Client-side guard: do not evaluate database in browser
+const isBrowser = typeof window !== 'undefined';
+
+if (!isBrowser && !process.env.DATABASE_URL) {
+  throw new Error("❌ DATABASE_URL mafih walou! T2akked anna .env.local fih lien d Neon.");
+}
+
 // Singleton cache implementation for Next.js hot-reloading
 declare global {
   var __db_v6: any;
@@ -38,6 +45,7 @@ function createDbConnection() {
 const globalForDb = globalThis as unknown as { __db_v6: any };
 
 function getDbInstance() {
+  if (isBrowser) return null as any;
   return process.env.NODE_ENV === 'production'
     ? (globalForDb.__db_v6 ??= createDbConnection())
     : (globalForDb.__db_v6 = globalForDb.__db_v6 ?? createDbConnection());
@@ -48,6 +56,7 @@ export const db = new Proxy(
   {
     get(_target, prop) {
       const instance = getDbInstance();
+      if (!instance) return undefined;
       return (instance as any)[prop as any];
     },
   }

@@ -4,23 +4,26 @@ import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { usePosCartStore } from '@/features/pos/store/use-pos-cart-store';
 import { useToast } from '@/hooks/use-toast';
-import { getClientAvailableLenses } from '@/app/actions/pos-lens-actions';
-import { getClientReservationsAction, createFrameReservationAction, completeFrameReservationAction } from '@/app/actions/reservation-actions';
+import { getPendingLensOrders as getClientAvailableLenses } from '@/app/actions/lens-orders-actions';
+import { getClientReservationsAction as getClientReservations, createFrameReservationAction as createFrameReservation, completeFrameReservationAction as completeFrameReservation } from '@/app/actions/reservation-actions';
 import { createSale } from '@/app/actions/sales-actions';
-import { createLineItem, recalculateLineTotal } from '@/lib/pos/pricing';
+import { recordAdvancePayment } from '@/app/actions/payment-actions';
+import { AdvancePaymentDialog } from '@/components/modals/advance-payment-dialog';
+import { getClientTransactions } from '@/app/actions/client-transactions-actions';
+import { createLineItem, recalculateLineTotal } from '@/features/pos/utils/pricing';
 import { Product, Client } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tag, Printer } from 'lucide-react';
+import { Tag, Printer, Wallet } from 'lucide-react';
 import { ProductSearch } from './product-search';
 import { Cart } from './cart';
 import { PaymentSection } from './payment-section';
 import { SalesHistory } from './sales-history';
 
 interface ClientPOSProps {
-    client: Client; 
+    client: Client;
     clientId: string;
 }
 
@@ -30,13 +33,27 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
     const [isProcessing, setIsProcessing] = React.useState(false);
     const { toast } = useToast();
     // Simple state to force refresh history
+    const [transactions, setTransactions] = React.useState<any[]>([]);
     const [historyRefreshKey, setHistoryRefreshKey] = React.useState(0);
     const [pendingOrders, setPendingOrders] = React.useState<any[]>([]);
     const [debugInfo, setDebugInfo] = React.useState<any>(null);
+    const [showAdvanceDialog, setShowAdvanceDialog] = React.useState(false);
+    const [isFinalizingReservation, setIsFinalizingReservation] = React.useState(false);
 
     React.useEffect(() => {
         if (clientId) {
             console.log('🎨 [ClientPOS] Component mounted for client:', clientId);
+
+            // 0. Fetch client transactions 
+            getClientTransactions(clientId).then(res => {
+                if (res.success && res.transactions) {
+                    setTransactions(res.transactions);
+                }
+            }).catch(error => {
+                console.error('❌ [ClientPOS] Error fetching client transactions:', error);
+            });
+
+            // 1. Fetch Lens Orders
             getClientAvailableLenses(clientId).then(res => {
                 console.log('📦 [ClientPOS] Lens Data received:', res.data?.length || 0);
                 if (res.success && res.data) {
@@ -46,7 +63,7 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
                         count: res.data.length,
                         timestamp: new Date().toLocaleTimeString()
                     });
-                    
+
                     if (res.data.length > 0) {
                         toast({
                             title: `✨ ${res.data.length} commande(s) de verres disponible(s)`,
@@ -68,35 +85,51 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
                 window.history.replaceState({}, '', newUrl);
 
                 // Fetch and add items
-                getClientReservationsAction(clientId).then(res => {
-                    if (res.success && res.data) {
-                        const reservation = (res.data as any[]).find(r => r.id.toString() === resId);
-                        if (reservation && reservation.status === 'PENDING') {
-                            const newLines = reservation.items
-                                .map((item: any) => {
-                                    const unitPrice =
-                                        typeof item.unitPrice === 'number'
-                                            ? item.unitPrice
-                                            : parseFloat(item.unitPrice ?? '0');
+                getClientReservations(parseInt(clientId)).then(reservations => {
+                    const reservation = reservations.find(r => r.id.toString() === resId);
+                    if (reservation && reservation.status === 'PENDING') {
+                        const newLines = reservation.items
+                            .map((item: any) => {
+                                const unitPrice =
+                                    typeof item.unitPrice === 'number'
+                                        ? item.unitPrice
+                                        : parseFloat(item.unitPrice ?? '0');
 
-                                    return createLineItem(
-                                        item.productId.toString(),
-                                        item.productName,
-                                        Number.isFinite(unitPrice) ? unitPrice : 0,
-                                        item.quantity,
-                                        'MONTURE'
-                                    );
-                                })
-                                .map((line: any) => ({ ...line, fromReservation: reservation.id }));
+                                return createLineItem(
+                                    item.productId.toString(),
+                                    item.productName,
+                                    Number.isFinite(unitPrice) ? unitPrice : 0,
+                                    item.quantity,
+                                    'MONTURE'
+                                );
+                            })
+                            .map((line: any) => ({ ...line, fromReservation: reservation.id }));
 
-                            setItems([...cartItems, ...newLines]);
-                            toast({ title: "Déjà réservé", description: "Les montures réservées ont été ajoutées au panier." });
-                        }
+                        setItems([...cartItems, ...newLines]);
+                        toast({ title: "Déjà réservé", description: "Les montures réservées ont été ajoutées au panier." });
                     }
                 });
             }
         }
     }, [clientId]);
+
+    const detectedAdvances = React.useMemo(() => {
+        const loIds = cartItems
+            .filter(item => item.productId.startsWith('LO-'))
+            .map(item => `LENS_ORDER:${item.productId.replace('LO-', '')}`);
+
+        const resIds = [...new Set(
+            cartItems
+                .filter(item => item.fromReservation)
+                .map(item => `RESERVATION:${item.fromReservation}`)
+        )];
+
+        const allRefs = [...loIds, ...resIds];
+
+        return transactions
+            .filter(t => t.type === 'PAYMENT' && t.referenceId && allRefs.includes(t.referenceId))
+            .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    }, [cartItems, transactions]);
 
     const addLensOrderToCart = ({ product, lensOrder }: { product: any, lensOrder: any }) => {
         const virtualId = `LO-${lensOrder.id}`;
@@ -112,7 +145,7 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
             price,
             1,
             'VERRE',
-            { 
+            {
                 lensOrderId: lensOrder.id,
                 prescription: {
                     sphereR: lensOrder.sphereR,
@@ -134,16 +167,16 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
             // Check stock limit for existing item
             const existingItem = cartItems[existingIndex];
             const maxAllowed = product.type === 'MONTURE' ? (product.availableQuantity ?? product.quantiteStock) : product.quantiteStock;
-            
+
             if (existingItem.quantity >= maxAllowed) {
-                 toast({
+                toast({
                     title: "Stock insuffisant",
                     description: product.type === 'MONTURE' ? "Ce produit est réservé ou en rupture de stock." : "Vous avez atteint la limite du stock pour ce produit.",
                     variant: "destructive"
                 });
                 return;
             }
-            
+
             const newItems = [...cartItems];
             newItems[existingIndex] = recalculateLineTotal({
                 ...existingItem,
@@ -182,10 +215,10 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
                 // In this architecture, we might need to fetch product or store maxStock in item metadata.
                 // For now, let's just update and assume UI handles max disabling.
                 // ideally PosLineItem could carry maxStock.
-                
+
                 const newQuantity = item.quantity + delta;
-                if (newQuantity < 1) return item; 
-                
+                if (newQuantity < 1) return item;
+
                 return recalculateLineTotal({ ...item, quantity: newQuantity });
             }
             return item;
@@ -201,7 +234,7 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
 
     const handleReserveFrame = async () => {
         const frames = cartItems.filter(item => item.type === 'MONTURE' && !item.fromReservation);
-        
+
         if (frames.length === 0) {
             toast({
                 title: 'Aucune monture',
@@ -211,10 +244,16 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
             return;
         }
 
+        setShowAdvanceDialog(true);
+    };
+
+    const handleFinalReserveFrame = async (advanceAmount: number) => {
+        const frames = cartItems.filter(item => item.type === 'MONTURE' && !item.fromReservation);
+
+        setIsFinalizingReservation(true);
         setIsProcessing(true);
         try {
-            const result = await createFrameReservationAction({
-                storeId: 'ADMIN_STORE', // This should normally come from auth context
+            const reservation = await createFrameReservation({
                 clientId: parseInt(clientId),
                 clientName: `${client.prenom} ${client.nom}`,
                 items: frames.map(f => ({
@@ -225,31 +264,48 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
                 notes: 'Réservation créée depuis le POS'
             });
 
-            if (result.success) {
+            if (reservation) {
+                // Record the advance payment if any
+                if (advanceAmount > 0) {
+                    await recordAdvancePayment({
+                        clientId: parseInt(clientId),
+                        amount: advanceAmount,
+                        referenceId: reservation.id.toString(),
+                        referenceType: 'RESERVATION',
+                        notes: `Avance pour réservation de monture #${reservation.id}`
+                    });
+                }
+
                 // Remove frames from current cart
                 const remainingItems = cartItems.filter(item => !frames.some(f => f.lineId === item.lineId));
                 setItems(remainingItems);
-                
+
                 toast({
                     title: 'Réservation créée',
-                    description: `Monture(s) réservée(s) avec succès.`,
+                    description: advanceAmount > 0
+                        ? `Réservé avec succès (Avance: ${advanceAmount} DH).`
+                        : `Monture(s) réservée(s) avec succès.`,
                 });
+                setShowAdvanceDialog(false);
             } else {
-                throw new Error(result.error);
+                throw new Error("Erreur lors de la création de la réservation");
             }
         } catch (error: any) {
-             toast({
+            toast({
                 title: 'Erreur',
                 description: error.message,
                 variant: 'destructive',
             });
         } finally {
             setIsProcessing(false);
+            setIsFinalizingReservation(false);
         }
     };
 
-    const handleProcessSale = async (paymentData: { amountPaid: number; method: string; notes: string }) => {
+    const handleProcessSale = async (paymentData: { amountPaid: number; method: string; notes: string; isDeclared?: boolean }) => {
         if (cartItems.length === 0) return;
+
+        console.log('🛒 [ClientPOS] Processing Sale:', paymentData);
 
         setIsProcessing(true);
 
@@ -262,35 +318,39 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
                 unitPrice: item.unitPrice, // Discounted price
                 total: item.lineTotal
             }));
-            
+
             const lensOrderIds = cartItems
                 .filter(item => item.productId.startsWith('LO-'))
                 .map(item => parseInt(item.productId.replace('LO-', '')));
 
-            const result = await createSale({
-                clientId,
-                items: saleItems,
-                lensOrderIds,
-                paymentMethod: paymentData.method,
-                notes: paymentData.notes ? `${paymentData.notes} (Initial payment: ${paymentData.amountPaid})` : undefined,
-            });
-
-            if (!result.success) {
-                throw new Error(result.error);
-            }
-
-            const saleId = parseInt(result.id || "0"); // result.id contains the created sale ID
-            
-            // Complete reservations if any
             const reservationIds = [...new Set(
                 cartItems
                     .filter(item => item.fromReservation)
                     .map(item => item.fromReservation!)
             )];
 
+            const result = await createSale({
+                clientId,
+                items: saleItems,
+                lensOrderIds,
+                reservationIds,
+                paymentMethod: paymentData.method,
+                notes: paymentData.notes,
+                amountPaid: Number(paymentData.amountPaid),
+                isDeclared: paymentData.isDeclared,
+            });
+
+            console.log('✅ [ClientPOS] Sale Created:', result);
+
+            if (!result.success) {
+                throw new Error(result.error);
+            }
+
+            const saleId = parseInt(result.id || "0"); // result.id contains the created sale ID
+
             if (saleId && reservationIds.length > 0) {
                 for (const resId of reservationIds) {
-                    await completeFrameReservationAction({
+                    await completeFrameReservation({
                         reservationId: resId,
                         saleId: saleId,
                     });
@@ -304,7 +364,7 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
 
             clearCart();
             setHistoryRefreshKey(prev => prev + 1);
-            
+
             // Redirect to Sale Details
             router.push(`/dashboard/ventes/${saleId}`);
 
@@ -338,8 +398,8 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
                     <h3 className="font-semibold text-lg flex items-center gap-2">
                         <Badge variant="outline">1</Badge> Sélectionner Produits
                     </h3>
-                    <ProductSearch 
-                        onProductSelect={addToCart} 
+                    <ProductSearch
+                        onProductSelect={addToCart}
                         clientLenses={pendingOrders}
                         onLensSelect={(product, lensOrder) => addLensOrderToCart({ product, lensOrder })}
                         addedLensIds={cartItems.filter(i => i.productId.startsWith('LO-')).map(i => i.productId.replace('LO-', ''))}
@@ -363,25 +423,26 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
-                             <Button 
-                                 variant="outline" 
-                                 className="border-dashed border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 gap-2 h-11"
-                                 onClick={handleReserveFrame}
-                                 disabled={isProcessing || !cartItems.some(i => i.type === 'MONTURE' && !i.fromReservation)}
-                             >
-                                 <Tag className="h-4 w-4" />
-                                 Réserver
-                             </Button>
-                             <Button className="h-11 bg-slate-900 gap-2" disabled>
-                                 <Printer className="h-4 w-4" />
-                                 Devis
-                             </Button>
+                            <Button
+                                variant="outline"
+                                className="border-dashed border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 gap-2 h-11"
+                                onClick={handleReserveFrame}
+                                disabled={isProcessing || !cartItems.some(i => i.type === 'MONTURE' && !i.fromReservation)}
+                            >
+                                <Tag className="h-4 w-4" />
+                                Réserver
+                            </Button>
+                            <Button className="h-11 bg-slate-900 gap-2" disabled>
+                                <Printer className="h-4 w-4" />
+                                Devis
+                            </Button>
                         </div>
 
                         <Separator />
 
                         <PaymentSection
                             total={total}
+                            alreadyPaid={detectedAdvances}
                             onProcessSale={handleProcessSale}
                             isProcessing={isProcessing}
                         />
@@ -400,6 +461,15 @@ export function ClientPOS({ client, clientId }: ClientPOSProps) {
                     <SalesHistory clientId={clientId} key={historyRefreshKey} />
                 </CardContent>
             </Card>
+
+            <AdvancePaymentDialog
+                open={showAdvanceDialog}
+                onOpenChange={setShowAdvanceDialog}
+                totalAmount={cartItems.filter(item => item.type === 'MONTURE' && !item.fromReservation).reduce((sum, item) => sum + item.lineTotal, 0)}
+                onConfirm={handleFinalReserveFrame}
+                isSubmitting={isFinalizingReservation}
+                title="Avance sur réservation"
+            />
         </div>
     );
 }

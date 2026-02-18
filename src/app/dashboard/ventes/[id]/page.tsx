@@ -73,7 +73,7 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
                         reference: item.reference || item.productRef
                     }))
                 } as unknown as Sale;
-                
+
                 setSale(saleData);
 
                 // 2. Fetch Client if exists
@@ -86,18 +86,18 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
                         const nameParts = c.name.split(' ');
                         const prenom = nameParts.length > 1 ? nameParts[0] : '';
                         const nom = nameParts.length > 1 ? nameParts.slice(1).join(' ') : c.name;
-                        
+
                         const adaptedClient: Client = {
                             ...c,
-                             nom: c.nom || nom,
-                             prenom: c.prenom || prenom,
-                             telephone1: c.phone || c.telephone1 || '', // Map phone
-                             id: c.id?.toString() || '',
-                             // Mutuelle mapping
-                             // clientRes.client property 'mutuelle' might be missing if not in schema yet?
-                             // But we can rely on what we have.
-                             // types.ts Client has mutuelle? Yes.
-                             mutuelle: c.mutuelle || c.assuranceId // Fallback
+                            nom: c.nom || nom,
+                            prenom: c.prenom || prenom,
+                            telephone1: c.phone || c.telephone1 || '', // Map phone
+                            id: c.id?.toString() || '',
+                            // Mutuelle mapping
+                            // clientRes.client property 'mutuelle' might be missing if not in schema yet?
+                            // But we can rely on what we have.
+                            // types.ts Client has mutuelle? Yes.
+                            mutuelle: c.mutuelle || c.assuranceId // Fallback
                         } as any; // Cast to avoid strict errors during transition
 
                         setClient(adaptedClient);
@@ -123,7 +123,7 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
         };
 
         fetchSaleDetails();
-        
+
         return () => { isMounted = false; };
     }, [id, router, toast, refreshTrigger]);
 
@@ -326,13 +326,38 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
                             <span>Total TTC</span>
                             <span>{totalTTC.toFixed(2)} DH</span>
                         </div>
-                        <div className="flex justify-between text-sm pt-2 text-green-600 font-medium">
-                            <span>Avance / Payé</span>
-                            <span>{sale.totalPaye.toFixed(2)} DH</span>
+
+                        {/* 🆕 Explicit Advance & Payment Breakdown */}
+                        <div className="space-y-1 pt-2 border-t mt-2">
+                            {sale.paymentHistory && sale.paymentHistory.length > 0 && (() => {
+                                const totalAvance = (sale.paymentHistory as any[]).reduce((sum, p) => {
+                                    const isAvance = p.note?.toLowerCase().includes('avance') || p.method === 'Advance';
+                                    return sum + (isAvance ? Number(p.amount) : 0);
+                                }, 0);
+
+                                if (totalAvance > 0) {
+                                    return (
+                                        <div className="flex justify-between text-sm text-blue-600 font-medium">
+                                            <span className="flex items-center gap-1">
+                                                <Wallet className="h-3.5 w-3.5" />
+                                                Avance initiale
+                                            </span>
+                                            <span>{totalAvance.toFixed(2)} DH</span>
+                                        </div>
+                                    );
+                                }
+                                return null;
+                            })()}
+
+                            <div className="flex justify-between text-sm text-green-600 font-medium">
+                                <span>Total déjà payé</span>
+                                <span>{Number(sale.totalPaye).toFixed(2)} DH</span>
+                            </div>
                         </div>
-                        <div className={`flex justify-between text-lg font-bold border-t pt-2 ${sale.resteAPayer > 0 ? 'text-red-600' : 'text-green-600'}`}>
+
+                        <div className={`flex justify-between text-lg font-bold border-t pt-2 ${Number(sale.resteAPayer) > 0 ? 'text-red-600' : 'text-green-600'}`}>
                             <span>Reste à Payer</span>
-                            <span>{sale.resteAPayer.toFixed(2)} DH</span>
+                            <span>{Number(sale.resteAPayer).toFixed(2)} DH</span>
                         </div>
                     </CardContent>
                 </Card>

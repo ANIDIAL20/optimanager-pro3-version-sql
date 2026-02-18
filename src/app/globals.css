@@ -112,3 +112,60 @@ body[style*="pointer-events: none"] {
 [data-radix-portal] {
   pointer-events: auto !important;
 }
+
+/* 🟢 Mode Basique / Expert Toggle */
+.mode-toggle {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 1rem;
+  border-radius: 12px;
+  margin: 0.5rem;
+  color: white;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.mode-label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.813rem;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.toggle-button {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(8px);
+  text-align: center;
+  font-weight: 500;
+}
+
+.toggle-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.sidebar-divider {
+  height: 1px;
+  background: hsl(var(--sidebar-border));
+  margin: 1rem 0;
+}
+
+.sidebar-section-title {
+  color: hsl(var(--sidebar-foreground) / 0.5);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.5rem 1rem;
+  margin-top: 0.5rem;
+}
+

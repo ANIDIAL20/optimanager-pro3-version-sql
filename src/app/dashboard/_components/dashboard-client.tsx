@@ -22,11 +22,13 @@ import {
     ShoppingBag,
     Database,
     Truck,
-    Briefcase
+    Briefcase,
+    Banknote
 } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
 import { ExpiringReservationsWidget } from '@/features/reservations/components/expiring-reservations-widget';
 import { ReadyLensesDashboardWidget } from '@/features/lens-orders/components/ready-lenses-widget';
+import { useMode } from '@/contexts/mode-context';
 
 interface DashboardData {
     globalRevenue: number;
@@ -48,6 +50,7 @@ interface DashboardData {
         status: string;
         resteAPayer?: number;
     }>;
+    pendingPaymentsCount: number;
     pendingReservations: any[]; // Frame reservations
 }
 
@@ -68,6 +71,7 @@ const formatLimit = (limit: number) => {
 };
 
 export default function DashboardClient({ user, usage }: DashboardClientProps) {
+    const { isBasicMode } = useMode();
     const [data, setData] = React.useState<DashboardData | null>(null);
     const [isLoading, setIsLoading] = React.useState(true);
 
@@ -181,7 +185,10 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
             </div>
 
             {/* --- ZONE 1.5: ACCÈS RAPIDE (4 Cols) --- */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-in fade-in slide-in-from-top-4 duration-500 delay-150">
+            <div className={cn(
+                "grid gap-4 animate-in fade-in slide-in-from-top-4 duration-500 delay-150",
+                isBasicMode ? "grid-cols-2" : "grid-cols-2 lg:grid-cols-4"
+            )}>
                 <Link href="/dashboard/clients" className="group p-4 bg-white rounded-2xl border border-slate-100 hover:border-purple-200 hover:bg-purple-50/30 transition-all flex flex-col items-center justify-center text-center gap-2 shadow-sm">
                     <div className="h-10 w-10 rounded-xl bg-purple-50 flex items-center justify-center group-hover:scale-110 transition-transform">
                         <Users className="h-5 w-5 text-purple-600" />
@@ -196,18 +203,67 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                     <span className="text-sm font-bold text-slate-700">Stock</span>
                 </Link>
 
-                <Link href="/dashboard/devis" className="group p-4 bg-white rounded-2xl border border-slate-100 hover:border-emerald-200 hover:bg-emerald-50/30 transition-all flex flex-col items-center justify-center text-center gap-2 shadow-sm">
-                    <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <FileText className="h-5 w-5 text-emerald-600" />
-                    </div>
-                    <span className="text-sm font-bold text-slate-700">Devis</span>
+                {!isBasicMode && (
+                    <>
+                        <Link href="/dashboard/devis" className="group p-4 bg-white rounded-2xl border border-slate-100 hover:border-emerald-200 hover:bg-emerald-50/30 transition-all flex flex-col items-center justify-center text-center gap-2 shadow-sm">
+                            <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <FileText className="h-5 w-5 text-emerald-600" />
+                            </div>
+                            <span className="text-sm font-bold text-slate-700">Devis</span>
+                        </Link>
+
+                        <Link href="/dashboard/suppliers" className="group p-4 bg-white rounded-2xl border border-slate-100 hover:border-amber-200 hover:bg-amber-50/30 transition-all flex flex-col items-center justify-center text-center gap-2 shadow-sm">
+                            <div className="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <Truck className="h-5 w-5 text-amber-600" />
+                            </div>
+                            <span className="text-sm font-bold text-slate-700">Fournisseurs</span>
+                        </Link>
+                    </>
+                )}
+            </div>
+
+            {/* --- ZONE 1.7: ACTION CARDS (Pending Payments + Low Stock) --- */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Action Card: Pending Payments */}
+                <Link href="/dashboard/ventes" className="group">
+                    <SpotlightCard className="p-6 border-amber-100 bg-amber-50/10" spotlightColor="rgba(245, 158, 11, 0.1)">
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                                <p className="text-sm font-semibold text-amber-900 flex items-center gap-2">
+                                    <Banknote className="h-4 w-4" />
+                                    Paiements en Attente
+                                </p>
+                                <h3 className="text-2xl font-bold text-amber-700">
+                                    {data?.pendingPaymentsCount || 0} Ventes
+                                </h3>
+                                <p className="text-xs text-amber-600/80">Ventes avec un solde restant à payer</p>
+                            </div>
+                            <div className="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform">
+                                <ArrowRight className="h-5 w-5" />
+                            </div>
+                        </div>
+                    </SpotlightCard>
                 </Link>
 
-                <Link href="/dashboard/suppliers" className="group p-4 bg-white rounded-2xl border border-slate-100 hover:border-amber-200 hover:bg-amber-50/30 transition-all flex flex-col items-center justify-center text-center gap-2 shadow-sm">
-                    <div className="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <Truck className="h-5 w-5 text-amber-600" />
-                    </div>
-                    <span className="text-sm font-bold text-slate-700">Fournisseurs</span>
+                {/* Action Card: Low Stock */}
+                <Link href="/produits" className="group">
+                    <SpotlightCard className="p-6 border-red-100 bg-red-50/10" spotlightColor="rgba(239, 68, 68, 0.1)">
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                                <p className="text-sm font-semibold text-red-900 flex items-center gap-2">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    Produits en Rupture
+                                </p>
+                                <h3 className="text-2xl font-bold text-red-700">
+                                    {data?.stockAlerts || 0} Articles
+                                </h3>
+                                <p className="text-xs text-red-600/80">Articles au-dessous du seuil d'alerte</p>
+                            </div>
+                            <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center text-red-600 group-hover:scale-110 transition-transform">
+                                <ArrowRight className="h-5 w-5" />
+                            </div>
+                        </div>
+                    </SpotlightCard>
                 </Link>
             </div>
 
@@ -314,7 +370,9 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                     ) : (
                         <div className="max-h-[350px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pr-1">
                             <div className="space-y-3">
-                                {data.recentActivity.map((activity) => (
+                                {data.recentActivity
+                                    .filter(activity => !isBasicMode || activity.type === 'sale')
+                                    .map((activity) => (
                                     <Link
                                         key={activity.id}
                                         href={`/dashboard/ventes/${activity.id}`}
@@ -403,24 +461,26 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                     </p>
                  </SpotlightCard>
 
-                 {/* Suppliers Quota */}
-                 <SpotlightCard className="p-6" spotlightColor="rgba(234, 179, 8, 0.1)">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                             <div className="h-8 w-8 rounded-lg bg-yellow-50 flex items-center justify-center">
-                                <Truck className="h-4 w-4 text-yellow-600" />
+                 {/* Suppliers Quota (Expert Only) */}
+                 {!isBasicMode && (
+                     <SpotlightCard className="p-6" spotlightColor="rgba(234, 179, 8, 0.1)">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                                 <div className="h-8 w-8 rounded-lg bg-yellow-50 flex items-center justify-center">
+                                    <Truck className="h-4 w-4 text-yellow-600" />
+                                </div>
+                                <span className="text-sm font-medium text-slate-700">Fournisseurs</span>
                             </div>
-                            <span className="text-sm font-medium text-slate-700">Fournisseurs</span>
+                            <span className="text-xs font-bold bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">
+                                {usage.suppliers.count} / {formatLimit(usage.suppliers.limit)}
+                            </span>
                         </div>
-                        <span className="text-xs font-bold bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">
-                            {usage.suppliers.count} / {formatLimit(usage.suppliers.limit)}
-                        </span>
-                    </div>
-                    <Progress value={(usage.suppliers.count / usage.suppliers.limit) * 100} className="h-2 mb-2" />
-                     <p className="text-xs text-slate-400 text-right">
-                        {Math.round((usage.suppliers.count / usage.suppliers.limit) * 100)}% utilisÃ©
-                    </p>
-                 </SpotlightCard>
+                        <Progress value={(usage.suppliers.count / usage.suppliers.limit) * 100} className="h-2 mb-2" />
+                         <p className="text-xs text-slate-400 text-right">
+                            {Math.round((usage.suppliers.count / usage.suppliers.limit) * 100)}% utilisÃ©
+                        </p>
+                     </SpotlightCard>
+                 )}
             </div>
         </div>
     );

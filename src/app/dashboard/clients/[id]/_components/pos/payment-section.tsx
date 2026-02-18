@@ -24,27 +24,31 @@ interface PaymentSectionProps {
     onProcessSale: (paymentData: PaymentData) => Promise<void>;
     isProcessing: boolean;
     defaultDeclared?: boolean;
+    alreadyPaid?: number;
 }
 
-export function PaymentSection({ total, onProcessSale, isProcessing, defaultDeclared = false }: PaymentSectionProps) {
-    const [amountPaid, setAmountPaid] = React.useState<string>(''); 
+export function PaymentSection({ total, onProcessSale, isProcessing, defaultDeclared = false, alreadyPaid = 0 }: PaymentSectionProps) {
+    const [amountPaid, setAmountPaid] = React.useState<string>('');
     const [method, setMethod] = React.useState('Especes');
     const [notes, setNotes] = React.useState('');
     const [isDeclared, setIsDeclared] = React.useState(defaultDeclared);
 
-    // Auto-fill amount paid with total when total changes (optional convenience)
-    // Auto-fill amount paid with total whenever total changes
+    // Auto-fill amount paid with Remaining to pay (Total - AlreadyPaid)
     React.useEffect(() => {
-        setAmountPaid(total.toString());
-    }, [total]);
+        const remaining = Math.max(0, total - alreadyPaid);
+        setAmountPaid(remaining.toString());
+    }, [total, alreadyPaid]);
 
     const numericAmount = parseFloat(amountPaid) || 0;
-    const reste = Math.max(0, total - numericAmount);
+    const totalWithNewPayment = numericAmount + alreadyPaid;
+    const reste = Math.max(0, total - totalWithNewPayment);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        const numericAmountValue = parseFloat(amountPaid) || 0;
+        console.log('🚀 [PaymentSection] Submitting Payment:', { amountPaid: numericAmountValue, method, notes, isDeclared });
         onProcessSale({
-            amountPaid: numericAmount,
+            amountPaid: numericAmountValue,
             method,
             notes,
             isDeclared
@@ -95,12 +99,19 @@ export function PaymentSection({ total, onProcessSale, isProcessing, defaultDecl
                     </Label>
                     <span className="text-[10px] text-muted-foreground uppercase font-semibold">TVA 20% Incluse • Déclaration Fiscale</span>
                 </div>
-                <Switch 
-                    checked={isDeclared} 
+                <Switch
+                    checked={isDeclared}
                     onCheckedChange={setIsDeclared}
                     className="data-[state=checked]:bg-indigo-600"
                 />
             </div>
+
+            {alreadyPaid > 0 && (
+                <div className="flex justify-between items-center bg-green-50/50 p-2 px-3 rounded border border-green-200">
+                    <span className="text-xs font-medium text-green-700">Avance déjà payée</span>
+                    <span className="font-bold text-green-600">{alreadyPaid.toFixed(2)} MAD</span>
+                </div>
+            )}
 
             <div className="flex justify-between items-center bg-background p-3 rounded border">
                 <span className="text-sm font-medium text-muted-foreground">Reste à payer (Crédit)</span>

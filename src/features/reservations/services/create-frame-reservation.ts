@@ -1,3 +1,5 @@
+'use server';
+
 import { db } from '@/db';
 import { products, frameReservations } from '@/db/schema';
 import { eq, inArray, sql } from 'drizzle-orm';
@@ -12,24 +14,24 @@ export async function createFrameReservation(
   input: CreateFrameReservationInput
 ): Promise<FrameReservation> {
   return await db.transaction(async (tx) => {
-    
+
     // 1) جلب المنتجات
     const productIds = input.items.map(i => i.productId);
     const fetchedProducts = await tx.query.products.findMany({
       where: inArray(products.id, productIds),
     });
-    
+
     if (fetchedProducts.length !== productIds.length) {
       throw new Error('Un ou plusieurs produits introuvables');
     }
-    
+
     // 2) التحقق من النوع والكمية المتاحة
     const reservationItems = [];
-    
+
     for (const item of input.items) {
       const product = fetchedProducts.find(p => p.id === item.productId);
       if (!product) continue;
-      
+
       /*
       // تحقق أن المنتج من نوع MONTURE (Removed per request to allow reservation of any product)
       if (product.type !== 'MONTURE') {
@@ -38,10 +40,10 @@ export async function createFrameReservation(
         );
       }
       */
-      
+
       // حساب المتاح
       const available = product.quantiteStock - product.reservedQuantity;
-      
+
       /*
       if (available < item.quantity) {
         // Allow backorder for reservations
@@ -50,7 +52,7 @@ export async function createFrameReservation(
         // );
       }
       */
-      
+
       reservationItems.push({
         productId: product.id,
         productName: product.nom,
@@ -59,11 +61,11 @@ export async function createFrameReservation(
         unitPrice: parseFloat(product.prixVente.toString()),
       });
     }
-    
+
     // 3) حساب التواريخ
     const reservationDate = new Date();
     const expiryDate = addDays(reservationDate, input.expiryDays ?? 7);
-    
+
     // 4) إدخال الحجز
     const [reservation] = await tx
       .insert(frameReservations)
@@ -78,7 +80,7 @@ export async function createFrameReservation(
         notes: input.notes,
       })
       .returning();
-    
+
     // 5) تحديث reservedQuantity لكل منتج
     for (const item of input.items) {
       await tx
@@ -88,7 +90,7 @@ export async function createFrameReservation(
         })
         .where(eq(products.id, item.productId));
     }
-    
+
     return reservation as FrameReservation;
   });
 }

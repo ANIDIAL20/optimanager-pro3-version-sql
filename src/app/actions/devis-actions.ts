@@ -22,7 +22,7 @@ export interface DevisItem {
     productId?: string; // ID of the product
     reference: string;
     designation: string;
-    
+
     // New fields
     marque?: string;
     modele?: string;
@@ -30,14 +30,14 @@ export interface DevisItem {
 
     quantite: number;
     prixUnitaire: number;
-    
+
     // Financials
     priceHT?: number;
     tvaRate?: number;
     amountTVA?: number;
     totalHT?: number;
     totalTTC?: number;
-    
+
     unitPrice?: number; // Alias for priceUnitaire
     
     // Lens Details
@@ -78,7 +78,7 @@ export interface CreateDevisInput {
 export const getDevis = secureAction(async (userId, user) => {
     try {
         console.log(`🔍 Fetching devis for user: ${userId}`);
-        
+
         // Use select() instead of query relational builder for better reliability
         const resultRows = await db
             .select()
@@ -164,45 +164,45 @@ export const createDevis = secureAction(async (userId, user, data: CreateDevisIn
             // Check product for exemptions
             let hasTva = true;
             if (item.productId) {
-                 const pid = parseInt(item.productId);
-                 if (!isNaN(pid)) {
-                      const product = await db.query.products.findFirst({
-                          where: and(eq(products.id, pid), eq(products.userId, userId)),
-                          columns: { 
-                              category: true, 
-                              categorie: true, 
-                              hasTva: true, 
-                              reference: true,
-                              marque: true, 
-                              modele: true, 
-                              couleur: true 
-                          }
-                      });
-                      if (product) {
-                          const cat = product.categorie || product.category;
-                          const isExempt = cat && ['Monture', 'Montures', 'Medical'].includes(cat);
-                          if (product.hasTva === false || isExempt) hasTva = false;
-                          
-                          // Ensure reference is correct
-                          if (product.reference) {
-                              item.reference = product.reference;
-                          }
-                          
-                          // Enrich text fields if missing
-                          if (!item.marque && product.marque) item.marque = product.marque;
-                          if (!item.modele && product.modele) item.modele = product.modele;
-                          if (!item.couleur && product.couleur) item.couleur = product.couleur;
-                      }
-                 }
+                const pid = parseInt(item.productId);
+                if (!isNaN(pid)) {
+                    const product = await db.query.products.findFirst({
+                        where: and(eq(products.id, pid), eq(products.userId, userId)),
+                        columns: {
+                            category: true,
+                            categorie: true,
+                            hasTva: true,
+                            reference: true,
+                            marque: true,
+                            modele: true,
+                            couleur: true
+                        }
+                    });
+                    if (product) {
+                        const cat = product.categorie || product.category;
+                        const isExempt = cat && ['Monture', 'Montures', 'Medical'].includes(cat);
+                        if (product.hasTva === false || isExempt) hasTva = false;
+
+                        // Ensure reference is correct
+                        if (product.reference) {
+                            item.reference = product.reference;
+                        }
+
+                        // Enrich text fields if missing
+                        if (!item.marque && product.marque) item.marque = product.marque;
+                        if (!item.modele && product.modele) item.modele = product.modele;
+                        if (!item.couleur && product.couleur) item.couleur = product.couleur;
+                    }
+                }
             }
-            
+
             // Calculate
             const tax = calculateLineItem(item.prixUnitaire, item.quantite, true, hasTva);
-            
+
             runningTotalHT += tax.totalHT;
             runningTotalTVA += tax.totalTVA;
             runningTotalTTC += tax.totalTTC;
-            
+
             return {
                 ...item,
                 priceHT: tax.unitHT,
@@ -210,7 +210,7 @@ export const createDevis = secureAction(async (userId, user, data: CreateDevisIn
                 amountTVA: tax.unitTVA,
                 totalHT: tax.totalHT,
                 totalTTC: tax.totalTTC,
-                unitPrice: item.prixUnitaire 
+                unitPrice: item.prixUnitaire
             };
         }));
 
@@ -234,9 +234,9 @@ export const createDevis = secureAction(async (userId, user, data: CreateDevisIn
             templateVersionUsed: currentSettings.version
         };
 
-         const inserted = await db.insert(devis).values(newDevis).returning();
-        
-        await logSuccess(userId, 'CREATE', 'devis', inserted[0].id.toString(), { clientName: data.clientName, total: totalTTC }, null, newDevis);
+        const inserted = await db.insert(devis).values(newDevis).returning();
+
+        await logSuccess(userId, 'CREATE', 'devis', inserted[0].id.toString(), { clientName: data.clientName, total: runningTotalTTC }, null, newDevis);
         revalidatePath('/dashboard/devis');
         return { success: true, id: inserted[0].id.toString(), message: 'Devis créé avec succès' };
 
@@ -261,16 +261,16 @@ import { revalidatePath } from 'next/cache';
 export const updateDevisStatus = secureAction(async (userId, user, devisId: string, status: Devis['status']) => {
     try {
         const id = parseInt(devisId);
-        
+
         const result = await db.update(devis)
             .set({ status, updatedAt: new Date() })
             .where(and(eq(devis.id, id), eq(devis.userId, userId)))
             .returning();
-            
+
         if (result.length === 0) return { success: false, error: 'Devis introuvable' };
 
         await logSuccess(userId, 'UPDATE_STATUS', 'devis', devisId, { status });
-        
+
         revalidatePath('/dashboard/devis');
         return { success: true, message: 'Statut mis à jour' };
 
@@ -293,7 +293,7 @@ export const deleteDevis = secureAction(async (userId, user, devisId: string) =>
         if (result.length === 0) return { success: false, error: 'Devis introuvable' };
 
         await logSuccess(userId, 'DELETE', 'devis', devisId);
-        
+
         revalidatePath('/dashboard/devis');
         return { success: true, message: 'Devis supprimé' };
 
@@ -321,58 +321,58 @@ export const convertDevisToSale = secureAction(async (userId, user, devisId: str
 
             // 2. Check Stock & Prepare Updates
             const devisItems = devisData.items as DevisItem[];
-            
+
             for (const item of devisItems) {
                 if (item.productId) {
                     const pid = parseInt(item.productId);
                     if (!isNaN(pid)) {
-                         const product = await tx.query.products.findFirst({
-                             where: and(eq(products.id, pid), eq(products.userId, userId))
-                         });
-                         
-                         if (product) {
-                             if ((product.quantiteStock || 0) < item.quantite) {
-                                 throw new Error(`Stock insuffisant pour ${item.designation}`);
-                             }
-                             
-                             // ✅ Optimistic Locking update
-                             const updateRes = await tx.update(products)
-                                 .set({ 
-                                     quantiteStock: sql`${products.quantiteStock} - ${item.quantite}`,
-                                     version: sql`${products.version} + 1`,
-                                     updatedAt: new Date()
-                                 })
-                                 .where(and(
-                                     eq(products.id, pid),
-                                     eq(products.version, product.version)
-                                 ));
+                        const product = await tx.query.products.findFirst({
+                            where: and(eq(products.id, pid), eq(products.userId, userId))
+                        });
 
-                             if (updateRes.rowCount === 0) {
-                                 throw new Error(`Erreur de concurrence pour ${item.designation}.`);
-                             }
+                        if (product) {
+                            if ((product.quantiteStock || 0) < item.quantite) {
+                                throw new Error(`Stock insuffisant pour ${item.designation}`);
+                            }
 
-                             // Log movement
-                             await tx.insert(stockMovements).values({
-                                 userId,
-                                 productId: pid,
-                                 quantite: -item.quantite,
-                                 type: 'Vente (Devis)',
-                                 ref: `DEVIS-${id}`,
-                                 date: new Date()
-                             });
+                            // ✅ Optimistic Locking update
+                            const updateRes = await tx.update(products)
+                                .set({
+                                    quantiteStock: sql`${products.quantiteStock} - ${item.quantite}`,
+                                    version: sql`${products.version} + 1`,
+                                    updatedAt: new Date()
+                                })
+                                .where(and(
+                                    eq(products.id, pid),
+                                    eq(products.version, product.version)
+                                ));
 
-                             // Audit log product
-                             await logAudit({
-                                 userId,
-                                 entityType: 'product',
-                                 entityId: pid.toString(),
-                                 action: 'UPDATE_STOCK',
-                                 oldValue: { stock: product.quantiteStock, version: product.version },
-                                 newValue: { stock: product.quantiteStock - item.quantite, version: product.version + 1 },
-                                 metadata: { devisRef: id.toString() },
-                                 success: true
-                             });
-                         }
+                            if (updateRes.rowCount === 0) {
+                                throw new Error(`Erreur de concurrence pour ${item.designation}.`);
+                            }
+
+                            // Log movement
+                            await tx.insert(stockMovements).values({
+                                userId,
+                                productId: pid,
+                                quantite: -item.quantite,
+                                type: 'Vente (Devis)',
+                                ref: `DEVIS-${id}`,
+                                date: new Date()
+                            });
+
+                            // Audit log product
+                            await logAudit({
+                                userId,
+                                entityType: 'product',
+                                entityId: pid.toString(),
+                                action: 'UPDATE_STOCK',
+                                oldValue: { stock: product.quantiteStock, version: product.version },
+                                newValue: { stock: product.quantiteStock - item.quantite, version: product.version + 1 },
+                                metadata: { devisRef: id.toString() },
+                                success: true
+                            });
+                        }
                     }
                 }
             }
@@ -408,7 +408,7 @@ export const convertDevisToSale = secureAction(async (userId, user, devisId: str
                 totalHT: devisData.totalHT,
                 totalTTC: devisData.totalTTC,
                 totalNet: devisData.totalTTC,
-                totalTVA: (Number(devisData.totalHT) * 0.20).toFixed(2), 
+                totalTVA: (Number(devisData.totalHT) * 0.20).toFixed(2),
                 totalPaye: '0',
                 resteAPayer: devisData.totalTTC,
                 status: 'impaye',
@@ -424,8 +424,8 @@ export const convertDevisToSale = secureAction(async (userId, user, devisId: str
 
             // 4. Update Devis
             await tx.update(devis)
-                .set({ 
-                    status: 'TRANSFORME', 
+                .set({
+                    status: 'TRANSFORME',
                     saleId: insertedSale[0].id,
                     updatedAt: new Date()
                 })
@@ -445,10 +445,10 @@ export const convertDevisToSale = secureAction(async (userId, user, devisId: str
         });
 
         await logSuccess(userId, 'CONVERT_DEVIS', 'sales', result.toString());
-        
+
         revalidatePath('/dashboard/devis');
         revalidatePath('/dashboard/ventes'); // Also revalidate sales list
-        
+
         return { success: true, saleId: result.toString(), message: 'Transformé en vente' };
 
     } catch (error: any) {

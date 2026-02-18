@@ -41,7 +41,9 @@ import { getPrescriptions } from '@/app/actions/prescriptions-actions';
 import { getSuppliersList } from '@/app/actions/supplier-actions';
 import { getSettings } from '@/app/actions/settings-actions';
 import { createLensOrder, type LensOrderInput } from '@/app/actions/lens-orders-actions';
+import { recordAdvancePayment } from '@/app/actions/payment-actions';
 import { BrandLoader } from '@/components/ui/loader-brand';
+import { AdvancePaymentDialog } from '@/components/modals/advance-payment-dialog';
 
 const LensOrderSchema = z.object({
   prescriptionId: z.coerce.string().min(1, 'Veuillez sélectionner une prescription.'),
@@ -70,6 +72,9 @@ interface LensOrderFormProps {
 export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrderFormProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [showAdvanceDialog, setShowAdvanceDialog] = React.useState(false);
+  const [pendingFormData, setPendingFormData] = React.useState<LensOrderFormValues | null>(null);
+  const [isFinalizing, setIsFinalizing] = React.useState(false);
 
   // Data State
   const [prescriptions, setPrescriptions] = React.useState<any[]>([]);
@@ -157,6 +162,16 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
   }, [lensTypeValue, form, mode]);
 
   const onSubmit = async (data: LensOrderFormValues) => {
+    // On n'enregistre pas directement, on demande l'avance d'abord
+    setPendingFormData(data);
+    setShowAdvanceDialog(true);
+  };
+
+  const handleFinalSubmit = async (advanceAmount: number) => {
+    if (!pendingFormData) return;
+    const data = pendingFormData;
+
+    setIsFinalizing(true);
     setIsSubmitting(true);
     try {
       // Validate conversions
@@ -194,18 +209,21 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
         axeR: fullSelectedPrescription?.data?.od?.axis?.toString() || null,
         additionR: (fullSelectedPrescription?.data?.od?.addition || fullSelectedPrescription?.data?.od?.add)?.toString() || null,
         hauteurR: (fullSelectedPrescription?.data?.od?.height || fullSelectedPrescription?.data?.od?.hauteur)?.toString() || null,
-        
+
         sphereL: fullSelectedPrescription?.data?.og?.sphere?.toString() || null,
         cylindreL: fullSelectedPrescription?.data?.og?.cylinder?.toString() || null,
         axeL: fullSelectedPrescription?.data?.og?.axis?.toString() || null,
         additionL: (fullSelectedPrescription?.data?.og?.addition || fullSelectedPrescription?.data?.og?.add)?.toString() || null,
         hauteurL: (fullSelectedPrescription?.data?.og?.height || fullSelectedPrescription?.data?.og?.hauteur)?.toString() || null,
-        
+
         ecartPupillaireR: fullSelectedPrescription?.data?.od?.pd?.toString() || null,
         ecartPupillaireL: fullSelectedPrescription?.data?.og?.pd?.toString() || null,
         diameterR: fullSelectedPrescription?.data?.od?.diameter?.toString() || null,
         diameterL: fullSelectedPrescription?.data?.og?.diameter?.toString() || null,
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/nouvelle-modif
 
         matiere: fullSelectedPrescription?.data?.matiere || null,
         indice: fullSelectedPrescription?.data?.indice || null,
@@ -226,10 +244,29 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
       const result = await createLensOrder(orderInput);
 
       if (result.success) {
+        const orderId = result.data?.id;
+
+        // Record the advance payment if any
+        if (orderId && advanceAmount > 0) {
+          await recordAdvancePayment({
+            clientId: parseInt(clientId),
+            amount: advanceAmount,
+            referenceId: orderId.toString(),
+            referenceType: 'LENS_ORDER',
+            notes: `Avance pour commande de verres #${orderId}`
+          });
+        }
+
         toast({
           title: mode === 'contacts' ? 'Commande de lentilles créée' : 'Commande de verres créée',
-          description: 'La nouvelle commande a été enregistrée en tant que brouillon.',
+          description: advanceAmount > 0
+            ? `La commande a été enregistrée avec une avance de ${advanceAmount} DH.`
+            : 'La nouvelle commande a été enregistrée en tant que brouillon.',
         });
+
+        setShowAdvanceDialog(false);
+        setPendingFormData(null);
+
         form.reset({
           prescriptionId: '',
           supplierId: '',
@@ -257,6 +294,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
       });
     } finally {
       setIsSubmitting(false);
+      setIsFinalizing(false);
     }
   };
 
@@ -326,6 +364,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                   <Eye className="h-4 w-4 text-blue-600" />
                   <h4 className="text-sm font-semibold text-slate-900">Détails de la correction</h4>
                 </div>
+<<<<<<< HEAD
                 <div className="grid grid-cols-2 gap-4 text-sm mt-2">
                   <div className="bg-white p-3 rounded border border-slate-200">
                     <span className="font-semibold text-blue-700 block mb-2 border-b pb-1">Œil Droit (OD)</span>
@@ -349,6 +388,29 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                       <div className="pt-1 border-t col-span-2 mt-1"></div>
                       <div>EP: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.pd || fullSelectedPrescription.data?.pd || '-'}</span></div>
                       <div>H: <span className="font-medium text-slate-900">{fullSelectedPrescription.data?.og?.hauteur || '-'}</span></div>
+=======
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                  <div>
+                    <span className="font-semibold text-blue-700 block mb-2 border-b border-blue-100 pb-1">Œil Droit (OD)</span>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-2 gap-x-4 text-slate-600">
+                      <div>Sph: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.od?.sphere || '-'}</span></div>
+                      <div>Cyl: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.od?.cylinder || '-'}</span></div>
+                      <div>Axe: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.od?.axis || '-'}</span>°</div>
+                      <div>Add: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.od?.addition || fullSelectedPrescription.data?.od?.add || '-'}</span></div>
+                      <div>EP: <span className="font-bold text-blue-700">{fullSelectedPrescription.data?.od?.pd || '-'}</span></div>
+                      <div>H: <span className="font-bold text-blue-700">{fullSelectedPrescription.data?.od?.height || fullSelectedPrescription.data?.od?.hauteur || '-'}</span></div>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-blue-700 block mb-2 border-b border-blue-100 pb-1">Œil Gauche (OG)</span>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-2 gap-x-4 text-slate-600">
+                      <div>Sph: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.og?.sphere || '-'}</span></div>
+                      <div>Cyl: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.og?.cylinder || '-'}</span></div>
+                      <div>Axe: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.og?.axis || '-'}</span>°</div>
+                      <div>Add: <span className="font-bold text-slate-900">{fullSelectedPrescription.data?.og?.addition || fullSelectedPrescription.data?.og?.add || '-'}</span></div>
+                      <div>EP: <span className="font-bold text-blue-700">{fullSelectedPrescription.data?.og?.pd || '-'}</span></div>
+                      <div>H: <span className="font-bold text-blue-700">{fullSelectedPrescription.data?.og?.height || fullSelectedPrescription.data?.og?.hauteur || '-'}</span></div>
+>>>>>>> origin/nouvelle-modif
                     </div>
                   </div>
                 </div>
@@ -396,6 +458,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
             )}
 
             {mode === 'contacts' && (
+<<<<<<< HEAD
                <FormField
                   control={form.control}
                   name="lensType"
@@ -410,6 +473,21 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                   )}
                 />
 
+=======
+              <FormField
+                control={form.control}
+                name="lensType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Marque de Lentilles / Modèle</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ex: Acuvue Oasys, Biofinity..." {...field} value={field.value ?? ''} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+>>>>>>> origin/nouvelle-modif
             )}
 
 
@@ -674,6 +752,15 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
           </form>
         </Form>
       </CardContent>
+
+      <AdvancePaymentDialog
+        open={showAdvanceDialog}
+        onOpenChange={setShowAdvanceDialog}
+        totalAmount={form.watch('sellingPrice') || 0}
+        onConfirm={handleFinalSubmit}
+        isSubmitting={isFinalizing}
+        title={mode === 'contacts' ? "Avance sur lentilles" : "Avance sur verres"}
+      />
     </Card>
   );
 }

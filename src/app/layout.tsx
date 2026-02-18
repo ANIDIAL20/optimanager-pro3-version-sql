@@ -10,6 +10,7 @@ import { Toaster as SonnerToaster } from "sonner";
 import { SessionProvider } from "next-auth/react";
 import { PrivacyProvider } from "@/context/privacy-context";
 import { LoadingProvider } from "@/contexts/loading-context";
+import { ModeProvider } from "@/contexts/mode-context";
 import { UnifiedLoader } from "@/components/ui/unified-loader";
 import { getGlobalBanner } from "@/app/actions/adminActions";
 import { Analytics } from "@vercel/analytics/react";
@@ -56,12 +57,14 @@ export default async function RootLayout({
           <ErrorBoundary>
             <QueryProvider>
               <LoadingProvider>
-                <PrivacyProvider>
-                  <UnifiedLoader />
-                  <AppShell banner={banner}>
-                    {children}
-                  </AppShell>
-                </PrivacyProvider>
+                <ModeProvider>
+                  <PrivacyProvider>
+                    <UnifiedLoader />
+                    <AppShell banner={banner}>
+                      {children}
+                    </AppShell>
+                  </PrivacyProvider>
+                </ModeProvider>
               </LoadingProvider>
             </QueryProvider>
           </ErrorBoundary>

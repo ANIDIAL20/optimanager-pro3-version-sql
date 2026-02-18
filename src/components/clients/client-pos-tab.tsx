@@ -21,6 +21,8 @@ import { getProducts, getCategories } from '@/app/actions/products-actions';
 import { createSale } from '@/app/actions/sales-actions';
 import { getPendingLensOrders, type LensOrder } from '@/app/actions/lens-orders-actions';
 import { createFrameReservationAction, completeFrameReservationAction, getClientReservationsAction } from '@/app/actions/reservation-actions';
+import { recordAdvancePayment } from '@/app/actions/payment-actions';
+import { AdvancePaymentDialog } from '@/components/modals/advance-payment-dialog';
 import { BrandLoader } from '@/components/ui/loader-brand';
 
 interface Client {
@@ -80,6 +82,8 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [isLoading, setIsLoading] = React.useState(true);
     const [pendingOrders, setPendingOrders] = React.useState<LensOrder[]>([]);
+    const [showAdvanceDialog, setShowAdvanceDialog] = React.useState(false);
+    const [isFinalizingReservation, setIsFinalizingReservation] = React.useState(false);
 
     const { toast } = useToast();
     const router = useRouter();
@@ -115,7 +119,7 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
 
         loadData();
     }, []);
-    
+
     // Load pending lens orders
     React.useEffect(() => {
         if (clientId) {
@@ -130,16 +134,16 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
     // Handle Reservation Loading (from prop or URL)
     React.useEffect(() => {
         const loadReservation = async (id: string) => {
-             getClientReservationsAction(clientId).then(res => {
-                 if (res.success && res.data) {
-                     const reservation = (res.data as any[]).find(r => r.id.toString() === id);
-                     if (reservation && reservation.status === 'PENDING') {
-                         
-                         // Avoid duplicates: Check if any item from this reservation is already in cart
-                         const alreadyInCart = cartItems.some(item => item.fromReservation === reservation.id);
-                         if (alreadyInCart) return;
+            getClientReservationsAction(clientId).then(res => {
+                if (res.success && res.data) {
+                    const reservation = (res.data as any[]).find(r => r.id.toString() === id);
+                    if (reservation && reservation.status === 'PENDING') {
 
-                         const newLines = reservation.items.map((item: any) => {
+                        // Avoid duplicates: Check if any item from this reservation is already in cart
+                        const alreadyInCart = cartItems.some(item => item.fromReservation === reservation.id);
+                        if (alreadyInCart) return;
+
+                        const newLines = reservation.items.map((item: any) => {
                              let unitPrice =
                                  typeof item.unitPrice === 'number'
                                      ? item.unitPrice
@@ -157,41 +161,41 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                                  Number.isFinite(unitPrice) ? unitPrice : 0,
                                  item.quantity
                              );
-                         }).map((line: any) => ({ 
+                        }).map((line: any) => ({ 
                              ...line, 
                              fromReservation: reservation.id 
-                         }));
-                         
-                         setItems([...cartItems, ...newLines]);
-                         toast({ title: "Déjà réservé", description: "Les articles réservés ont été ajoutés au panier." });
-                     }
-                 }
-             });
+                        }));
+                        
+                        setItems([...cartItems, ...newLines]);
+                        toast({ title: "Déjà réservé", description: "Les articles réservés ont été ajoutés au panier." });
+                    }
+                }
+            });
         };
 
         if (initialReservationId) {
             loadReservation(initialReservationId.toString());
         } else {
-             // Fallback to URL for direct links
-             const urlParams = new URLSearchParams(window.location.search);
-             const resId = urlParams.get('reservationId');
-             if (resId) {
-                 const newUrl = new URL(window.location.href);
-                 newUrl.searchParams.delete('reservationId');
-                 window.history.replaceState({}, '', newUrl);
-                 loadReservation(resId);
-             }
+            // Fallback to URL for direct links
+            const urlParams = new URLSearchParams(window.location.search);
+            const resId = urlParams.get('reservationId');
+            if (resId) {
+                const newUrl = new URL(window.location.href);
+                newUrl.searchParams.delete('reservationId');
+                window.history.replaceState({}, '', newUrl);
+                loadReservation(resId);
+            }
 
-             // New: Auto-add lens order by ID from URL
-             const orderId = urlParams.get('orderId');
-             if (orderId && clientId) {
-                 // Remove from URL to avoid re-adding
-                 const newUrl = new URL(window.location.href);
-                 newUrl.searchParams.delete('orderId');
-                 window.history.replaceState({}, '', newUrl);
+            // New: Auto-add lens order by ID from URL
+            const orderId = urlParams.get('orderId');
+            if (orderId && clientId) {
+                // Remove from URL to avoid re-adding
+                const newUrl = new URL(window.location.href);
+                newUrl.searchParams.delete('orderId');
+                window.history.replaceState({}, '', newUrl);
 
-                 // Fetch single order or find in pending (finding in pending is safer since we just loaded them)
-                 getPendingLensOrders(clientId).then(res => {
+                // Fetch single order or find in pending (finding in pending is safer since we just loaded them)
+                getPendingLensOrders(clientId).then(res => {
                     if (res.success && res.data) {
                         const order = (res.data as LensOrder[]).find(o => o.id.toString() === orderId);
                         if (order) {
@@ -199,8 +203,8 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                             toast({ title: "Commande chargée", description: `${order.lensType} ajouté au panier.` });
                         }
                     }
-                 });
-             }
+                });
+            }
         }
     }, [initialReservationId, clientId]);
 
@@ -226,8 +230,8 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
         // Filter by category
         if (activeCategory !== 'all') {
             const catStr = activeCategory.toString();
-            filtered = filtered.filter(p => 
-                p.categorieId === catStr || 
+            filtered = filtered.filter(p =>
+                p.categorieId === catStr ||
                 p.categorie === catStr
             );
         }
@@ -287,12 +291,12 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
             if (item.productId === productId) {
                 const product = products.find(p => p.id === productId);
                 const maxStock = product?.quantiteStock || 999;
-                
+
                 const newQuantity = item.quantity + delta;
                 if (newQuantity < 1) return item;
-                
+
                 if (newQuantity > maxStock && !item.productId.startsWith('LO-')) {
-                     toast({
+                    toast({
                         variant: 'destructive',
                         title: 'Stock insuffisant',
                         description: `Seulement ${maxStock} en stock.`,
@@ -329,7 +333,7 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
             price,
             1
         );
-        
+
         setItems([...cartItems, newLine]);
         toast({ title: "Ajouté", description: "Commande ajoutée au panier." });
     };
@@ -378,16 +382,16 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                 )];
 
                 if (reservationIds.length > 0 && result.id) {
-                     // We need to complete them. 
-                     // Since we don't have completeFrameReservationAction imported yet, we'll need to do that.
-                     // For now, let's assume the sale is created.
-                     // Actually, we should call the action.
-                     for (const resId of reservationIds) {
-                         await completeFrameReservationAction({
-                             reservationId: resId,
-                             saleId: parseInt(result.id),
-                         });
-                     }
+                    // We need to complete them. 
+                    // Since we don't have completeFrameReservationAction imported yet, we'll need to do that.
+                    // For now, let's assume the sale is created.
+                    // Actually, we should call the action.
+                    for (const resId of reservationIds) {
+                        await completeFrameReservationAction({
+                            reservationId: resId,
+                            saleId: parseInt(result.id),
+                        });
+                    }
                 }
 
                 toast({
@@ -419,7 +423,7 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
     const handleReserveFrame = async () => {
         // Find items in cart that are not Lens Orders (LO-) and not already from a reservation
         const reservables = cartItems.filter(item => !item.productId.startsWith('LO-') && !item.fromReservation);
-        
+
         if (reservables.length === 0) {
             toast({
                 title: 'Aucun article à réserver',
@@ -429,11 +433,16 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
             return;
         }
 
+        setShowAdvanceDialog(true);
+    };
+
+    const handleFinalReserveFrame = async (advanceAmount: number) => {
+        const reservables = cartItems.filter(item => !item.productId.startsWith('LO-') && !item.fromReservation);
+
+        setIsFinalizingReservation(true);
         setIsSubmitting(true);
         try {
-            // Note: storeId will be overridden by the server action with the actual user ID
-            const result = await createFrameReservationAction({
-                storeId: 'USE_SESSION_ID', 
+            const reservation = await createFrameReservationAction({
                 clientId: parseInt(clientId),
                 clientName: `${client.prenom} ${client.nom}`,
                 items: reservables.map(f => ({
@@ -444,28 +453,42 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                 notes: 'Réservation créée depuis le POS'
             });
 
-            if (result.success) {
+            if (reservation) {
+                // Record the advance payment if any
+                if (advanceAmount > 0) {
+                    await recordAdvancePayment({
+                        clientId: parseInt(clientId),
+                        amount: advanceAmount,
+                        referenceId: reservation.id.toString(),
+                        referenceType: 'RESERVATION',
+                        notes: `Avance pour réservation de monture #${reservation.id}`
+                    });
+                }
                 // Remove reserved items from cart
                 const remainingItems = cartItems.filter(item => !reservables.some(r => r.lineId === item.lineId));
                 setItems(remainingItems);
-                
+
                 toast({
                     title: 'Réservation créée',
-                    description: `Article(s) réservé(s) avec succès. Retrouvez-les dans l'onglet Réservations.`,
+                    description: advanceAmount > 0
+                        ? `Article(s) réservé(s) avec succès (Avance: ${advanceAmount} DH).`
+                        : `Article(s) réservé(s) avec succès. Retrouvez-les dans l'onglet Réservations.`,
                     className: "bg-blue-50 border-blue-200 text-blue-800",
                 });
+                setShowAdvanceDialog(false);
                 router.refresh();
             } else {
-                throw new Error(result.error);
+                throw new Error("Erreur lors de la création de la réservation");
             }
         } catch (error: any) {
-             toast({
+            toast({
                 title: 'Erreur',
                 description: error.message,
                 variant: 'destructive',
             });
         } finally {
             setIsSubmitting(false);
+            setIsFinalizingReservation(false);
         }
     };
 
@@ -494,7 +517,7 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                                 Synchronisation Pro
                             </Badge>
                         </div>
-                        
+
                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                             {pendingOrders.map(order => {
                                 const isAdded = cartItems.some(i => i.productId === `LO-${order.id}`);
@@ -502,8 +525,8 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                                 return (
                                     <Card key={order.id} className={cn(
                                         "overflow-hidden border-2 transition-all duration-300 group hover:shadow-xl hover:-translate-y-1 relative",
-                                        isReceived 
-                                            ? "border-emerald-100 bg-gradient-to-br from-emerald-50/80 via-white to-white hover:border-emerald-400" 
+                                        isReceived
+                                            ? "border-emerald-100 bg-gradient-to-br from-emerald-50/80 via-white to-white hover:border-emerald-400"
                                             : "border-indigo-50 bg-gradient-to-br from-indigo-50/40 via-white to-white hover:border-indigo-300",
                                         isAdded && "opacity-50 border-slate-100 grayscale-[0.3] pointer-events-none"
                                     )}>
@@ -515,8 +538,8 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                                             <div className="flex gap-4 items-center flex-1 min-w-0">
                                                 <div className={cn(
                                                     "h-12 w-12 rounded-xl flex items-center justify-center transition-all duration-500 group-hover:rotate-6 shadow-sm ring-4 shrink-0",
-                                                    isReceived 
-                                                        ? "bg-emerald-100 text-emerald-600 ring-emerald-50" 
+                                                    isReceived
+                                                        ? "bg-emerald-100 text-emerald-600 ring-emerald-50"
                                                         : "bg-indigo-100 text-indigo-600 ring-indigo-50"
                                                 )}>
                                                     {isReceived ? <CheckCircle2 className="h-6 w-6" /> : <Package className="h-6 w-6" />}
@@ -544,23 +567,23 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                                                     </div>
                                                 </div>
                                             </div>
-                                            
+
                                             <div className="flex flex-col items-end gap-2 shrink-0">
                                                 <div className="text-right flex flex-col">
                                                     <span className="text-lg font-black text-slate-950 tracking-tighter leading-none">
                                                         {parseFloat(order.sellingPrice || '0').toLocaleString('fr-MA', { minimumFractionDigits: 2 })} <small className="text-[9px] font-medium opacity-60">DH</small>
                                                     </span>
                                                 </div>
-                                                
-                                                <Button 
-                                                    size="sm" 
+
+                                                <Button
+                                                    size="sm"
                                                     variant={isAdded ? "ghost" : (isReceived ? "default" : "outline")}
                                                     className={cn(
                                                         "font-black text-[9px] transition-all duration-300 h-8 px-4 rounded-lg border-2",
-                                                        isAdded 
-                                                            ? "text-slate-300 border-transparent" 
-                                                            : isReceived 
-                                                                ? "bg-slate-900 border-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-200" 
+                                                        isAdded
+                                                            ? "text-slate-300 border-transparent"
+                                                            : isReceived
+                                                                ? "bg-slate-900 border-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-200"
                                                                 : "border-indigo-200 text-indigo-600 hover:bg-indigo-600 hover:text-white hover:border-indigo-600"
                                                     )}
                                                     onClick={() => handleAddLensOrder(order)}
@@ -758,7 +781,7 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                                                         {item.unitPrice.toFixed(2)} DH
                                                     </p>
                                                 )}
-                                                <DiscountDialog 
+                                                <DiscountDialog
                                                     lineId={item.lineId}
                                                     productName={item.productName}
                                                     originalPrice={item.originalUnitPrice}
@@ -771,12 +794,12 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                                             {item.priceMode !== 'STANDARD' && item.discountPercent !== undefined && Math.abs(item.discountPercent) > 0.01 && (
                                                 <p className={cn(
                                                     "text-[9px] font-medium self-start px-1.5 py-0.5 rounded border mt-0.5 w-fit",
-                                                    item.discountPercent > 0 
-                                                        ? "text-emerald-600 bg-emerald-50 border-emerald-100" 
+                                                    item.discountPercent > 0
+                                                        ? "text-emerald-600 bg-emerald-50 border-emerald-100"
                                                         : "text-orange-600 bg-orange-50 border-orange-100"
                                                 )}>
-                                                    {item.discountPercent > 0 
-                                                        ? `-${item.discountPercent.toFixed(0)}% OFF` 
+                                                    {item.discountPercent > 0
+                                                        ? `-${item.discountPercent.toFixed(0)}% OFF`
                                                         : `+${Math.abs(item.discountPercent).toFixed(0)}% AJOUT`
                                                     } {item.overrideReason && `• ${item.overrideReason}`}
                                                 </p>
@@ -843,16 +866,16 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                         {/* Validate Button */}
                         {/* Validation Actions */}
                         <div className="flex gap-3">
-                             <Button
-                                 onClick={handleReserveFrame}
-                                 disabled={cartItems.length === 0 || isSubmitting || !cartItems.some(i => !i.productId.startsWith('LO-') && !i.fromReservation)}
-                                 variant="outline"
-                                 className="flex-1 h-12 text-sm font-semibold border-dashed border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50"
-                             >
-                                 <Clock className="h-4 w-4 mr-2" />
-                                 Réserver
-                             </Button>
-                             
+                            <Button
+                                onClick={handleReserveFrame}
+                                disabled={cartItems.length === 0 || isSubmitting || !cartItems.some(i => !i.productId.startsWith('LO-') && !i.fromReservation)}
+                                variant="outline"
+                                className="flex-1 h-12 text-sm font-semibold border-dashed border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50"
+                            >
+                                <Clock className="h-4 w-4 mr-2" />
+                                Réserver
+                            </Button>
+
                             <Button
                                 onClick={handleValidateOrder}
                                 disabled={cartItems.length === 0 || isSubmitting}
@@ -865,6 +888,14 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                     </CardContent>
                 </Card>
             </div>
+            <AdvancePaymentDialog
+                open={showAdvanceDialog}
+                onOpenChange={setShowAdvanceDialog}
+                totalAmount={cartItems.filter(item => !item.productId.startsWith('LO-') && !item.fromReservation).reduce((sum, item) => sum + item.lineTotal, 0)}
+                onConfirm={handleFinalReserveFrame}
+                isSubmitting={isFinalizingReservation}
+                title="Avance sur réservation"
+            />
         </div>
     );
 }
