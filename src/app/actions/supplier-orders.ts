@@ -9,7 +9,6 @@ import { validateOrderData } from '@/lib/utils/supplier-utils';
 import { logAudit } from '@/lib/utils/audit';
 import { revalidatePath } from 'next/cache';
 import { type NodePgDatabase } from 'drizzle-orm/node-postgres';
-
 /**
  * Créer une commande fournisseur
  */
