@@ -17,17 +17,23 @@ import type { Notification } from '@/db/schema';
 
 interface NotificationsPopoverProps {
   notifications: Notification[];
+  onMarkAsRead?: (id: number) => Promise<void>;
+  onMarkAllAsRead?: () => Promise<void>;
 }
 
-export function NotificationsPopover({ notifications }: NotificationsPopoverProps) {
+export function NotificationsPopover({
+  notifications,
+  onMarkAsRead,
+  onMarkAllAsRead
+}: NotificationsPopoverProps) {
   const unreadCount = notifications.filter(n => !n.isRead).length;
-  
+
   const getPriorityColor = (priority: string) => {
     if (priority === 'HIGH') return 'text-red-600 bg-red-50 border-red-100';
     if (priority === 'MEDIUM') return 'text-orange-600 bg-orange-50 border-orange-100';
     return 'text-slate-600 bg-slate-50 border-slate-100';
   };
-  
+
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -53,16 +59,22 @@ export function NotificationsPopover({ notifications }: NotificationsPopoverProp
               </Badge>
             )}
           </h3>
-          <Button variant="ghost" size="sm" className="text-[11px] h-7 px-2 hover:text-blue-600">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-[11px] h-7 px-2 hover:text-blue-600"
+            onClick={onMarkAllAsRead}
+            disabled={unreadCount === 0}
+          >
             Tout lire
           </Button>
         </div>
-        
+
         <ScrollArea className="h-[350px]">
           {notifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
-                 <Bell className="h-6 w-6 text-slate-300" />
+                <Bell className="h-6 w-6 text-slate-300" />
               </div>
               <p className="text-sm font-medium text-slate-500">Aucune notification</p>
               <p className="text-xs text-slate-400 mt-1">Vous êtes à jour !</p>
@@ -107,8 +119,11 @@ export function NotificationsPopover({ notifications }: NotificationsPopoverProp
                     </div>
                   </div>
                   {!notif.isRead && (
-                    <button className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-white rounded border shadow-sm text-blue-600">
-                        <Check className="h-3.5 w-3.5" />
+                    <button
+                      className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-white rounded border shadow-sm text-blue-600"
+                      onClick={() => onMarkAsRead?.(notif.id)}
+                    >
+                      <Check className="h-3.5 w-3.5" />
                     </button>
                   )}
                 </div>
@@ -117,9 +132,9 @@ export function NotificationsPopover({ notifications }: NotificationsPopoverProp
           )}
         </ScrollArea>
         <div className="p-2 border-t bg-slate-50/30 text-center">
-           <Button variant="ghost" size="sm" className="w-full text-xs text-slate-500 hover:text-blue-600">
-              Voir tout l'historique
-           </Button>
+          <Button variant="ghost" size="sm" className="w-full text-xs text-slate-500 hover:text-blue-600">
+            Voir tout l'historique
+          </Button>
         </div>
       </PopoverContent>
     </Popover>

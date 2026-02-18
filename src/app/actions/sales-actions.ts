@@ -6,7 +6,7 @@
 'use server';
 
 import { db } from '@/db';
-import { sales, saleItems, clients, products, lensOrders, clientTransactions, devis, stockMovements } from '@/db/schema';
+import { sales, saleItems, clients, products, lensOrders, clientTransactions, devis, stockMovements, saleLensDetails } from '@/db/schema';
 import { eq, and, desc, sql, inArray, or } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure, logAudit } from '@/lib/audit-log';
@@ -23,7 +23,7 @@ export interface SaleItem {
     productRef: string;
     productName: string;
     nomProduit?: string; // alias
-    
+
     // Details
     reference?: string;
     marque?: string;
@@ -36,18 +36,18 @@ export interface SaleItem {
     priceHT?: number;
     tvaRate?: number;
     amountTVA?: number;
-    
+
     total: number; // TTC
     totalHT?: number;
     totalTTC?: number;
-    
+
     returnedQuantity?: number;
-    
+
     // Snapshot fields
     category?: string;
     brand?: string;
     productType?: string;
-    
+
     // Optical Details
     lensDetails?: {
         eye: 'OD' | 'OG';
@@ -97,6 +97,8 @@ export interface CreateSaleInput {
     totalHT?: number; // Optional, usually calculated
     totalTVA?: number;
     totalTTC?: number;
+    amountPaid?: number; // 🆕 Initial Cash-in
+    reservationIds?: number[]; // 🆕 IDs of reservations to link
     isDeclared?: boolean; // 🆕 Dual-Mode
 }
 
@@ -104,7 +106,7 @@ export interface CreateSaleInput {
 function calculateTaxBreakdown(price: number, qty: number, isTTC: boolean, hasTva: boolean) {
     // Basic rate: 20% or 0%
     const rate = hasTva ? 0.20 : 0.0;
-    
+
     let unitHT, unitTVA, unitTTC;
 
     if (isTTC) {
@@ -131,13 +133,13 @@ function calculateTaxBreakdown(price: number, qty: number, isTTC: boolean, hasTv
 async function generateInvoiceNumber(userId: string, tx: any) {
     const year = new Date().getFullYear();
     const prefix = `${year}-`;
-    
+
     // Find the last invoice number for this user and year
     // Optimized for concurrency: use a locking read if possible or atomic increments
     // For now, we select desc limit 1.
     // Note: In high concurrency, this needs a separate counters table. 
     // Given the scale (single shop usually), this is acceptable with unique constraint fallback.
-    
+
     const lastSale = await tx.query.sales.findFirst({
         where: and(
             eq(sales.userId, userId),
@@ -196,7 +198,7 @@ const mapSale = (s: any): Sale => ({
 export const getSales = secureAction(async (userId, user) => {
     try {
         console.log('📊 Fetching sales for userId (Drizzle):', userId);
-        
+
         const results = await db.query.sales.findMany({
             where: eq(sales.userId, userId),
             orderBy: [desc(sales.createdAt)],
@@ -327,7 +329,7 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
 
                 // 3. Update Stock & Enrich Items
                 const enrichedItems: any[] = [];
-                
+
                 // ✅ N+1 Fix: Fetch all products in bulk
                 const productRefs = activeItemsInput.map(i => i.productRef);
                 const possibleIds = productRefs.map(r => parseInt(r)).filter(id => !isNaN(id));
@@ -348,7 +350,7 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                 let runningTotalTTC = 0;
 
                 for (const item of activeItemsInput) {
-                    const productToUpdate = fetchedProducts.find((p: any) => 
+                    const productToUpdate = fetchedProducts.find((p: any) =>
                         p.id.toString() === item.productRef || p.reference === item.productRef
                     );
 
@@ -370,7 +372,7 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                                     eq(products.id, productToUpdate.id),
                                     eq(products.version, productToUpdate.version)
                                 ));
-                            
+
                             if (updateResult.rowCount === 0) {
                                 throw new Error(`CONCURRENCY_ERROR: Le produit ${productToUpdate.nom} a été modifié.`);
                             }
@@ -381,7 +383,7 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                     const isDeclared = data.isDeclared === true;
                     let rawRate = Number(productToUpdate?.tvaRate || item.tvaRate || 20);
                     const effectiveRate = isDeclared ? rawRate : 0;
-                    
+
                     const unitTTC = Number(item.unitPrice || 0);
                     const unitHT = unitTTC / (1 + (effectiveRate / 100));
                     const unitTVA = unitTTC - unitHT;
@@ -394,27 +396,27 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                         productId: productToUpdate?.id.toString() || item.productRef,
                         productRef: productToUpdate?.reference || item.productRef,
                         productName: item.productName || productToUpdate?.nom || 'Article Inconnu',
-                        
+
                         brand: productToUpdate?.brand || productToUpdate?.marque || 'N/A',
                         marque: productToUpdate?.brand || productToUpdate?.marque || 'N/A',
                         modele: productToUpdate?.modele || '-',
                         category: productToUpdate?.category || productToUpdate?.categorie || 'OPTIQUE',
                         productType: productToUpdate?.productType || (productToUpdate?.categorie?.toLowerCase().includes('monture') ? 'frame' : 'accessory'),
-                        
+
                         reference: productToUpdate?.reference || item.productRef,
                         unitPrice: unitTTC,
                         priceHT: unitHT,
                         tvaRate: effectiveRate,
                         amountTVA: unitTVA,
-                        
+
                         quantity: item.quantity,
                         totalHT: lineHT,
                         totalTTC: lineTTC,
                         total: lineTTC,
-                        
+
                         lensDetails: item.lensDetails
                     });
-                    
+
                     runningTotalHT += lineHT;
                     runningTotalTVA += lineTVA;
                     runningTotalTTC += lineTTC;
@@ -429,6 +431,77 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                     transactionNumber = `FACT-${new Date().getFullYear()}-${(count + 1).toString().padStart(5, '0')}`;
                 }
 
+                // 5b. Check for existing advances (LENS_ORDERS and RESERVATIONS)
+                let existingAdvancesAmount = 0;
+                const advanceEntries: any[] = [];
+                const searchReferences: string[] = [];
+
+                if (data.lensOrderIds && data.lensOrderIds.length > 0) {
+                    data.lensOrderIds.forEach(id => searchReferences.push(`LENS_ORDER:${id}`));
+                }
+                if (data.reservationIds && data.reservationIds.length > 0) {
+                    data.reservationIds.forEach(id => searchReferences.push(`RESERVATION:${id}`));
+                }
+
+                if (searchReferences.length > 0) {
+                    const advances = await tx.query.clientTransactions.findMany({
+                        where: and(
+                            clientIdNum ? eq(clientTransactions.clientId, clientIdNum) : undefined,
+                            eq(clientTransactions.type, 'PAYMENT'),
+                            inArray(clientTransactions.referenceId, searchReferences)
+                        )
+                    });
+
+                    for (const adv of advances) {
+                        const amount = Math.abs(Number(adv.amount));
+                        existingAdvancesAmount += amount;
+                        advanceEntries.push({
+                            id: `ADV-${adv.id}`,
+                            amount: amount,
+                            date: adv.date?.toISOString() || new Date().toISOString(),
+                            method: 'Advance',
+                            note: adv.notes || 'Avance récupérée',
+                            receivedBy: 'System'
+                        });
+                    }
+                }
+
+                const amountPaidFromInput = data.amountPaid !== undefined ? Number(data.amountPaid) : 0;
+                const initialPaid = isNaN(amountPaidFromInput) ? 0 : amountPaidFromInput;
+                const totalPayeForSale = initialPaid + existingAdvancesAmount;
+                const resteAPayer = Math.max(0, runningTotalTTC - totalPayeForSale);
+
+                console.log('💰 [CreateSale] Final Calculation:', {
+                    runningTotalTTC,
+                    initialPaid,
+                    existingAdvancesAmount,
+                    totalPayeForSale,
+                    resteAPayer
+                });
+
+                let status: 'impaye' | 'partiel' | 'paye' = 'impaye';
+                if (resteAPayer <= 0.05) status = 'paye';
+                else if (totalPayeForSale > 0.1) status = 'partiel';
+
+                const initialPaymentHistory = [];
+
+                // Add current payment if any (This is the "Avance" entered in POS)
+                if (initialPaid > 0) {
+                    initialPaymentHistory.push({
+                        id: `PAY-INIT-${Date.now()}`,
+                        amount: initialPaid,
+                        date: new Date().toISOString(),
+                        method: data.paymentMethod || 'Especes',
+                        note: 'Avance',
+                        receivedBy: user.email || 'System'
+                    });
+                }
+
+                // Add existing advances found in transactions
+                if (advanceEntries.length > 0) {
+                    initialPaymentHistory.push(...advanceEntries);
+                }
+
                 const saleData = {
                     userId,
                     clientId: clientIdNum,
@@ -441,13 +514,15 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                     totalTVA: runningTotalTVA.toFixed(2),
                     totalTTC: runningTotalTTC.toFixed(2),
                     totalNet: runningTotalTTC.toFixed(2),
-                    totalPaye: '0',
-                    resteAPayer: runningTotalTTC.toFixed(2),
-                    status: 'impaye',
+                    totalPaye: totalPayeForSale.toFixed(2),
+                    resteAPayer: resteAPayer.toFixed(2),
+                    status,
                     paymentMethod: data.paymentMethod,
+                    paymentHistory: initialPaymentHistory,
                     type: data.isDeclared ? 'INVOICE' : 'VENTE',
                     createdAt: new Date(),
-                    date: new Date()
+                    date: new Date(),
+                    lastPaymentDate: totalPayeForSale > 0 ? new Date() : undefined
                 };
 
                 const saleResult = await tx.insert(sales).values(saleData).returning();
@@ -492,11 +567,41 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                     const client = await tx.query.clients.findFirst({ where: eq(clients.id, clientIdNum) });
                     if (client) {
                         const currentBalance = Number(client.balance || 0);
-                        await tx.update(clients).set({ 
-                            balance: (currentBalance + runningTotalTTC).toFixed(2),
+                        const newBalance = currentBalance + runningTotalTTC - totalPayeForSale;
+
+                        await tx.update(clients).set({
+                            balance: newBalance.toFixed(2),
                             totalSpent: sql`${clients.totalSpent} + ${runningTotalTTC}`,
                             updatedAt: new Date()
                         }).where(eq(clients.id, clientIdNum));
+
+                        // Record NEW Payment Transaction only if strictly positive
+                        if (initialPaid > 0) {
+                            await tx.insert(clientTransactions).values({
+                                userId,
+                                clientId: clientIdNum,
+                                type: 'PAYMENT',
+                                referenceId: `SALE:${saleNumber}`, // Link to sale
+                                amount: (-initialPaid).toString(), // Negative = Credit
+                                previousBalance: (currentBalance + runningTotalTTC).toFixed(2),
+                                newBalance: (currentBalance + runningTotalTTC - initialPaid).toFixed(2),
+                                notes: `Avance lors de la Vente #${saleNumber}`,
+                                date: new Date()
+                            });
+                        }
+
+                        // Also update existing advances transactions to link them to the sale!
+                        if (searchReferences.length > 0) {
+                            await tx.update(clientTransactions)
+                                .set({
+                                    notes: sql`${clientTransactions.notes} || ' (Lié à Vente #' || ${saleNumber} || ')'`
+                                })
+                                .where(and(
+                                    clientIdNum ? eq(clientTransactions.clientId, clientIdNum) : undefined,
+                                    eq(clientTransactions.type, 'PAYMENT'),
+                                    inArray(clientTransactions.referenceId, searchReferences)
+                                ));
+                        }
                     }
                 }
 
@@ -504,7 +609,7 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                 revalidatePath('/dashboard/stock');
                 revalidateTag('sales');
                 revalidateTag('products');
-                
+
                 return { success: true, id: createdSaleId.toString(), message: `Vente #${saleNumber} créée` };
             });
 
@@ -526,7 +631,7 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
 export const deleteSale = secureAction(async (userId, user, saleId: string) => {
     try {
         const id = parseInt(saleId);
-        
+
         await db.transaction(async (tx: any) => {
             // 1. Fetch sale to get items for stock reversion
             const saleDoc = await tx.query.sales.findFirst({
@@ -558,8 +663,8 @@ export const deleteSale = secureAction(async (userId, user, saleId: string) => {
 
                     if (productId) {
                         // Re-add the quantity to stock
-                         await tx.update(products)
-                            .set({ 
+                        await tx.update(products)
+                            .set({
                                 quantiteStock: sql`${products.quantiteStock} + ${item.quantity}`,
                                 updatedAt: new Date()
                             })
@@ -622,9 +727,9 @@ export const processReturn = secureAction(async (userId, user, saleId: string, r
 
                 if (productId) {
                     await tx.update(products)
-                        .set({ 
-                             quantiteStock: sql`${products.quantiteStock} + ${item.quantity}`,
-                             updatedAt: new Date()
+                        .set({
+                            quantiteStock: sql`${products.quantiteStock} + ${item.quantity}`,
+                            updatedAt: new Date()
                         })
                         .where(eq(products.id, productId));
                 }
@@ -633,7 +738,7 @@ export const processReturn = secureAction(async (userId, user, saleId: string, r
             // 2. Recalculate Sale Totals
             // Instead of subtracting, let's recalculate from updated items to be safe
             // Or just subtract correctly.
-            
+
             const currentTotalTTC = Number(sale.totalTTC || 0);
             const currentTotalHT = Number(sale.totalHT || 0);
             const currentTotalPaid = Number(sale.totalPaye || 0);
@@ -650,7 +755,7 @@ export const processReturn = secureAction(async (userId, user, saleId: string, r
             // 3. Handle Payment/Refund Logic
             // Only issue a refund if the client has paid MORE than the new Total.
             // If they owe money, just reduce the debt (don't refund cash).
-            
+
             let refundAmount = 0;
             let newTotalPaid = currentTotalPaid;
             let paymentRecordsToAdd: any[] = [];
@@ -659,7 +764,7 @@ export const processReturn = secureAction(async (userId, user, saleId: string, r
                 // Client paid more than what they kept -> Refund the difference
                 refundAmount = currentTotalPaid - newTotalTTC;
                 newTotalPaid = newTotalTTC; // Paid amount becomes equal to total (fully paid)
-                
+
                 paymentRecordsToAdd.push({
                     id: `REF-${Date.now()}`,
                     amount: -refundAmount,
@@ -740,7 +845,7 @@ export const getClientSales = secureAction(async (userId, user, clientId: string
         });
 
         const mappedSales = salesData.map(mapSale);
-        
+
         return { success: true, sales: mappedSales };
     } catch (error: any) {
         return { success: false, error: error.message };
@@ -753,7 +858,7 @@ export const getClientSales = secureAction(async (userId, user, clientId: string
 export const addPayment = secureAction(async (userId, user, saleId: string, payment: { amount: number; method: string; note?: string; date?: string }) => {
     try {
         const id = parseInt(saleId);
-        
+
         await db.transaction(async (tx: any) => {
             const saleDoc = await tx.query.sales.findFirst({
                 where: and(eq(sales.id, id), eq(sales.userId, userId)),
@@ -771,7 +876,7 @@ export const addPayment = secureAction(async (userId, user, saleId: string, paym
             const newPaid = currentPaid + payment.amount;
             const totalTTC = Number(saleDoc.totalTTC || saleDoc.totalNet || 0);
             const remaining = Math.max(0, totalTTC - newPaid);
-            
+
             // Determine status
             let newStatus = 'impaye';
             if (remaining <= 0.01) newStatus = 'paye';
@@ -802,22 +907,22 @@ export const addPayment = secureAction(async (userId, user, saleId: string, paym
 
             // Ledger Update
             if (saleDoc.clientId) {
-                const client = await tx.query.clients.findFirst({ 
+                const client = await tx.query.clients.findFirst({
                     where: eq(clients.id, saleDoc.clientId),
                     columns: { id: true, balance: true }
                 });
                 if (client) {
-                   const amountPaid = payment.amount;
-                   const currentBalance = Number(client.balance || 0);
-                   // Logic: Payment reduces balance (debt)
-                   const newBalance = currentBalance - amountPaid;
-                   
-                   await tx.update(clients)
-                       .set({ 
-                           balance: newBalance.toFixed(2),
-                           updatedAt: new Date()
-                       })
-                       .where(eq(clients.id, saleDoc.clientId));
+                    const amountPaid = payment.amount;
+                    const currentBalance = Number(client.balance || 0);
+                    // Logic: Payment reduces balance (debt)
+                    const newBalance = currentBalance - amountPaid;
+
+                    await tx.update(clients)
+                        .set({
+                            balance: newBalance.toFixed(2),
+                            updatedAt: new Date()
+                        })
+                        .where(eq(clients.id, saleDoc.clientId));
 
                     await tx.insert(clientTransactions).values({
                         userId,
@@ -832,8 +937,8 @@ export const addPayment = secureAction(async (userId, user, saleId: string, paym
                     });
                 }
             }
-            await logSuccess(userId, 'UPDATE', 'sales', saleId, { 
-                action: 'addPayment', 
+            await logSuccess(userId, 'UPDATE', 'sales', saleId, {
+                action: 'addPayment',
                 amount: payment.amount,
                 saleNumber: saleDoc?.saleNumber
             });

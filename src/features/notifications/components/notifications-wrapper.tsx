@@ -7,7 +7,7 @@ import type { Notification } from '@/db/schema';
 
 export function NotificationsWrapper() {
     const [notifications, setNotifications] = React.useState<Notification[]>([]);
-    
+
     const loadNotifications = React.useCallback(async () => {
         const res = await getRecentNotifications();
         if (res.success && res.data) {
@@ -22,5 +22,25 @@ export function NotificationsWrapper() {
         return () => clearInterval(interval);
     }, [loadNotifications]);
 
-    return <NotificationsPopover notifications={notifications} />;
+    const handleMarkAsRead = async (id: number) => {
+        const res = await markNotificationAsRead(id);
+        if (res.success) {
+            loadNotifications();
+        }
+    };
+
+    const handleMarkAllAsRead = async () => {
+        const res = await markAllNotificationsAsRead();
+        if (res.success) {
+            loadNotifications();
+        }
+    };
+
+    return (
+        <NotificationsPopover
+            notifications={notifications}
+            onMarkAsRead={handleMarkAsRead}
+            onMarkAllAsRead={handleMarkAllAsRead}
+        />
+    );
 }
