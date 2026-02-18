@@ -39,6 +39,11 @@ export function QuoteActions({ devis, shopSettings, client }: QuoteActionsProps)
     const [showPrintPreview, setShowPrintPreview] = React.useState(false);
     const { toast } = useToast();
 
+    // ✅ UPDATED
+    const handlePreviewLatestDesign = () => {
+        window.open(`/api/devis/${devis.id}/pdf?latest=true`, '_blank');
+    };
+
     // Unified Print Handling (The "Master" Source)
     const handlePrint = () => {
         setShowPrintPreview(true);
@@ -92,6 +97,11 @@ export function QuoteActions({ devis, shopSettings, client }: QuoteActionsProps)
                     <DropdownMenuItem onClick={handlePrint}>
                         <Printer className="mr-2 h-4 w-4" />
                         <span>Imprimer</span>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem onClick={handlePreviewLatestDesign}>
+                        <FileText className="mr-2 h-4 w-4" />
+                        <span>Aperçu (design actuel)</span>
                     </DropdownMenuItem>
 
                     <DropdownMenuItem onClick={() => {

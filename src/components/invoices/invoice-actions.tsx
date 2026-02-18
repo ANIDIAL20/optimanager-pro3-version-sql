@@ -57,6 +57,11 @@ export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsPro
         window.open(url, '_blank');
     };
 
+    // ✅ UPDATED
+    const handlePreviewLatestDesign = () => {
+        window.open(`/api/factures/${sale.id}/pdf?latest=true`, '_blank');
+    };
+
     const handleShare = async () => {
         const url = `${window.location.origin}/print/facture/${sale.id}`;
         
@@ -98,6 +103,11 @@ export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsPro
                     <DropdownMenuItem onClick={handlePrint}>
                         <Printer className="mr-2 h-4 w-4" />
                         <span>Imprimer</span>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem onClick={handlePreviewLatestDesign}>
+                        <FileText className="mr-2 h-4 w-4" />
+                        <span>Aperçu (design actuel)</span>
                     </DropdownMenuItem>
 
                     <DropdownMenuItem onClick={() => {

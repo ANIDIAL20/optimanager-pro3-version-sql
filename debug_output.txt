@@ -1,0 +1,31 @@
+--- Attempting Manual Insert to catch PG Error ---
+✅ Manual insert succeeded! (Unexpected?)
+
+--- Table Constraints ---
+[
+  {
+    "conname": "supplier_payments_pkey",
+    "contype": "p",
+    "def": "PRIMARY KEY (id)"
+  },
+  {
+    "conname": "supplier_payments_firebase_id_unique",
+    "contype": "u",
+    "def": "UNIQUE (firebase_id)"
+  },
+  {
+    "conname": "supplier_payments_supplier_id_suppliers_id_fk",
+    "contype": "f",
+    "def": "FOREIGN KEY (supplier_id) REFERENCES suppliers(id)"
+  },
+  {
+    "conname": "supplier_payments_payment_number_unique",
+    "contype": "u",
+    "def": "UNIQUE (payment_number)"
+  },
+  {
+    "conname": "supplier_payments_order_id_fkey",
+    "contype": "f",
+    "def": "FOREIGN KEY (order_id) REFERENCES supplier_orders(id) ON DELETE SET NULL"
+  }
+]

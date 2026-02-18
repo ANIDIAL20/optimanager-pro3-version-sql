@@ -54,7 +54,7 @@ export const getSupplierPayments = secureAction(async (userId, user, supplierId?
 
         const payments = await db.query.supplierPayments.findMany({
             where: whereClause,
-            orderBy: [desc(supplierPayments.date)],
+            orderBy: [desc(supplierPayments.paymentDate)],
             with: {
                 allocations: {
                     with: {
@@ -70,7 +70,7 @@ export const getSupplierPayments = secureAction(async (userId, user, supplierId?
             supplierName: p.supplierName,
             amount: Number(p.amount),
             method: p.method,
-            date: p.date ? (typeof p.date === 'string' ? p.date : (p.date as Date).toISOString()) : '',
+            date: p.paymentDate ? (typeof p.paymentDate === 'string' ? p.paymentDate : (p.paymentDate as Date).toISOString()) : '',
             reference: p.reference || undefined,
             bank: p.bank || undefined,
             notes: p.notes || undefined,
@@ -117,7 +117,7 @@ export const createSupplierPayment = secureAction(async (userId, user, data: Cre
                 paymentNumber: paymentNumber,
                 amount: data.amount.toString(),
                 method: data.method,
-                date: new Date(data.date),
+                paymentDate: new Date(data.date),
                 reference: data.reference,
                 bank: data.bank,
                 notes: data.notes,

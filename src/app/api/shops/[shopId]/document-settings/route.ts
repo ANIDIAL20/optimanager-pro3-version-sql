@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { shopProfiles } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { DEFAULT_DOCUMENT_SETTINGS, DocumentSettings } from '@/lib/document-settings';
 import { auth } from '@/auth';
+import { updateDocumentSettingsSchema } from '@/lib/validations/document-settings';
+import { getDocumentSettings, updateDocumentSettings } from '@/lib/services/document-settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,19 +40,8 @@ export async function GET(
        return new NextResponse('Forbidden', { status: 403 });
     }
 
-    const startSettings = profile.documentSettings as DocumentSettings || DEFAULT_DOCUMENT_SETTINGS;
-    
-    // Ensure defaults are merged if missing
-    const mergedSettings = {
-        ...DEFAULT_DOCUMENT_SETTINGS,
-        ...startSettings,
-        default: {
-            ...DEFAULT_DOCUMENT_SETTINGS.default,
-            ...(startSettings.default || {})
-        }
-    };
-
-    return NextResponse.json(mergedSettings);
+    const settings = await getDocumentSettings(shopId);
+    return NextResponse.json(settings);
   } catch (error) {
     console.error('[DOCUMENT_SETTINGS_GET]', error);
     return new NextResponse('Internal Error', { status: 500 });
@@ -79,26 +69,21 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    
-    // Validate body structure (basic validation)
-    if (!body || typeof body !== 'object') {
-       return new NextResponse('Invalid body', { status: 400 });
-    }
-
-    const { default: defaults } = body;
-    if (defaults) {
-        // Validate booleans to prevent "indeterminate" state or wrong types
-        const booleanFields = ['showLogo', 'showFooter', 'showAddress', 'showPhone', 'showEmail', 'showIce', 'showRib', 'showRc'];
-        for (const field of booleanFields) {
-            if (defaults[field] !== undefined && typeof defaults[field] !== 'boolean') {
-                return new NextResponse(`Invalid field 'default.${field}': must be a boolean (true/false)`, { status: 400 });
-            }
-        }
+    const parsed = updateDocumentSettingsSchema.safeParse(body);
+    if (!parsed.success) {
+      // ✅ UPDATED
+      return NextResponse.json(
+        {
+          error: 'Validation échouée',
+          details: parsed.error.flatten(),
+        },
+        { status: 400 }
+      );
     }
 
     // Fetch current profile to check ownership and get version
     const profile = await db.query.shopProfiles.findFirst({
-      where: eq(shopProfiles.id, parseInt(shopId)),
+      where: eq(shopProfiles.id, shopId),
     });
 
     if (!profile) {
@@ -109,23 +94,8 @@ export async function PATCH(
        return new NextResponse('Forbidden', { status: 403 });
     }
 
-    const newVersion = (profile.documentSettingsVersion || 0) + 1;
-    
-    // Ensure we keep the version in the settings object consistent
-    const newSettings = {
-        ...body,
-        version: newVersion,
-    };
-
-    await db.update(shopProfiles)
-      .set({
-        documentSettings: newSettings,
-        documentSettingsVersion: newVersion,
-        documentSettingsUpdatedAt: new Date(),
-      })
-      .where(eq(shopProfiles.id, parseInt(shopId)));
-
-    return NextResponse.json(newSettings);
+    const updated = await updateDocumentSettings(shopId, parsed.data);
+    return NextResponse.json(updated);
   } catch (error) {
     console.error('[DOCUMENT_SETTINGS_PATCH]', error);
     return new NextResponse((error as Error).message, { status: 500 });

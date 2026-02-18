@@ -28,11 +28,12 @@ export default function DocumentPreviewClient({ type, data, documentSettings }: 
                 // Generates blob manually using imperative API to avoid React 19 component crashes
                 const blob = await pdf(
                     <PdfDocumentTemplate 
-                        type={type} 
+                        docType={type} 
                         data={{ 
                             ...data, 
                             documentSettings: settingsToUse 
                         }} 
+                        documentSettings={settingsToUse}
                     />
                 ).toBlob();
 
