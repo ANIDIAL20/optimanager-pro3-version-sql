@@ -6,13 +6,14 @@
 'use server';
 
 import { db } from '@/db';
-import { sales, saleItems, clients, products, lensOrders, clientTransactions, devis, stockMovements, saleLensDetails } from '@/db/schema';
+import { sales, saleItems, clients, products, lensOrders, clientTransactions, devis, stockMovements, saleLensDetails, prescriptionsLegacy, comptabiliteJournal } from '@/db/schema';
 import { eq, and, desc, sql, inArray, or } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure, logAudit } from '@/lib/audit-log';
 import { withTiming } from '@/lib/db-monitor';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { track } from '@vercel/analytics/server';
+import { redis } from '@/lib/cache/redis';
 
 // ========================================
 // TYPE DEFINITIONS
@@ -58,6 +59,8 @@ export interface SaleItem {
         treatment?: string;
     }[];
 
+    metadata?: any;
+
     // Legacy
     prixVente?: number;
     price?: number;
@@ -80,6 +83,7 @@ export interface Sale {
     totalPaye: number;
     resteAPayer: number;
     status: string;
+    deliveryStatus?: string;
     paymentMethod?: string;
     paymentHistory?: any[];
     notes?: string;
@@ -100,6 +104,7 @@ export interface CreateSaleInput {
     amountPaid?: number; // 🆕 Initial Cash-in
     reservationIds?: number[]; // 🆕 IDs of reservations to link
     isDeclared?: boolean; // 🆕 Dual-Mode
+    factureOfficielle?: boolean; // 🆕 POS v2 Official Invoice
 }
 
 // Helper for tax calculation
@@ -182,6 +187,7 @@ const mapSale = (s: any): Sale => ({
     totalPaye: Number(s.totalPaye),
     resteAPayer: Number(s.resteAPayer),
     status: s.status || 'impaye',
+    deliveryStatus: s.deliveryStatus || 'en_attente',
     paymentMethod: s.paymentMethod,
     paymentHistory: (s.paymentHistory as any[]) || [],
     notes: s.notes,
@@ -414,7 +420,8 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                         totalTTC: lineTTC,
                         total: lineTTC,
 
-                        lensDetails: item.lensDetails
+                        lensDetails: item.lensDetails,
+                        metadata: item.metadata
                     });
 
                     runningTotalHT += lineHT;
@@ -517,9 +524,15 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                     totalPaye: totalPayeForSale.toFixed(2),
                     resteAPayer: resteAPayer.toFixed(2),
                     status,
+                    deliveryStatus: 'en_attente',
                     paymentMethod: data.paymentMethod,
                     paymentHistory: initialPaymentHistory,
                     type: data.isDeclared ? 'INVOICE' : 'VENTE',
+                    
+                    // 🆕 Accounting integration
+                    isOfficialInvoice: data.factureOfficielle ?? true,
+                    comptabiliteStatus: (data.factureOfficielle ?? true) ? 'PENDING' : 'EXCLUDED',
+                    
                     createdAt: new Date(),
                     date: new Date(),
                     lastPaymentDate: totalPayeForSale > 0 ? new Date() : undefined
@@ -527,6 +540,20 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
 
                 const saleResult = await tx.insert(sales).values(saleData).returning();
                 const createdSaleId = saleResult[0].id;
+
+                // 🔥 CAISSE LOGIC REMOVED
+
+                // 🆕 COMPTABILITE: Link to Journal if official
+                if (data.factureOfficielle ?? true) {
+                    await tx.insert(comptabiliteJournal).values({
+                        userId,
+                        saleId: createdSaleId,
+                        montantHT: runningTotalHT.toFixed(2),
+                        tva: runningTotalTVA.toFixed(2),
+                        montantTTC: runningTotalTTC.toFixed(2),
+                        statut: 'BROUILLON'
+                    });
+                }
 
                 // 7. Normalized Items Insertion
                 for (const item of enrichedItems) {
@@ -560,6 +587,92 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                             });
                         }
                     }
+
+                    // 🆕 COMPLEX PACK LOGIC: Create Prescription + Lens Order
+                    if (item.metadata?.isComplexPack && clientIdNum) {
+                        const m = item.metadata;
+                        
+                        // 1. Insert Legacy Prescription (JSON format)
+                        const [presc] = await tx.insert(prescriptionsLegacy).values({
+                            userId,
+                            clientId: clientIdNum,
+                            date: m.prescription.date ? new Date(m.prescription.date) : new Date(),
+                            prescriptionData: {
+                                od: {
+                                    sphere: m.prescription.od.sph?.toString() || '0.00',
+                                    cylinder: m.prescription.od.cyl?.toString() || '0.00',
+                                    axis: m.prescription.od.axis?.toString() || '0',
+                                    addition: m.prescription.od.add?.toString() || '0.00',
+                                    pd: m.prescription.od.pd?.toString() || '0.00',
+                                    height: m.prescription.od.hauteur?.toString() || '0.00'
+                                },
+                                og: {
+                                    sphere: m.prescription.og.sph?.toString() || '0.00',
+                                    cylinder: m.prescription.og.cyl?.toString() || '0.00',
+                                    axis: m.prescription.og.axis?.toString() || '0',
+                                    addition: m.prescription.og.add?.toString() || '0.00',
+                                    pd: m.prescription.og.pd?.toString() || '0.00',
+                                    height: m.prescription.og.hauteur?.toString() || '0.00'
+                                },
+                                doctorName: m.prescription.doctorName,
+                                pd: m.prescription.pd.binocular?.toString() || '0.00'
+                            },
+                            notes: `Généré depuis Vente #${saleNumber}`,
+                            createdAt: new Date(),
+                            updatedAt: new Date()
+                        }).returning();
+
+                        // 2. Insert Lens Order
+                        await tx.insert(lensOrders).values({
+                            userId,
+                            clientId: clientIdNum,
+                            prescriptionId: presc.id,
+                            saleId: createdSaleId,
+                            orderType: m.lensOrder.orderType,
+                            lensType: item.productName,
+                            supplierId: m.lensOrder.supplierId,
+                            supplierName: m.lensOrder.supplierName || 'Fournisseur externe (Pack)', 
+                            indice: m.lensOrder.index, // 🆕 Lens Index 
+                            
+                            sphereR: m.prescription.od.sph?.toString() || '0.00',
+                            cylindreR: m.prescription.od.cyl?.toString() || '0.00',
+                            axeR: m.prescription.od.axis?.toString() || '0',
+                            additionR: m.prescription.od.add?.toString() || '0.00',
+                            hauteurR: m.prescription.od.hauteur?.toString() || '0.00',
+                            ecartPupillaireR: m.prescription.od.pd?.toString() || '0.00',
+
+                            sphereL: m.prescription.og.sph?.toString() || '0.00',
+                            cylindreL: m.prescription.og.cyl?.toString() || '0.00',
+                            axeL: m.prescription.og.axis?.toString() || '0',
+                            additionL: m.prescription.og.add?.toString() || '0.00',
+                            hauteurL: m.prescription.og.hauteur?.toString() || '0.00',
+                            ecartPupillaireL: m.prescription.og.pd?.toString() || '0.00',
+
+                            unitPrice: item.unitPrice,
+                            quantity: item.quantity,
+                            totalPrice: (item.unitPrice * item.quantity).toString(),
+                            sellingPrice: item.unitPrice.toString(),
+                            estimatedBuyingPrice: (m.lensOrder.purchasePrice || 0).toString(),
+                            estimatedMargin: (item.unitPrice - (m.lensOrder.purchasePrice || 0)).toString(),
+                            status: 'pending',
+                            notes: m.lensOrder.notes,
+                            orderDate: new Date()
+                        });
+                    }
+                }
+
+                // ✅ UPDATE LENS ORDERS STATUS TO 'SOLD' (Smart Advance Persistence)
+                if (data.lensOrderIds && data.lensOrderIds.length > 0) {
+                    await tx.update(lensOrders)
+                        .set({ 
+                            status: 'sold', 
+                            saleId: createdSaleId,
+                            updatedAt: new Date() 
+                        })
+                        .where(and(
+                            inArray(lensOrders.id, data.lensOrderIds),
+                            eq(lensOrders.userId, userId)
+                        ));
                 }
 
                 // 8. CLIENT LEDGER
@@ -607,8 +720,14 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
 
                 revalidatePath('/dashboard/ventes');
                 revalidatePath('/dashboard/stock');
-                revalidateTag('sales');
-                revalidateTag('products');
+                // revalidateTag('sales');
+                // revalidateTag('products');
+
+                try {
+                    await redis?.del(`notifications:count:${userId}`);
+                } catch {
+                    // ignore cache errors
+                }
 
                 return { success: true, id: createdSaleId.toString(), message: `Vente #${saleNumber} créée` };
             });
@@ -687,7 +806,26 @@ export const deleteSale = secureAction(async (userId, user, saleId: string) => {
         revalidatePath('/dashboard/ventes');
         revalidatePath('/dashboard/stock');
         return { success: true, message: 'Vente supprimée et stock restauré avec succès' };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+});
 
+/**
+ * Update Delivery Status
+ */
+export const updateDeliveryStatus = secureAction(async (userId, user, saleId: string, status: 'en_attente' | 'en_cours' | 'pret' | 'livre') => {
+    try {
+        const id = parseInt(saleId);
+        if (isNaN(id)) return { success: false, error: 'ID vente invalide' };
+
+        await db.update(sales)
+            .set({ deliveryStatus: status, updatedAt: new Date() })
+            .where(and(eq(sales.id, id), eq(sales.userId, userId)));
+
+        await logSuccess(userId, 'UPDATE', 'sales', saleId, { action: 'update_delivery_status', status });
+        revalidatePath('/dashboard/ventes');
+        return { success: true, message: `Statut de livraison mis Ã  jour: ${status}` };
     } catch (error: any) {
         return { success: false, error: error.message };
     }

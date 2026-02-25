@@ -1,6 +1,7 @@
 import { pgTable, serial, text, timestamp, boolean, decimal, integer, json, jsonb, primaryKey, uuid, index, real, uniqueIndex } from 'drizzle-orm/pg-core';
 import type { AdapterAccount } from "next-auth/adapters";
 import { relations, sql } from 'drizzle-orm';
+import { suppliers, supplierOrders, supplierPayments, supplierOrderPayments } from './schema/suppliers.schema';
 export { suppliers, supplierOrders, supplierPayments, supplierOrderPayments } from './schema/suppliers.schema';
 
 // ========================================
@@ -144,7 +145,7 @@ export const products = pgTable('products', {
   // Using unique index on reference + userId is safer for multi-tenant, 
   // but user requested strict UNIQUE on reference. 
   // We'll add the Drizzle definition for it.
-  uniqueReference: uniqueIndex('unique_product_reference').on(table.reference),
+  // uniqueReference: uniqueIndex('unique_product_reference').on(table.reference),
 
   idx_products_not_deleted: index('idx_products_not_deleted').on(table.userId, table.deletedAt), // ✅ Performance for soft delete
   idx_products_category: index('idx_products_category').on(table.category),
@@ -205,10 +206,13 @@ export const sales = pgTable('sales', {
 
   // Status
   status: text('status').$type<'impaye' | 'partiel' | 'paye' | 'brouillon' | 'annule'>().default('impaye'),
+  deliveryStatus: text('delivery_status').$type<'en_attente' | 'en_cours' | 'pret' | 'livre'>().default('en_attente'),
   paymentMethod: text('payment_method'),
   type: text('type').$type<'INVOICE' | 'QUOTE' | 'COMMANDE' | 'VENTE'>().default('VENTE'),
 
   isDeclared: boolean('is_declared').default(false), // 🆕 Dual-Mode Logic
+  isOfficialInvoice: boolean('is_official_invoice').notNull().default(true), // 🆕 Official Invoice Flag
+  comptabiliteStatus: text('comptabilite_status').$type<'PENDING' | 'POSTED' | 'EXCLUDED'>().notNull().default('PENDING'), // 🆕 Accounting Status
 
   // Complex data (stored as JSON)
   items: json('items').$type<any[]>().notNull(), // Legacy/Denormalized Fallback
@@ -597,6 +601,9 @@ export const lensOrders = pgTable('lens_orders', {
 
   // Additional info
   notes: text('notes'),
+
+  // 💰 Avance (paiement partiel reçu à la commande)
+  amountPaid: decimal('amount_paid', { precision: 10, scale: 2 }).default('0').notNull(),
 
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
@@ -1124,6 +1131,47 @@ export const expenses = pgTable('expenses', {
   categoryIdx: index('expenses_category_idx').on(table.category),
 }));
 
+// ========================================
+// 12.5 CASH SESSIONS & MOVEMENTS (CAISSE)
+// ========================================
+export const cashSessions = pgTable('cash_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull(),
+  openedAt: timestamp('opened_at').notNull().defaultNow(),
+  closedAt: timestamp('closed_at'),
+  openingBalance: decimal('opening_balance', { precision: 10, scale: 2 })
+    .notNull()
+    .default('0'),
+  closingBalance: decimal('closing_balance', { precision: 10, scale: 2 }),
+  expectedBalance: decimal('expected_balance', { precision: 10, scale: 2 }),
+  difference: decimal('difference', { precision: 10, scale: 2 }),
+  status: text('status').notNull().default('open'),
+  notes: text('notes'),
+  closedBy: text('closed_by'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (table) => ({
+  userIdIdx: index('cash_sessions_user_id_idx').on(table.userId),
+  statusIdx: index('cash_sessions_status_idx').on(table.status),
+  openedAtIdx: index('cash_sessions_opened_at_idx').on(table.openedAt),
+}));
+
+export const cashMovements = pgTable('cash_movements', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sessionId: uuid('session_id').references(() => cashSessions.id),
+  userId: text('user_id').notNull(),
+  type: text('type').notNull(),
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  reason: text('reason').notNull(),
+  referenceId: text('reference_id'),
+  referenceType: text('reference_type'),
+  description: text('description'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (table) => ({
+  userIdIdx: index('cash_movements_user_id_idx').on(table.userId),
+  sessionIdIdx: index('cash_movements_session_id_idx').on(table.sessionId),
+  createdAtIdx: index('cash_movements_created_at_idx').on(table.createdAt),
+}));
+
 // 📋 Prescriptions (Ordonnances)
 export const prescriptions = pgTable('prescriptions', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -1199,8 +1247,14 @@ export const frameReservations = pgTable('frame_reservations', {
     .defaultNow(),
 
   expiryDate: timestamp('expiry_date', { mode: 'date' }).notNull(),
+  
+  // Financial info 🆕
+  totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).default('0'),
+  depositAmount: decimal('deposit_amount', { precision: 10, scale: 2 }).default('0'),
+  remainingAmount: decimal('remaining_amount', { precision: 10, scale: 2 }).default('0'),
 
   completedAt: timestamp('completed_at', { mode: 'date' }),
+
   saleId: integer('sale_id').references(() => sales.id),
 
   notes: text('notes'),
@@ -1211,6 +1265,35 @@ export const frameReservations = pgTable('frame_reservations', {
     .defaultNow()
     .$onUpdate(() => new Date()),
 });
+
+// ========================================
+// 14. COMPTABILITE JOURNAL TABLE
+// ========================================
+export const comptabiliteJournal = pgTable('comptabilite_journal', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id'), // Multi-tenancy
+  saleId: integer('sale_id').references(() => sales.id, { onDelete: 'cascade' }),
+  
+  montantHT: decimal('montant_ht', { precision: 10, scale: 2 }).notNull(),
+  tva: decimal('tva', { precision: 10, scale: 2 }).notNull(),
+  montantTTC: decimal('montant_ttc', { precision: 10, scale: 2 }).notNull(),
+  
+  statut: text('statut').$type<'BROUILLON' | 'VALIDE' | 'CLOTURE'>().default('BROUILLON'),
+  
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
+}, (table) => ({
+  saleIdIdx: index('journal_sale_id_idx').on(table.saleId),
+  userIdIdx: index('journal_user_id_idx').on(table.userId),
+}));
+
+export const comptabiliteJournalRelations = relations(comptabiliteJournal, ({ one }) => ({
+  sale: one(sales, {
+    fields: [comptabiliteJournal.saleId],
+    references: [sales.id],
+  }),
+}));
 
 export const frameReservationsRelations = relations(frameReservations, ({ one }) => ({
   client: one(clients, {

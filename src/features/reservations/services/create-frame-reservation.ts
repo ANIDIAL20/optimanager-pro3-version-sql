@@ -13,7 +13,8 @@ import type { CreateFrameReservationInput, FrameReservation } from '../types/res
 export async function createFrameReservation(
   input: CreateFrameReservationInput
 ): Promise<FrameReservation> {
-  return await db.transaction(async (tx) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return await db.transaction(async (tx: any) => {
 
     // 1) جلب المنتجات
     const productIds = input.items.map(i => i.productId);
@@ -29,7 +30,7 @@ export async function createFrameReservation(
     const reservationItems = [];
 
     for (const item of input.items) {
-      const product = fetchedProducts.find(p => p.id === item.productId);
+      const product = fetchedProducts.find((p: { id: number }) => p.id === item.productId);
       if (!product) continue;
 
       /*
@@ -62,6 +63,8 @@ export async function createFrameReservation(
       });
     }
 
+    const totalAmount = reservationItems.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
+
     // 3) حساب التواريخ
     const reservationDate = new Date();
     const expiryDate = addDays(reservationDate, input.expiryDays ?? 7);
@@ -77,9 +80,13 @@ export async function createFrameReservation(
         items: reservationItems,
         reservationDate,
         expiryDate,
+        totalAmount: totalAmount.toString(),
+        depositAmount: '0',
+        remainingAmount: totalAmount.toString(),
         notes: input.notes,
       })
       .returning();
+
 
     // 5) تحديث reservedQuantity لكل منتج
     for (const item of input.items) {

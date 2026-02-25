@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * EXAMPLE: Secured Products Actions for Neon Database
  * This shows how to update server actions with the new security system

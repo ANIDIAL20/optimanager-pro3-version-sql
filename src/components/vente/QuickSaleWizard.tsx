@@ -11,10 +11,10 @@ import WizardProgress from "./WizardProgress";
 import "@/styles/wizard.css";
 
 const STEPS = [
-  { id: 1, title: 'العميل', subtitle: 'من غيشري؟', icon: '👤' },
-  { id: 2, title: 'المقاسات', subtitle: 'قياس النظر', icon: '👓' },
-  { id: 3, title: 'المنتجات', subtitle: 'شنو غيشري؟', icon: '📦' },
-  { id: 4, title: 'الدفع', subtitle: 'التأكيد والدفع', icon: '💰' },
+  { id: 1, title: 'Client', subtitle: 'Qui achète ?', icon: '👤' },
+  { id: 2, title: 'Mesures', subtitle: 'Réfractions', icon: '👓' },
+  { id: 3, title: 'Produits', subtitle: 'Qu\'achète-t-il ?', icon: '📦' },
+  { id: 4, title: 'Paiement', subtitle: 'Confirmation & Paiement', icon: '💰' },
 ];
 
 const initMesures = {
@@ -91,13 +91,13 @@ export default function QuickSaleWizard({ onClose }: { onClose: () => void }) {
       
       if (result) {
         setDone(true);
-        toast({ title: "✅ تم الحفظ", description: "تمت عملية البيع بنجاح." });
+        toast({ title: "✅ Enregistré", description: "La vente a été effectuée avec succès." });
       }
     } catch (e: any) {
       console.error(e);
       toast({ 
-        title: "❌ خطأ", 
-        description: e.message || "حدث خطأ غير متوقع. حاول مجدداً.",
+        title: "❌ Erreur", 
+        description: e.message || "Une erreur inattendue est survenue. Veuillez réessayer.",
         variant: "destructive"
       });
     } finally {
@@ -122,20 +122,20 @@ export default function QuickSaleWizard({ onClose }: { onClose: () => void }) {
              </motion.svg>
           </div>
           <div className="space-y-2">
-             <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">تم البيع بنجاح!</h2>
-             <p className="text-slate-500 font-medium italic">تم تسجيل العملية وخصم المخزون.</p>
+             <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Vente réussie !</h2>
+             <p className="text-slate-500 font-medium italic">L'opération a été enregistrée et le stock a été mis à jour.</p>
              <div className="inline-block px-4 py-2 bg-blue-50 text-blue-700 rounded-full font-bold text-sm mt-2">
-                فاتورة رقم: #S-{Math.floor(Math.random() * 9000) + 1000}
+                Facture N°: #S-{Math.floor(Math.random() * 9000) + 1000}
              </div>
           </div>
           <div className="w-full h-px bg-slate-100" />
           <div className="space-y-1">
-             <p className="text-slate-500 text-sm">العميل: <strong className="text-slate-900">{client?.nom}</strong></p>
-             <p className="text-slate-500 text-sm">المجموع: <strong className="text-blue-600 font-extrabold">{totalTTC.toFixed(2)} MAD</strong></p>
+             <p className="text-slate-500 text-sm">Client : <strong className="text-slate-900">{client?.nom}</strong></p>
+             <p className="text-slate-500 text-sm">Total : <strong className="text-blue-600 font-extrabold">{totalTTC.toFixed(2)} MAD</strong></p>
           </div>
           <div className="flex gap-3 w-full">
-             <button className="flex-1 bg-slate-100 text-slate-700 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all border border-slate-200" onClick={onClose}>إغلاق</button>
-             <button className="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-extrabold hover:bg-blue-700 transition-all shadow-lg shadow-blue-100">🖨️ طباعة</button>
+             <button className="flex-1 bg-slate-100 text-slate-700 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all border border-slate-200" onClick={onClose}>Fermer</button>
+             <button className="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-extrabold hover:bg-blue-700 transition-all shadow-lg shadow-blue-100">🖨️ Imprimer</button>
           </div>
        </motion.div>
     </div>
@@ -153,8 +153,8 @@ export default function QuickSaleWizard({ onClose }: { onClose: () => void }) {
                 </svg>
              </div>
              <div>
-                <h2 className="font-extrabold text-xl text-slate-900 tracking-tight">بيع سريــع (Wizard)</h2>
-                <p className="text-xs text-slate-400 font-medium">خطوات بسيطة وسريعة لإتمام العملية</p>
+                <h2 className="font-extrabold text-xl text-slate-900 tracking-tight">Vente Rapide (Wizard)</h2>
+                <p className="text-xs text-slate-400 font-medium">Étapes simples et rapides pour finaliser l'opération</p>
              </div>
           </div>
           <button className="h-10 w-10 flex items-center justify-center hover:bg-slate-100 rounded-full transition-colors text-slate-400" onClick={onClose}>✕</button>
@@ -210,7 +210,7 @@ export default function QuickSaleWizard({ onClose }: { onClose: () => void }) {
               className="h-12 px-6 rounded-2xl bg-white text-slate-600 font-bold hover:bg-slate-100 transition-all border border-slate-200 flex items-center gap-2" 
               onClick={prevStep}
             >
-             <span>←</span> رجوع
+             <span>←</span> Retour
             </button>
           )}
           
@@ -222,7 +222,7 @@ export default function QuickSaleWizard({ onClose }: { onClose: () => void }) {
               onClick={nextStep} 
               disabled={(currentStep === 1 && !client) || (currentStep === 3 && lignes.length === 0)}
             >
-              متابعة <span>→</span>
+              Continuer <span>→</span>
             </button>
           ) : (
             <button 
@@ -230,7 +230,7 @@ export default function QuickSaleWizard({ onClose }: { onClose: () => void }) {
               onClick={validerVente} 
               disabled={loading || lignes.length === 0}
             >
-              {loading ? "جاري الحفظ..." : "تأكيد وإتمام البيع ✓"}
+              {loading ? "Enregistrement..." : "Confirmer et finaliser la vente ✓"}
             </button>
           )}
         </div>

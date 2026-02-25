@@ -1,6 +1,6 @@
 import { neon, neonConfig, Pool } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
-import ws from 'ws';
+import * as ws from 'ws';
 import * as schemaFile from './schema';
 import * as schemaDir from './schema/index';
 
@@ -8,7 +8,7 @@ const schema = { ...schemaFile, ...schemaDir };
 // Schema re-evaluation trigger: v6.1 - Fixed supplier table name
 
 // ✅ Essential for Transactions support in Node.js environment
-neonConfig.webSocketConstructor = ws;
+neonConfig.webSocketConstructor = (ws as any).default || ws;
 
 // ✅ Client-side guard: do not evaluate database in browser
 const isBrowser = typeof window !== 'undefined';
@@ -33,7 +33,10 @@ function getDatabaseUrl(): string {
 function createDbConnection() {
   console.log("🔌 [DB] Creating new database connection pool (v6)...");
   // Use Pool instead of simple neon() for better transaction/session support
-  const pool = new Pool({ connectionString: getDatabaseUrl() });
+  const pool = new Pool({ 
+    connectionString: getDatabaseUrl(),
+    webSocketConstructor: (ws as any).default || ws,
+  });
 
   return drizzle(pool, {
     schema,
@@ -57,7 +60,8 @@ export const db = new Proxy(
     get(_target, prop) {
       const instance = getDbInstance();
       if (!instance) return undefined;
-      return (instance as any)[prop as any];
+      const value = (instance as any)[prop as any];
+      return typeof value === 'function' ? value.bind(instance) : value;
     },
   }
-) as any;
+) as ReturnType<typeof createDbConnection>;

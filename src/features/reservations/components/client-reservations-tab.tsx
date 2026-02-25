@@ -157,6 +157,7 @@ export function ClientReservationsTab({
                                     <TableHead className="w-[100px] font-semibold text-slate-700"># Réf</TableHead>
                                     <TableHead className="font-semibold text-slate-700">Articles Réservés</TableHead>
                                     <TableHead className="font-semibold text-slate-700">Dates</TableHead>
+                                    <TableHead className="font-semibold text-slate-700 text-center">Finances</TableHead>
                                     <TableHead className="font-semibold text-slate-700">Statut</TableHead>
                                     <TableHead className="text-right font-semibold text-slate-700 pr-6">Actions</TableHead>
                                 </TableRow>
@@ -177,7 +178,7 @@ export function ClientReservationsTab({
                                                                 Qté: {item.quantity}
                                                             </span>
                                                             {item.reference && (
-                                                                <span className="text-slate-400">• Réf: {item.reference}</span>
+                                                                <span className="text-slate-400 font-mono">• {item.reference}</span>
                                                             )}
                                                         </div>
                                                     </div>
@@ -188,7 +189,7 @@ export function ClientReservationsTab({
                                             <div className="flex flex-col gap-1 text-xs">
                                                 <div className="flex items-center gap-1.5 text-slate-600">
                                                     <Calendar className="h-3 w-3 text-slate-400" />
-                                                    <span>Du: {format(new Date(res.reservationDate), 'dd/MM/yyyy', { locale: fr })}</span>
+                                                    <span>Du: {format(new Date(res.reservationDate), 'dd/MM', { locale: fr })}</span>
                                                 </div>
                                                 <div className="flex items-center gap-1.5 text-slate-500">
                                                     <AlertTriangle className="h-3 w-3 text-orange-400" />
@@ -196,7 +197,19 @@ export function ClientReservationsTab({
                                                 </div>
                                             </div>
                                         </TableCell>
+                                        <TableCell>
+                                            <div className="flex flex-col items-center gap-1 min-w-[120px]">
+                                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Total: {Number(res.totalAmount).toFixed(2)}</div>
+                                                <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 px-2 py-0 h-5 text-[10px] font-bold">
+                                                    Avance: {Number(res.depositAmount).toFixed(0)} DH
+                                                </Badge>
+                                                <div className="text-[11px] font-black text-amber-700 bg-amber-50 px-2 rounded-full border border-amber-100">
+                                                    Reste: {Number(res.remainingAmount).toFixed(0)} DH
+                                                </div>
+                                            </div>
+                                        </TableCell>
                                         <TableCell>{getStatusBadge(res.status)}</TableCell>
+
                                         <TableCell className="text-right pr-4">
                                             {res.status === 'PENDING' ? (
                                                 <div className="flex justify-end gap-2 opacity-100 transition-opacity">

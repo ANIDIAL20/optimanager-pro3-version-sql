@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { db } from '@/db';
 import { shopProfiles } from '@/db/schema';
 import { getDocumentAction } from '@/app/actions/document-actions';

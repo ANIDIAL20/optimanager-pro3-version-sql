@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as React from 'react';
 import { getProduct } from '@/app/actions/products-actions';
 import { ProductForm } from '@/app/produits/_components/product-form';

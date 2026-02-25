@@ -45,7 +45,7 @@ export const columns: ColumnDef<DevisRow>[] = [
         accessorKey: "type",
         header: "",
         cell: () => {
-             return <FileText className="h-4 w-4 text-slate-500" title="Devis" />;
+             return <FileText className="h-4 w-4 text-slate-500" />;
         },
     },
     {

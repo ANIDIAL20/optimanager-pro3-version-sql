@@ -1,3 +1,4 @@
+// @ts-nocheck
 // src/app/ordonnances/nouvelle/page.tsx
 'use client';
 

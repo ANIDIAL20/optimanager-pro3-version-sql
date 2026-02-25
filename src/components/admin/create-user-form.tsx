@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { createNewUser, type CreateUserInput } from '@/app/actions/auth-actions';
+import { createUserAction, type CreateUserInput } from '@/app/actions/auth-actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,8 +26,7 @@ export function CreateUserForm() {
   const [formData, setFormData] = useState<CreateUserInput>({
     email: '',
     password: '',
-    firstName: '',
-    lastName: '',
+    name: '',
     role: 'user',
   });
 
@@ -36,7 +35,7 @@ export function CreateUserForm() {
     setIsLoading(true);
 
     try {
-      const result = await createNewUser(formData);
+      const result = await createUserAction(formData);
 
       if (result.success) {
         toast.success(result.message || 'Utilisateur créé avec succès');
@@ -44,8 +43,7 @@ export function CreateUserForm() {
         setFormData({
           email: '',
           password: '',
-          firstName: '',
-          lastName: '',
+          name: '',
           role: 'user',
         });
       } else {
@@ -68,25 +66,14 @@ export function CreateUserForm() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="firstName">Prénom</Label>
-              <Input
-                id="firstName"
-                value={formData.firstName}
-                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                placeholder="Jean"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="lastName">Nom</Label>
-              <Input
-                id="lastName"
-                value={formData.lastName}
-                onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                placeholder="Dupont"
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="name">Nom complet</Label>
+            <Input
+              id="name"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="Jean Dupont"
+            />
           </div>
 
           <div className="space-y-2">

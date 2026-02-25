@@ -48,7 +48,7 @@ export function UpdateStatusDialog({
     }
 
     startTransition(async () => {
-      const result = await updateLensOrder(orderId.toString(), { status }) as any;
+      const result = await updateLensOrder(orderId.toString(), { status: status as "pending" | "received" | "ordered" | "delivered" }) as any;
 
       if (result.success) {
         toast({
@@ -72,7 +72,6 @@ export function UpdateStatusDialog({
       {/* @ts-ignore */}
       <Dialog modal={false} open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          onInteractOutside={(e) => e.preventDefault()}
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => {
             e.preventDefault();
@@ -86,7 +85,7 @@ export function UpdateStatusDialog({
 
           <div className="py-4">
             {/* @ts-ignore */}
-            <Select modal={false} value={status} onValueChange={(val: any) => setStatus(val)} disabled={isPending}>
+            <Select value={status} onValueChange={(val: any) => setStatus(val)} disabled={isPending}>
               <SelectTrigger>
                 <SelectValue placeholder="Sélectionner un statut" />
               </SelectTrigger>

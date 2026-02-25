@@ -196,6 +196,7 @@ export interface Sale {
   totalPaye: number;
   resteAPayer: number;
   status?: 'payée' | 'partiel' | 'impayée' | 'devis' | 'en_attente' | 'paye' | 'impaye'; // Add variations
+  deliveryStatus?: 'en_attente' | 'en_cours' | 'pret' | 'livre';
   type?: 'commande' | 'devis';
   notes?: string;
   paymentMethod?: 'cash' | 'bank' | 'credit';
@@ -214,6 +215,9 @@ export interface Sale {
   supplierInvoiceRef?: string; // BL/Invoice number
   receivedAt?: any;            // Timestamp or Date
   deliveredAt?: any;           // Timestamp or Date
+
+  isOfficialInvoice?: boolean;
+  comptabiliteStatus?: 'PENDING' | 'POSTED' | 'EXCLUDED';
 }
 
 export interface OrderDetail {

@@ -48,7 +48,7 @@ export function ManageMaterials() {
     setError(null);
     try {
       const data = await getSettings('materials');
-      setMaterials(data as Material[]);
+      setMaterials((data as unknown) as Material[]);
     } catch (err: any) {
       console.error('Error fetching materials:', err);
       setError(err.message || 'Erreur de chargement');

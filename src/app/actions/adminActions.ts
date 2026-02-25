@@ -189,8 +189,8 @@ export const getSaaSStats = adminAction(async (user) => {
       .from(users)
       .where(eq(users.role, 'USER'));
 
-      const activeClients = shopOwners.filter(u => u.isActive).length;
-      const totalRevenue = shopOwners.reduce((sum, u) => sum + parseFloat(u.amountPaid || '0'), 0);
+      const activeClients = shopOwners.filter((u: { isActive: boolean | null; amountPaid: string | null }) => u.isActive).length;
+      const totalRevenue = shopOwners.reduce((sum: number, u: { isActive: boolean | null; amountPaid: string | null }) => sum + parseFloat(u.amountPaid || '0'), 0);
 
       return {
         totalRevenue,

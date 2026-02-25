@@ -284,189 +284,191 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
             </div>
 
             {/* Middle Row: Stock + Recent Sales */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {!isBasicMode && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                {/* Stock Critique -> Linked to Produits */}
-                <SpotlightCard className="h-full p-6" spotlightColor="rgba(239, 68, 68, 0.15)">
-                    <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-center gap-2">
-                            <AlertTriangle className="h-5 w-5 text-red-600" />
-                            <h3 className="text-sm font-bold text-foreground border-b border-transparent">
-                                Stock Critique / Rupture
-                            </h3>
+                    {/* Stock Critique -> Linked to Produits */}
+                    <SpotlightCard className="h-full p-6" spotlightColor="rgba(239, 68, 68, 0.15)">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-2">
+                                <AlertTriangle className="h-5 w-5 text-red-600" />
+                                <h3 className="text-sm font-bold text-foreground border-b border-transparent">
+                                    Stock Critique / Rupture
+                                </h3>
+                            </div>
+                            {data && data.stockAlerts > 0 && (
+                                <Link href="/produits" className="h-6 min-w-[24px] px-1.5 rounded-full bg-red-600 flex items-center justify-center hover:bg-red-700 transition-colors cursor-pointer text-decoration-none">
+                                    <span className="text-xs font-bold text-white">{data.stockAlerts}</span>
+                                </Link>
+                            )}
                         </div>
-                        {data && data.stockAlerts > 0 && (
-                            <Link href="/produits" className="h-6 min-w-[24px] px-1.5 rounded-full bg-red-600 flex items-center justify-center hover:bg-red-700 transition-colors cursor-pointer text-decoration-none">
-                                <span className="text-xs font-bold text-white">{data.stockAlerts}</span>
-                            </Link>
+
+                        {!data || data.stockAlertItems.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-6 text-center">
+                                <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center mb-2">
+                                    <TrendingUp className="h-5 w-5 text-emerald-600" />
+                                </div>
+                                <p className="text-sm font-medium text-emerald-700">Stock sain</p>
+                                <p className="text-xs text-slate-500">Aucun produit en rupture</p>
+                            </div>
+                        ) : (
+                            <div className="max-h-[350px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pr-1">
+                                <div className="space-y-3">
+                                    {data.stockAlertItems.map((item) => (
+                                        <Link
+                                            key={item.id}
+                                            href={`/produits/${item.id}`}
+                                            className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-100 hover:border-red-200 hover:bg-red-50/30 transition-all group/item"
+                                        >
+                                            <div className="flex-1 min-w-0 pr-3">
+                                                <p className="text-sm font-medium text-slate-900 truncate group-hover/item:text-red-700 transition-colors">
+                                                    {item.nom}
+                                                </p>
+                                                <p className="text-xs text-slate-500 font-mono mt-0.5">
+                                                    Réf: {item.reference}
+                                                </p>
+                                            </div>
+                                            <div className="h-8 w-8 rounded-lg bg-red-600 flex items-center justify-center shadow-sm flex-shrink-0">
+                                                <span className="text-sm font-bold text-white">{item.quantite}</span>
+                                            </div>
+                                        </Link>
+                                    ))}
+                                    {data.stockAlerts > 5 && (
+                                        <Link href="/produits" className="block text-center text-xs text-slate-500 hover:text-red-600 font-medium pt-2 transition-colors">
+                                            Voir tout...
+                                        </Link>
+                                    )}
+                                </div>
+                            </div>
                         )}
-                    </div>
+                    </SpotlightCard>
 
-                    {!data || data.stockAlertItems.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-6 text-center">
-                            <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center mb-2">
-                                <TrendingUp className="h-5 w-5 text-emerald-600" />
+                    {/* DerniÃ¨res Ventes (2 cols) */}
+                    <SpotlightCard className="lg:col-span-2 p-6" spotlightColor="rgba(99, 102, 241, 0.1)">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-2">
+                                <div className="h-8 w-8 rounded-lg bg-indigo-50 flex items-center justify-center">
+                                    <ShoppingBag className="h-4 w-4 text-indigo-600" />
+                                </div>
+                                <h3 className="text-lg font-bold text-foreground">
+                                    DerniÃ¨res Ventes
+                                </h3>
                             </div>
-                            <p className="text-sm font-medium text-emerald-700">Stock sain</p>
-                            <p className="text-xs text-slate-500">Aucun produit en rupture</p>
+                            <Link
+                                href="/dashboard/ventes"
+                                className="text-sm font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1 transition-colors"
+                            >
+                                Voir tout
+                                <ArrowRight className="h-3 w-3" />
+                            </Link>
                         </div>
-                    ) : (
-                        <div className="max-h-[350px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pr-1">
-                            <div className="space-y-3">
-                                {data.stockAlertItems.map((item) => (
-                                    <Link
-                                        key={item.id}
-                                        href={`/produits/${item.id}`}
-                                        className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-100 hover:border-red-200 hover:bg-red-50/30 transition-all group/item"
-                                    >
-                                        <div className="flex-1 min-w-0 pr-3">
-                                            <p className="text-sm font-medium text-slate-900 truncate group-hover/item:text-red-700 transition-colors">
-                                                {item.nom}
-                                            </p>
-                                            <p className="text-xs text-slate-500 font-mono mt-0.5">
-                                                Réf: {item.reference}
-                                            </p>
-                                        </div>
-                                        <div className="h-8 w-8 rounded-lg bg-red-600 flex items-center justify-center shadow-sm flex-shrink-0">
-                                            <span className="text-sm font-bold text-white">{item.quantite}</span>
-                                        </div>
-                                    </Link>
-                                ))}
-                                {data.stockAlerts > 5 && (
-                                    <Link href="/produits" className="block text-center text-xs text-slate-500 hover:text-red-600 font-medium pt-2 transition-colors">
-                                        Voir tout...
-                                    </Link>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                </SpotlightCard>
 
-                {/* DerniÃ¨res Ventes (2 cols) */}
-                <SpotlightCard className="lg:col-span-2 p-6" spotlightColor="rgba(99, 102, 241, 0.1)">
-                    <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-center gap-2">
-                            <div className="h-8 w-8 rounded-lg bg-indigo-50 flex items-center justify-center">
-                                <ShoppingBag className="h-4 w-4 text-indigo-600" />
+                        {!data || data.recentActivity.length === 0 ? (
+                            <div className="py-12 text-center">
+                                <ShoppingBag className="h-12 w-12 mx-auto text-slate-200 mb-3" />
+                                <p className="text-sm text-slate-400">Aucune vente rÃ©cente</p>
                             </div>
-                            <h3 className="text-lg font-bold text-foreground">
-                                DerniÃ¨res Ventes
-                            </h3>
-                        </div>
-                        <Link
-                            href="/dashboard/ventes"
-                            className="text-sm font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1 transition-colors"
-                        >
-                            Voir tout
-                            <ArrowRight className="h-3 w-3" />
-                        </Link>
-                    </div>
-
-                    {!data || data.recentActivity.length === 0 ? (
-                        <div className="py-12 text-center">
-                            <ShoppingBag className="h-12 w-12 mx-auto text-slate-200 mb-3" />
-                            <p className="text-sm text-slate-400">Aucune vente rÃ©cente</p>
-                        </div>
-                    ) : (
-                        <div className="max-h-[350px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pr-1">
-                            <div className="space-y-3">
-                                {data.recentActivity
-                                    .filter(activity => !isBasicMode || activity.type === 'sale')
-                                    .map((activity) => (
-                                    <Link
-                                        key={activity.id}
-                                        href={`/dashboard/ventes/${activity.id}`}
-                                        className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 hover:border-slate-200 transition-all group"
-                                    >
-                                        <div className="flex items-center gap-4 flex-1">
-                                            <div className="h-10 w-10 rounded-lg bg-emerald-50 flex items-center justify-center group-hover:bg-emerald-100 transition-colors">
-                                                <ShoppingCart className="h-5 w-5 text-emerald-600" />
+                        ) : (
+                            <div className="max-h-[350px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pr-1">
+                                <div className="space-y-3">
+                                    {data.recentActivity
+                                        .filter(activity => !isBasicMode || activity.type === 'sale')
+                                        .map((activity) => (
+                                        <Link
+                                            key={activity.id}
+                                            href={`/dashboard/ventes/${activity.id}`}
+                                            className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 hover:border-slate-200 transition-all group"
+                                        >
+                                            <div className="flex items-center gap-4 flex-1">
+                                                <div className="h-10 w-10 rounded-lg bg-emerald-50 flex items-center justify-center group-hover:bg-emerald-100 transition-colors">
+                                                    <ShoppingCart className="h-5 w-5 text-emerald-600" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-bold text-slate-900 truncate">
+                                                        {activity.description}
+                                                    </p>
+                                                    <p className="text-xs text-slate-500">
+                                                        {new Date(activity.date).toLocaleDateString('fr-FR', {
+                                                            day: 'numeric',
+                                                            month: 'short',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit'
+                                                        })}
+                                                    </p>
+                                                </div>
                                             </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-bold text-slate-900 truncate">
-                                                    {activity.description}
-                                                </p>
-                                                <p className="text-xs text-slate-500">
-                                                    {new Date(activity.date).toLocaleDateString('fr-FR', {
-                                                        day: 'numeric',
-                                                        month: 'short',
-                                                        hour: '2-digit',
-                                                        minute: '2-digit'
-                                                    })}
-                                                </p>
+                                            <div className="flex items-center gap-4">
+                                                <span className="text-sm font-bold text-slate-900 bg-slate-50 px-2 py-1 rounded-md">
+                                                    <SensitiveData value={activity.amount} type="currency" currency="DH" />
+                                                </span>
+                                                <Badge
+                                                    variant={activity.status === 'PayÃ©' ? 'default' : 'destructive'}
+                                                    className={cn(
+                                                        "text-[10px] px-2 py-0.5 shadow-none",
+                                                        activity.status === 'PayÃ©'
+                                                            ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200"
+                                                            : "bg-red-100 text-red-700 hover:bg-red-200 border-red-200"
+                                                    )}
+                                                >
+                                                    {activity.status}
+                                                </Badge>
                                             </div>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            <span className="text-sm font-bold text-slate-900 bg-slate-50 px-2 py-1 rounded-md">
-                                                <SensitiveData value={activity.amount} type="currency" currency="DH" />
-                                            </span>
-                                            <Badge
-                                                variant={activity.status === 'PayÃ©' ? 'default' : 'destructive'}
-                                                className={cn(
-                                                    "text-[10px] px-2 py-0.5 shadow-none",
-                                                    activity.status === 'PayÃ©'
-                                                        ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200"
-                                                        : "bg-red-100 text-red-700 hover:bg-red-200 border-red-200"
-                                                )}
-                                            >
-                                                {activity.status}
-                                            </Badge>
-                                        </div>
-                                    </Link>
-                                ))}
+                                        </Link>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    )}
-                </SpotlightCard>
+                        )}
+                    </SpotlightCard>
 
-            </div>
+                </div>
+            )}
 
             {/* Quotas & Limits Row */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                 {/* Products Quota */}
-                 <SpotlightCard className="p-6" spotlightColor="rgba(59, 130, 246, 0.1)">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                             <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                                <Package className="h-4 w-4 text-blue-600" />
-                            </div>
-                            <span className="text-sm font-medium text-slate-700">Produits</span>
-                        </div>
-                        <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
-                            {usage.products.count} / {formatLimit(usage.products.limit)}
-                        </span>
-                    </div>
-                    <Progress value={(usage.products.count / usage.products.limit) * 100} className="h-2 mb-2" />
-                    <p className="text-xs text-slate-400 text-right">
-                        {Math.round((usage.products.count / usage.products.limit) * 100)}% utilisÃ©
-                    </p>
-                 </SpotlightCard>
-
-                 {/* Clients Quota */}
-                 <SpotlightCard className="p-6" spotlightColor="rgba(168, 85, 247, 0.1)">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                             <div className="h-8 w-8 rounded-lg bg-purple-50 flex items-center justify-center">
-                                <Users className="h-4 w-4 text-purple-600" />
-                            </div>
-                            <span className="text-sm font-medium text-slate-700">Clients</span>
-                        </div>
-                        <span className="text-xs font-bold bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
-                            {usage.clients.count} / {formatLimit(usage.clients.limit)}
-                        </span>
-                    </div>
-                    <Progress value={(usage.clients.count / usage.clients.limit) * 100} className="h-2 mb-2" />
-                     <p className="text-xs text-slate-400 text-right">
-                        {Math.round((usage.clients.count / usage.clients.limit) * 100)}% utilisÃ©
-                    </p>
-                 </SpotlightCard>
-
-                 {/* Suppliers Quota (Expert Only) */}
-                 {!isBasicMode && (
-                     <SpotlightCard className="p-6" spotlightColor="rgba(234, 179, 8, 0.1)">
+            {!isBasicMode && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Products Quota */}
+                    <SpotlightCard className="p-6" spotlightColor="rgba(59, 130, 246, 0.1)">
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-2">
-                                 <div className="h-8 w-8 rounded-lg bg-yellow-50 flex items-center justify-center">
+                                <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                                    <Package className="h-4 w-4 text-blue-600" />
+                                </div>
+                                <span className="text-sm font-medium text-slate-700">Produits</span>
+                            </div>
+                            <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                                {usage.products.count} / {formatLimit(usage.products.limit)}
+                            </span>
+                        </div>
+                        <Progress value={(usage.products.count / usage.products.limit) * 100} className="h-2 mb-2" />
+                        <p className="text-xs text-slate-400 text-right">
+                            {Math.round((usage.products.count / usage.products.limit) * 100)}% utilisÃ©
+                        </p>
+                    </SpotlightCard>
+
+                    {/* Clients Quota */}
+                    <SpotlightCard className="p-6" spotlightColor="rgba(168, 85, 247, 0.1)">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                                <div className="h-8 w-8 rounded-lg bg-purple-50 flex items-center justify-center">
+                                    <Users className="h-4 w-4 text-purple-600" />
+                                </div>
+                                <span className="text-sm font-medium text-slate-700">Clients</span>
+                            </div>
+                            <span className="text-xs font-bold bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
+                                {usage.clients.count} / {formatLimit(usage.clients.limit)}
+                            </span>
+                        </div>
+                        <Progress value={(usage.clients.count / usage.clients.limit) * 100} className="h-2 mb-2" />
+                        <p className="text-xs text-slate-400 text-right">
+                            {Math.round((usage.clients.count / usage.clients.limit) * 100)}% utilisÃ©
+                        </p>
+                    </SpotlightCard>
+
+                    {/* Suppliers Quota (Expert Only) */}
+                    <SpotlightCard className="p-6" spotlightColor="rgba(234, 179, 8, 0.1)">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                                <div className="h-8 w-8 rounded-lg bg-yellow-50 flex items-center justify-center">
                                     <Truck className="h-4 w-4 text-yellow-600" />
                                 </div>
                                 <span className="text-sm font-medium text-slate-700">Fournisseurs</span>
@@ -476,12 +478,12 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                             </span>
                         </div>
                         <Progress value={(usage.suppliers.count / usage.suppliers.limit) * 100} className="h-2 mb-2" />
-                         <p className="text-xs text-slate-400 text-right">
+                        <p className="text-xs text-slate-400 text-right">
                             {Math.round((usage.suppliers.count / usage.suppliers.limit) * 100)}% utilisÃ©
                         </p>
-                     </SpotlightCard>
-                 )}
-            </div>
+                    </SpotlightCard>
+                </div>
+            )}
         </div>
     );
 }

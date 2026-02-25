@@ -3,7 +3,7 @@ import { notifications } from '@/db/schema';
 
 interface CreateNotificationInput {
   userId?: string; // Optional, if not provided maybe it's for all admins?
-  type: 'RESERVATION_EXPIRING' | 'RESERVATION_EXPIRED' | 'LOW_STOCK' | 'OTHER';
+  type: 'RESERVATION_EXPIRING' | 'RESERVATION_EXPIRED' | 'LOW_STOCK' | 'LENS_READY' | 'OTHER';
   title: string;
   message: string;
   priority?: 'LOW' | 'MEDIUM' | 'HIGH';

@@ -2,38 +2,52 @@
 
 import * as React from "react";
 import { usePathname } from 'next/navigation';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getUnreadReminderCount } from '@/app/actions/reminder-actions';
 
 /**
- * Optimized Reminders Badge Component
- * Fetches unread count independently to avoid blocking main UI.
+ * Performance-Optimized Reminders Badge Component
+ * Fixes performance violation by removing manual setInterval and dynamic imports
+ * from the main thread execution path.
  */
 export function RemindersBadge() {
-    const [count, setCount] = React.useState(0);
     const pathname = usePathname();
+    const queryClient = useQueryClient();
 
-    React.useEffect(() => {
-        const fetchCount = async () => {
+    // Use React Query for efficient, non-blocking background fetching and caching.
+    // Replaces setInterval handler that was blocking the main thread.
+    const { data: count = 0 } = useQuery({
+        queryKey: ['reminders-count'],
+        queryFn: async () => {
             try {
-                // Dynamically import the action to keep bundle small and skip server-side execution if needed
-                const { getUnreadReminderCount } = await import('@/app/actions/reminder-actions');
-                const badgeCount = await getUnreadReminderCount();
-                setCount(badgeCount);
+                // Top-level imported server action is already a lightweight proxy.
+                return await getUnreadReminderCount();
             } catch (error) {
                 console.error("Failed to fetch reminders count", error);
+                return 0;
             }
-        };
+        },
+        // Revalidate in background every 60 seconds (Non-blocking)
+        refetchInterval: 60000,
+        // Consider data fresh for 30s to avoid redundant requests
+        staleTime: 30000,
+        // Avoid aggressive refetching on window focus to save resources
+        refetchOnWindowFocus: false,
+    });
 
-        fetchCount();
-
-        // Refresh every minute
-        const interval = setInterval(fetchCount, 60000);
-        return () => clearInterval(interval);
-    }, [pathname]); // Refresh on navigation to keep badge synced with "Mark as Read" actions
+    // Handle navigation-based refresh asynchronously to keep UI responsive.
+    React.useEffect(() => {
+        // This triggers a background refetch if stale, without blocking navigation.
+        queryClient.invalidateQueries({ queryKey: ['reminders-count'] });
+    }, [pathname, queryClient]);
 
     if (count <= 0) return null;
 
     return (
-        <span className="absolute right-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white shadow-sm transition-all animate-in zoom-in-50">
+        <span 
+            id="reminders-badge-count"
+            className="absolute right-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white shadow-sm transition-all animate-in zoom-in-50"
+        >
             {count > 99 ? '99+' : count}
         </span>
     );

@@ -27,7 +27,7 @@ import { ContactLensPrescriptionList } from './_components/contact-lens-prescrip
 import { Separator } from '@/components/ui/separator';
 import { LensOrderForm } from './_components/lens-order-form';
 import { LensOrderList } from './_components/lens-order-list';
-import { ClientPOSTab } from '@/components/clients/client-pos-tab';
+import { ClientPOS } from './_components/pos/client-pos';
 import { PurchaseHistoryTable } from './_components/purchase-history-table';
 import { ClientHeader } from '@/components/dashboard/clients/client-header';
 import { ClientOverview } from '@/components/dashboard/clients/tabs/client-overview';
@@ -159,7 +159,7 @@ export default function ClientDetailView({ initialClient, initialReservations }:
 
                 {/* Point de Vente Tab */}
                 <TabsContent value="sales" className="space-y-6">
-                    <ClientPOSTab
+                    <ClientPOS
                         client={client}
                         clientId={id}
                         initialReservationId={reservationToProcess}

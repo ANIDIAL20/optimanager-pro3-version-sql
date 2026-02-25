@@ -5,6 +5,11 @@ import { createFrameReservation } from '@/features/reservations/services/create-
 import { completeFrameReservation } from '@/features/reservations/services/complete-frame-reservation';
 import { cancelFrameReservation } from '@/features/reservations/services/cancel-frame-reservation';
 import { getClientReservations } from '@/features/reservations/queries/get-client-reservations';
+import { recordAdvancePayment } from '@/app/actions/payment-actions';
+import { db } from '@/db';
+// no cashSessions import
+import { eq, and } from 'drizzle-orm';
+import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 
 /**
@@ -42,4 +47,60 @@ export const cancelFrameReservationAction = secureAction(async (userId, user, in
  */
 export const getClientReservationsAction = secureAction(async (userId, user, clientId: number) => {
     return await getClientReservations(clientId);
+});
+
+const createReservationFromCartSchema = z.object({
+  clientId: z.number().int().positive(),
+  clientName: z.string().min(1),
+  items: z.array(z.object({
+    productId: z.number().int().positive(),
+    quantity: z.number().int().positive(),
+  })).min(1),
+  expiryDays: z.number().int().optional(),
+  notes: z.string().optional(),
+  avanceAmount: z.number().min(0).default(0),
+  avance: z.number().optional().default(0),
+  paymentMethod: z.string().optional(),
+});
+
+export const createReservationFromCartAction = secureAction(async (userId, user, input: z.infer<typeof createReservationFromCartSchema>) => {
+  const { clientId, clientName, items, expiryDays, notes, avanceAmount, avance, paymentMethod } = createReservationFromCartSchema.parse(input);
+
+  // Link existing advance
+  let finalNotes = notes || '';
+  if (avance > 0) {
+    const avanceRecordStr = `[Avance existante liée: ${avance} MAD]`;
+    finalNotes = finalNotes ? `${finalNotes}\n${avanceRecordStr}` : avanceRecordStr;
+  }
+
+  // 1. Create the base reservation
+  const reservation = await createFrameReservation({
+    clientId,
+    clientName,
+    items,
+    expiryDays: expiryDays || 7,
+    notes: finalNotes,
+    storeId: userId
+  });
+
+  if (!reservation) throw new Error("Erreur lors de la création de la réservation");
+
+  // 2. Register advance payment if present
+  if (avanceAmount > 0) {
+    await recordAdvancePayment({
+      clientId,
+      amount: avanceAmount,
+      referenceId: reservation.id.toString(),
+      referenceType: 'RESERVATION',
+      notes: `Avance pour réservation #${reservation.id}`
+    });
+
+    // 🔥 CAISSE INTEGRATION REMOVED
+  }
+
+  revalidatePath('/dashboard/ventes');
+  revalidatePath('/dashboard/clients');
+  revalidatePath(`/dashboard/clients/${clientId}`);
+
+  return { success: true, data: reservation };
 });

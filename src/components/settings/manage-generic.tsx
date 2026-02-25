@@ -70,7 +70,7 @@ export function ManageGeneric({
     setError(null);
     try {
       const data = await getSettings(settingType as any);
-      setItems(data as SettingsItem[]);
+      setItems((data as unknown) as SettingsItem[]);
     } catch (err: any) {
       console.error('Error fetching settings:', err);
       setError(err.message || 'Erreur de chargement');

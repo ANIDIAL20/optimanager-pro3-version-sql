@@ -1,33 +1,24 @@
-
-import { db } from '@/db';
-import { sales } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { config } from 'dotenv';
+config({ path: '.env.local' });
+import { db } from '../src/db';
+import { sales } from '../src/db/schema';
+import { eq, desc } from 'drizzle-orm';
 
 async function main() {
-  console.log('Testing simple sales query...');
-  
-  try {
-      const result = await db.select().from(sales).limit(1);
-      console.log('✅ Simple SELECT success. Rows:', result.length);
-      if (result.length > 0) {
-          console.log('Sample row:', result[0]);
-      }
-  } catch (e: any) {
-      console.error('❌ Simple SELECT failed:', e.message);
-  }
-
-  console.log('Testing Relation Query API (findMany)...');
-  try {
-      const result = await db.query.sales.findMany({
-          limit: 1
-      });
-      console.log('✅ Relation Query success. Rows:', result.length);
-  } catch (e: any) {
-      console.error('❌ Relation Query failed:', e.message);
-      console.error(e);
-  }
-
-  process.exit(0);
+    try {
+        const userId = 'd7daf565-32ff-482d-b798-63120fd75e66';
+        const results = await db.query.sales.findMany({
+            where: eq(sales.userId, userId),
+            orderBy: [desc(sales.createdAt)],
+            with: {
+                client: true
+            }
+        });
+        console.log('Success:', results.length);
+    } catch (e) {
+        console.error('ERROR =>', e);
+    }
+    process.exit(0);
 }
 
-main().catch(console.error);
+main();

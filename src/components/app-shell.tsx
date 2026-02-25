@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
+import Link from 'next/link';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./app-sidebar";
 import { BrandLoader } from '@/components/ui/loader-brand';
@@ -10,19 +11,42 @@ import { BreadcrumbCustom } from "@/components/ui/breadcrumb-custom";
 import { useBreadcrumbStore } from "@/hooks/use-breadcrumb-store";
 
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
-import { NotificationsWrapper } from "@/features/notifications/components/notifications-wrapper";
+import { getNotificationsCount } from "@/app/actions/notifications-actions";
+import { Bell } from 'lucide-react';
 
 export default function AppShell({ children, banner }: { children: React.ReactNode, banner?: any }) {
     const { data: session, status } = useSession();
     const router = useRouter();
     const pathname = usePathname();
     const [isBannerVisible, setIsBannerVisible] = useState(true);
+    const [notificationsCount, setNotificationsCount] = useState(0);
     
     // Breadcrumb store - must be called before any early returns
     const { labels } = useBreadcrumbStore();
 
     // Initialize global keyboard shortcuts (Power Users)
     useKeyboardShortcuts();
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function loadCount() {
+            try {
+                const res = await getNotificationsCount();
+                if (cancelled) return;
+                if (res.success && res.data) setNotificationsCount(res.data.total || 0);
+            } catch {
+                // ignore
+            }
+        }
+
+        loadCount();
+        const interval = setInterval(loadCount, 2 * 60 * 1000);
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
+    }, []);
 
     // 1. Define Public and Print Routes
     // Using explicit check to prevent any undefined errors
@@ -165,7 +189,14 @@ export default function AppShell({ children, banner }: { children: React.ReactNo
                                     })()}
                                 />
                                 <div className="ml-auto flex items-center gap-2">
-                                    <NotificationsWrapper />
+                                    <Link href="/dashboard/notifications" className="relative p-2">
+                                        <Bell size={20} />
+                                        {notificationsCount > 0 && (
+                                            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                                                {notificationsCount > 99 ? '99+' : notificationsCount}
+                                            </span>
+                                        )}
+                                    </Link>
                                 </div>
                             </header>
 

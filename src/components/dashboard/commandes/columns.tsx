@@ -4,7 +4,7 @@ import * as React from 'react';
 import { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MoreHorizontal, ArrowUpDown, Eye, CreditCard, Trash2, Glasses, Sun, Wrench, Disc, SprayCan, Link, Briefcase, Puzzle, ShoppingBag } from "lucide-react";
+import { MoreHorizontal, ArrowUpDown, Eye, CreditCard, Trash2, Glasses, Sun, Wrench, Disc, SprayCan, Link as LinkIcon, Briefcase, Puzzle, ShoppingBag, ShoppingCart, CheckCircle2, AlertTriangle } from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -24,7 +24,7 @@ import type { Sale } from "@/lib/types";
 import { SensitiveData } from "@/components/ui/sensitive-data";
 import { InvoiceActions } from "@/components/invoices/invoice-actions";
 import { PaymentDialog } from "./payment-dialog";
-import { deleteSale } from "@/app/actions/sales-actions";
+import { deleteSale, updateDeliveryStatus } from "@/app/actions/sales-actions";
 import { useToast } from "@/hooks/use-toast";
 
 // Extended Sale type with client info for display
@@ -44,24 +44,24 @@ export const columns: ColumnDef<Order>[] = [
             const type = (row.original.type || '').toLowerCase();
 
             if (type.includes('monture') || type.includes('lunettes')) {
-                return <Glasses className="h-4 w-4 text-blue-600" title="Montures" />;
+                return <Glasses className="h-4 w-4 text-blue-600" />;
             } else if (type.includes('verres')) {
-                return <Disc className="h-4 w-4 text-purple-600" title="Verres" />;
+                return <Disc className="h-4 w-4 text-purple-600" />;
             } else if (type.includes('lentille')) {
-                return <Eye className="h-4 w-4 text-teal-600" title="Lentilles" />;
+                return <Eye className="h-4 w-4 text-teal-600" />;
             } else if (type.includes('entretien')) {
-                return <SprayCan className="h-4 w-4 text-cyan-600" title="Produits d'entretien" />;
+                return <SprayCan className="h-4 w-4 text-cyan-600" />;
             } else if (type.includes('cordon')) {
-                return <Link className="h-4 w-4 text-orange-600" title="Cordons" />;
+                return <LinkIcon className="h-4 w-4 text-orange-600" />;
             } else if (type.includes('etui') || type.includes('étui')) {
-                return <Briefcase className="h-4 w-4 text-amber-700" title="Etuis" />;
+                return <Briefcase className="h-4 w-4 text-amber-700" />;
             } else if (type.includes('accessoire')) {
-                return <Puzzle className="h-4 w-4 text-indigo-600" title="Accessoires" />;
+                return <Puzzle className="h-4 w-4 text-indigo-600" />;
             } else if (type.includes('reparation') || type.includes('materiel')) {
-                return <Wrench className="h-4 w-4 text-slate-600" title="Réparation/Matériel" />;
+                return <Wrench className="h-4 w-4 text-slate-600" />;
             }
 
-            return <ShoppingBag className="h-4 w-4 text-gray-500" title="Produit" />;
+            return <ShoppingBag className="h-4 w-4 text-gray-500" />;
         },
     },
     {
@@ -100,11 +100,11 @@ export const columns: ColumnDef<Order>[] = [
         },
     },
     {
-        accessorKey: "status", // Delivery Status
+        accessorKey: "deliveryStatus", // Delivery Status
         header: "État (Livraison)",
         cell: ({ row }) => {
             // Normalize status
-            const status = (row.original.status || 'En attente').toLowerCase();
+            const status = (row.original.deliveryStatus || 'en_attente').toLowerCase();
 
             let badgeText = "En attente";
             let badgeClass = "bg-slate-100 text-slate-700 border-slate-200";
@@ -180,7 +180,7 @@ export const columns: ColumnDef<Order>[] = [
         },
     },
     {
-        id: "paymentStatus", // Changed accessorKey to id as it's computed
+        id: "paymentStatus",
         header: "Statut (Paiement)",
         cell: ({ row }) => {
             const reste = safeNum(row.original.resteAPayer);
@@ -205,6 +205,26 @@ export const columns: ColumnDef<Order>[] = [
                     className={cn("rounded-full", badgeClass)}
                 >
                     {badgeText}
+                </Badge>
+            );
+        },
+    },
+    {
+        accessorKey: "isOfficialInvoice",
+        header: "Facture",
+        cell: ({ row }) => {
+            const isOfficial = row.original.isOfficialInvoice;
+
+            return (
+                <Badge
+                    variant="outline"
+                    className={cn(
+                        "rounded-full text-[10px] font-bold uppercase flex w-fit items-center gap-1",
+                        isOfficial ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-orange-100 text-orange-700 border-orange-200"
+                    )}
+                >
+                    {isOfficial ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                    {isOfficial ? "Officielle" : "Hors-Bilan"}
                 </Badge>
             );
         },
@@ -297,6 +317,44 @@ function OrderActions({ order }: { order: Order }) {
                             <CreditCard className="mr-2 h-4 w-4" />
                             Enregistrer un Paiement
                         </DropdownMenuItem>
+
+                        {order.deliveryStatus !== 'livre' && order.deliveryStatus !== 'pret' && (
+                            <DropdownMenuItem onClick={async () => {
+                                try {
+                                    const res = await updateDeliveryStatus(order.id, 'pret');
+                                    if (res.success) {
+                                        toast({ title: "✅ Commande prête", description: "La commande est marquée comme prête pour livraison." });
+                                        router.refresh();
+                                    } else {
+                                        toast({ variant: "destructive", title: "Erreur", description: res.error });
+                                    }
+                                } catch (e) {
+                                     toast({ variant: "destructive", title: "Erreur", description: "Une erreur est survenue." });
+                                }
+                            }}>
+                                <ShoppingBag className="mr-2 h-4 w-4" />
+                                Marquer comme Prêt
+                            </DropdownMenuItem>
+                        )}
+
+                        {order.deliveryStatus !== 'livre' && (
+                            <DropdownMenuItem onClick={async () => {
+                                try {
+                                    const res = await updateDeliveryStatus(order.id, 'livre');
+                                    if (res.success) {
+                                        toast({ title: "✅ Livraison mise à jour", description: "La commande est marquée comme livrée." });
+                                        router.refresh();
+                                    } else {
+                                        toast({ variant: "destructive", title: "Erreur", description: res.error });
+                                    }
+                                } catch (e) {
+                                     toast({ variant: "destructive", title: "Erreur", description: "Une erreur est survenue." });
+                                }
+                            }}>
+                                <ShoppingCart className="mr-2 h-4 w-4" />
+                                Marquer comme Livré
+                            </DropdownMenuItem>
+                        )}
 
 
 

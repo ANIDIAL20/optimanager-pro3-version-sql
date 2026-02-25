@@ -50,9 +50,13 @@ export interface Client {
     address?: string;
     dateOfBirth?: string;
     prescriptions?: Prescription[];
+    totalSpent?: number;
+    totalDebt?: number;
+    creditBalance?: number;
     createdAt: string;
     updatedAt?: string;
 }
+
 
 // ========================================
 // CLIENT ACTIONS
@@ -270,9 +274,13 @@ export const getClient = secureAction(async (userId, user, clientId: string) => 
             city: clientData.city || undefined,
             dateOfBirth: clientData.dateOfBirth?.toISOString(),
             prescriptions: sortedPrescriptions,
+            totalSpent: clientData.totalSpent ? parseFloat(clientData.totalSpent.toString()) : 0,
+            totalDebt: clientData.balance ? parseFloat(clientData.balance.toString()) : 0,
+            creditBalance: clientData.balance ? parseFloat(clientData.balance.toString()) : 0,
             createdAt: clientData.createdAt?.toISOString() || new Date().toISOString(),
             updatedAt: clientData.updatedAt?.toISOString(),
         };
+
 
         console.log(`✅ Client fetched: ${client.name} with ${sortedPrescriptions.length} prescriptions`);
         await logSuccess(userId, 'READ', 'clients', clientId);

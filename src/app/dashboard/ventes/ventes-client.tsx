@@ -29,6 +29,7 @@ import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { SensitiveData } from '@/components/ui/sensitive-data';
 import { DataTable } from '@/components/ui/data-table';
 import { columns, type Order } from '@/components/dashboard/commandes/columns';
+import { useMode } from '@/contexts/mode-context';
 
 // --- Utility: Safe Number Access ---
 const safeNum = (num: number | undefined) => num || 0;
@@ -44,6 +45,8 @@ export function VentesClientPage({ initialSales, initialClients, initialError }:
     const clients = initialClients;
     const error = initialError;
 
+    const { isExpertMode } = useMode();
+    
     const clientsMap = React.useMemo(() => {
         if (!clients) return new Map();
         return new Map(clients.map(c => [c.id, c]));
@@ -53,6 +56,7 @@ export function VentesClientPage({ initialSales, initialClients, initialError }:
     const [viewMode, setViewMode] = React.useState<'grid' | 'list' | 'table'>('table');
     const [searchTerm, setSearchTerm] = React.useState('');
     const [filterStatus, setFilterStatus] = React.useState<'all' | 'paid' | 'unpaid'>('all');
+    const [filterType, setFilterType] = React.useState<'all' | 'official' | 'hors-bilan'>('all');
 
     // --- Filtering Logic ---
     const filteredSales = React.useMemo(() => {
@@ -71,9 +75,13 @@ export function VentesClientPage({ initialSales, initialClients, initialError }:
                 filterStatus === 'all' ? true :
                     filterStatus === 'paid' ? isPaid : !isPaid;
 
-            return searchMatch && statusMatch;
+            const typeMatch =
+                !isExpertMode || filterType === 'all' ? true :
+                    filterType === 'official' ? sale.isOfficialInvoice : !sale.isOfficialInvoice;
+
+            return searchMatch && statusMatch && typeMatch;
         });
-    }, [sales, clientsMap, searchTerm, filterStatus]);
+    }, [sales, clientsMap, searchTerm, filterStatus, filterType]);
 
     // Join sales with client data for the DataTable
     const ordersWithClientData = React.useMemo((): Order[] => {
@@ -229,7 +237,7 @@ export function VentesClientPage({ initialSales, initialClients, initialError }:
             {/* --- Filter Bar --- */}
             <SpotlightCard className="p-4">
                 <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-                    <div className="relative w-full md:w-96">
+                    <div className="relative w-full md:w-80">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
                             placeholder="Rechercher client, ID..."
@@ -239,13 +247,25 @@ export function VentesClientPage({ initialSales, initialClients, initialError }:
                         />
                     </div>
 
-                    <Tabs value={filterStatus} onValueChange={(v: any) => setFilterStatus(v)} className="w-full md:w-auto">
-                        <TabsList className="grid w-full grid-cols-3 md:w-[400px]">
-                            <TabsTrigger value="all">Tout</TabsTrigger>
-                            <TabsTrigger value="paid">Payés</TabsTrigger>
-                            <TabsTrigger value="unpaid">Impayés</TabsTrigger>
-                        </TabsList>
-                    </Tabs>
+                    <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+                        {isExpertMode && (
+                            <Tabs value={filterType} onValueChange={(v: any) => setFilterType(v)} className="w-full sm:w-auto">
+                                <TabsList className="grid w-full grid-cols-3 sm:w-[320px]">
+                                    <TabsTrigger value="all">Toutes</TabsTrigger>
+                                    <TabsTrigger value="official" className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700">Officielles ✅</TabsTrigger>
+                                    <TabsTrigger value="hors-bilan" className="data-[state=active]:bg-orange-100 data-[state=active]:text-orange-700">Hors-Bilan 🔴</TabsTrigger>
+                                </TabsList>
+                            </Tabs>
+                        )}
+
+                        <Tabs value={filterStatus} onValueChange={(v: any) => setFilterStatus(v)} className="w-full sm:w-auto">
+                            <TabsList className="grid w-full grid-cols-3 sm:w-[280px]">
+                                <TabsTrigger value="all">Tout</TabsTrigger>
+                                <TabsTrigger value="paid">Payés</TabsTrigger>
+                                <TabsTrigger value="unpaid">Impayés</TabsTrigger>
+                            </TabsList>
+                        </Tabs>
+                    </div>
                 </div>
             </SpotlightCard>
 
@@ -258,15 +278,15 @@ export function VentesClientPage({ initialSales, initialClients, initialError }:
                     </div>
                 ) : viewMode === 'table' ? (
                     <DataTable
-                        columns={columns}
+                        columns={isExpertMode ? columns : columns.filter(c => (c as any).accessorKey !== 'isOfficialInvoice')}
                         data={ordersWithClientData}
                         searchKey="clientNom"
                         searchValue={searchTerm}
                     />
                 ) : (
                     viewMode === 'grid'
-                        ? <KanbanGrid sales={filteredSales} clientsMap={clientsMap} />
-                        : <EnhancedListView sales={filteredSales} clientsMap={clientsMap} />
+                        ? <KanbanGrid sales={filteredSales} clientsMap={clientsMap} isExpertMode={isExpertMode} />
+                        : <EnhancedListView sales={filteredSales} clientsMap={clientsMap} isExpertMode={isExpertMode} />
                 )}
             </div>
 
@@ -276,7 +296,7 @@ export function VentesClientPage({ initialSales, initialClients, initialError }:
 
 // --- Components ---
 
-function KanbanGrid({ sales, clientsMap }: { sales: Sale[], clientsMap: Map<string, Client> }) {
+function KanbanGrid({ sales, clientsMap, isExpertMode }: { sales: Sale[], clientsMap: Map<string, Client>, isExpertMode: boolean }) {
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {(sales || []).map(sale => {
@@ -320,15 +340,44 @@ function KanbanGrid({ sales, clientsMap }: { sales: Sale[], clientsMap: Map<stri
                                 <span className="text-2xl font-bold text-slate-900">
                                     <SensitiveData value={sale.totalNet} type="currency" currency="dh" />
                                 </span>
-                                <Badge
-                                    variant={isPaid ? "secondary" : "outline"}
-                                    className={cn(
-                                        "rounded-full px-3",
-                                        isPaid ? "bg-green-100 text-green-700 border-green-200" : "bg-orange-100 text-orange-700 border-orange-200"
+                                <div className="flex flex-col items-end gap-1">
+                                    <Badge
+                                        variant={isPaid ? "secondary" : "outline"}
+                                        className={cn(
+                                            "rounded-full px-3",
+                                            isPaid ? "bg-green-100 text-green-700 border-green-200" : "bg-orange-100 text-orange-700 border-orange-200"
+                                        )}
+                                    >
+                                        {isPaid ? "Payé" : "Impayé"}
+                                    </Badge>
+                                    {sale.deliveryStatus && (
+                                        <Badge
+                                            variant="outline"
+                                            className={cn(
+                                                "text-[10px] px-2 py-0",
+                                                sale.deliveryStatus === 'livre' ? "bg-blue-100 text-blue-700 border-blue-200" :
+                                                sale.deliveryStatus === 'pret' ? "bg-indigo-100 text-indigo-700 border-indigo-200" :
+                                                sale.deliveryStatus === 'en_cours' ? "bg-orange-100 text-orange-700 border-orange-200" :
+                                                "bg-slate-100 text-slate-600 border-slate-200"
+                                            )}
+                                        >
+                                            {sale.deliveryStatus === 'livre' ? 'Livré' : 
+                                             sale.deliveryStatus === 'pret' ? 'Prêt' : 
+                                             sale.deliveryStatus === 'en_cours' ? 'En cours' : 'Attente'}
+                                        </Badge>
                                     )}
-                                >
-                                    {isPaid ? "Payé" : "Impayé"}
-                                </Badge>
+                                    {isExpertMode && (
+                                        <Badge
+                                            variant="outline"
+                                            className={cn(
+                                                "text-[10px] px-2 py-0 mt-1 uppercase font-bold",
+                                                sale.isOfficialInvoice ? "bg-indigo-50 text-indigo-600 border-indigo-100" : "bg-orange-50 text-orange-600 border-orange-100"
+                                            )}
+                                        >
+                                            {sale.isOfficialInvoice ? '📋 Officielle' : '🚫 Hors-Bilan'}
+                                        </Badge>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Remaining Amount */}
@@ -355,7 +404,7 @@ function KanbanGrid({ sales, clientsMap }: { sales: Sale[], clientsMap: Map<stri
     );
 }
 
-function EnhancedListView({ sales, clientsMap }: { sales: Sale[], clientsMap: Map<string, Client> }) {
+function EnhancedListView({ sales, clientsMap, isExpertMode }: { sales: Sale[], clientsMap: Map<string, Client>, isExpertMode: boolean }) {
     return (
         <SpotlightCard className="p-0 overflow-hidden">
             <div className="divide-y divide-slate-100">
@@ -406,9 +455,22 @@ function EnhancedListView({ sales, clientsMap }: { sales: Sale[], clientsMap: Ma
                             </div>
 
                             <div className="col-span-2">
-                                <Badge variant={isPaid ? "secondary" : "outline"} className={cn(isPaid ? "bg-green-100 text-green-700 border-green-200" : "bg-orange-100 text-orange-700 border-orange-200")}>
-                                    {isPaid ? "Payé" : "En Attente"}
-                                </Badge>
+                                <div className="flex flex-col gap-1">
+                                    <Badge variant={isPaid ? "secondary" : "outline"} className={cn(isPaid ? "bg-green-100 text-green-700 border-green-200" : "bg-orange-100 text-orange-700 border-orange-200")}>
+                                        {isPaid ? "Payé" : "Impayé"}
+                                    </Badge>
+                                    {isExpertMode && (
+                                        <Badge
+                                            variant="outline"
+                                            className={cn(
+                                                "text-[10px] uppercase font-bold",
+                                                sale.isOfficialInvoice ? "bg-indigo-50 text-indigo-600 border-indigo-100" : "bg-orange-50 text-orange-600 border-orange-100"
+                                            )}
+                                        >
+                                            {sale.isOfficialInvoice ? '📋 Officielle' : '🚫 Hors-Bilan'}
+                                        </Badge>
+                                    )}
+                                </div>
                             </div>
 
                             <div className="col-span-2 text-right">

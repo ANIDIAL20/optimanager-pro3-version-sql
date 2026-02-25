@@ -54,6 +54,53 @@ export default function SupplierView({ supplier, orders = [], payments = [], err
         }
     }, [supplier, setLabel]);
 
+    // ✅ FIX: All hooks MUST be called before any conditional return
+    // Financial Calculations (always called, safe when orders/payments are empty arrays)
+    const totalOrdered = React.useMemo(() =>
+        orders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0),
+    [orders]);
+
+    const totalPaid = React.useMemo(() =>
+        payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
+    [payments]);
+
+    const balance = totalOrdered - totalPaid;
+
+    // Transaction History (Relevé) - Merged & Sorted
+    const history = React.useMemo(() => {
+        const combined = [
+            ...orders.map(o => ({
+                id: o.id,
+                date: new Date(o.createdAt || o.dateCommande),
+                type: 'ACHAT',
+                ref: o.orderReference || o.orderNumber || `BC #${o.id}`,
+                debit: Number(o.totalAmount) || 0,
+                credit: 0,
+                details: o.items ? `${o.items.length} articles` : 'Commande',
+                status: o.status
+            })),
+            ...payments.map(p => ({
+                id: p.id,
+                date: new Date(p.date),
+                type: 'PAIEMENT',
+                ref: p.reference || p.paymentNumber,
+                debit: 0,
+                credit: Number(p.amount) || 0,
+                details: p.method || 'Paiement',
+                status: 'PAYÉ'
+            }))
+        ];
+
+        combined.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+        let runningBalance = 0;
+        return combined.map(item => {
+            runningBalance += item.debit - item.credit;
+            return { ...item, balance: runningBalance };
+        }).reverse();
+    }, [orders, payments]);
+
+    // ✅ Conditional return is AFTER all hooks
     if (error || !supplier) {
         return (
             <div className="flex flex-1 flex-col gap-4">
@@ -77,7 +124,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], err
     const s = {
         id: supplier.id,
         nomCommercial: supplier.name || supplier.nomCommercial,
-        raisonSociale: supplier.raisonSociale, 
+        raisonSociale: supplier.raisonSociale,
         telephone: supplier.phone || supplier.telephone,
         email: supplier.email,
         adresse: supplier.address || supplier.adresse,
@@ -98,54 +145,6 @@ export default function SupplierView({ supplier, orders = [], payments = [], err
         statut: supplier.status || supplier.statut || 'Actif',
         typeProduits: supplier.category ? supplier.category.split(', ') : (supplier.typeProduits || []),
     };
-
-    // Financial Calculations
-    const totalOrdered = React.useMemo(() => 
-        orders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0), 
-    [orders]);
-
-    const totalPaid = React.useMemo(() => 
-        // Use payments explicitly for total paid to avoid double counting if checking orders.amountPaid
-        payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
-    [payments]);
-
-    const balance = totalOrdered - totalPaid;
-
-    // Transaction History (Relevé) - Merged & Sorted
-    const history = React.useMemo(() => {
-        const combined = [
-            ...orders.map(o => ({
-                id: o.id,
-                date: new Date(o.createdAt || o.dateCommande),
-                type: 'ACHAT',
-                ref: o.orderReference || o.orderNumber || `BC #${o.id}`, // Prioritize user ref (BL/BC)
-                debit: Number(o.totalAmount) || 0,
-                credit: 0,
-                details: o.items ? `${o.items.length} articles` : 'Commande',
-                status: o.status
-            })),
-            ...payments.map(p => ({
-                id: p.id,
-                date: new Date(p.date),
-                type: 'PAIEMENT',
-                ref: p.reference || p.paymentNumber,
-                debit: 0,
-                credit: Number(p.amount) || 0,
-                details: p.method || 'Paiement',
-                status: 'PAYÉ'
-            }))
-        ];
-        
-        // Sort by Date Ascending for calculating running balance
-        combined.sort((a, b) => a.date.getTime() - b.date.getTime());
-
-        // Calculate Running Balance
-        let runningBalance = 0;
-        return combined.map(item => {
-            runningBalance += item.debit - item.credit;
-            return { ...item, balance: runningBalance };
-        }).reverse(); // Reverse for display (Newest first)
-    }, [orders, payments]);
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-6">

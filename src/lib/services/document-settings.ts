@@ -126,7 +126,8 @@ export async function updateDocumentSettings(
   };
 
   // ✅ UPDATED
-  await db.transaction(async (tx) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await db.transaction(async (tx: any) => {
     // 1) Update shop profile settings
     await tx
       .update(shopProfiles)

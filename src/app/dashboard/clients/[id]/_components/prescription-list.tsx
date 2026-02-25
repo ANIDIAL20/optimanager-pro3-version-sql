@@ -156,8 +156,8 @@ export function PrescriptionList({ clientId }: PrescriptionListProps) {
                       : p.data?.pd || '-'}
                   </TableCell>
                   <TableCell>
-                    {p.data?.od?.hauteur || p.data?.og?.hauteur || p.data?.od?.height || p.data?.og?.height
-                      ? `${p.data.od?.hauteur || p.data.od?.height || '-'} / ${p.data.og?.hauteur || p.data.og?.height || '-'}`
+                    {p.data?.od?.height || p.data?.og?.height
+                      ? `${p.data.od?.height || '-'} / ${p.data.og?.height || '-'}`
                       : '-'}
                   </TableCell>
                   <TableCell>{p.data?.doctorName || '-'}</TableCell>
@@ -175,7 +175,6 @@ export function PrescriptionList({ clientId }: PrescriptionListProps) {
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent
-                        onInteractOutside={(e) => e.preventDefault()}
                         onOpenAutoFocus={(e) => e.preventDefault()}
                         onCloseAutoFocus={(e) => {
                           e.preventDefault();

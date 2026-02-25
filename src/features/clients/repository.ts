@@ -39,20 +39,18 @@ export class ClientRepository extends BaseRepository<Client, typeof clients> {
         let results: Client[];
         
         if (isAdmin) {
-            results = await db
-                .select()
-                .from(clients)
-                .where(eq(clients.isActive, true))
-                .orderBy(desc(clients.createdAt));
+            results = await db.query.clients.findMany({
+                where: eq(clients.isActive, true),
+                orderBy: desc(clients.createdAt)
+            });
         } else {
-            results = await db
-                .select()
-                .from(clients)
-                .where(and(
+            results = await db.query.clients.findMany({
+                where: and(
                     eq(clients.userId, userId),
                     eq(clients.isActive, true)
-                ))
-                .orderBy(desc(clients.createdAt));
+                ),
+                orderBy: desc(clients.createdAt)
+            });
         }
 
         // 4. Set Cache

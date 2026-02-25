@@ -89,8 +89,8 @@ export function SupplierPaymentForm() {
       if (res.success && res.orders) {
         // Filter for this supplier AND unpaid/partial
         const filtered = res.orders.filter(o => 
-            (o.supplierId === supplierId || o.supplierName === suppliers.find(s => s.id === supplierId)?.nomCommercial) &&
-            (o.paymentStatus === 'impaye' || o.paymentStatus === 'partiel')
+            (o.supplierId === supplierId || o.supplierName === suppliers.find((s: { id: string; nomCommercial: string }) => s.id === supplierId)?.nomCommercial) &&
+            (o.status === 'impaye' || o.status === 'partiel')
         );
         
         setUnpaidOrders(filtered);
@@ -181,7 +181,7 @@ export function SupplierPaymentForm() {
                         render={({ field }) => (
                         <FormItem>
                             <FormLabel>Fournisseur</FormLabel>
-                            <Select modal={false} onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                                 <SelectTrigger>
                                 <SelectValue placeholder="Choisir un fournisseur" />
@@ -225,7 +225,7 @@ export function SupplierPaymentForm() {
                             render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Mode</FormLabel>
-                                <Select modal={false} onValueChange={field.onChange} defaultValue={field.value}>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
                                 <FormControl>
                                     <SelectTrigger>
                                         <SelectValue />

@@ -1,8 +1,8 @@
 /**
- * نظام التسعير والتخفيضات في نقطة البيع (POS)
+ * Système de tarification et remises POS
  * 
- * هاد الملف فيه كلشي لي كيخص التحكم في الأسعار والتخفيضات
- * ديال المنتجات في السلة (Cart)
+ * Ce fichier contient toutes les fonctions de contrôle des prix et des remises
+ * pour les produits dans le panier (Cart).
  */
 
 // ========================================
@@ -10,57 +10,57 @@
 // ========================================
 
 /**
- * وضع التسعير - كيحدد كيفاش تحسب الثمن
+ * Mode de tarification - détermine comment le prix est calculé
  * 
- * - STANDARD: الثمن العادي من الستوك (بدون تخفيض)
- * - OVERRIDE: الثمن متبدل يدويًا
- * - DISCOUNT: فيه تخفيض بالنسبة المئوية
+ * - STANDARD: Prix normal du stock (sans remise)
+ * - OVERRIDE: Prix modifié manuellement
+ * - DISCOUNT: Avec remise en pourcentage
  */
 export type PriceMode = 'STANDARD' | 'OVERRIDE' | 'DISCOUNT';
 
 /**
- * سطر في سلة نقطة البيع
+ * Ligne dans le panier POS
  * 
- * كل سطر كيمثل منتوج واحد مع الكمية والثمن ديالو
+ * Chaque ligne représente un produit unique avec sa quantité et son prix
  */
 export interface PosLineItem {
-  /** معرف فريد للسطر */
+  /** Identifiant unique de la ligne */
   lineId: string;
   
-  /** معرف المنتوج من قاعدة البيانات */
+  /** Identifiant du produit en base de données */
   productId: string;
   
-  /** اسم المنتوج */
+  /** Nom du produit */
   productName: string;
   
-  /** الكمية */
+  /** Quantité */
   quantity: number;
 
-  // ========== الأسعار ==========
+  // ========== Prix ==========
   
-  /** الثمن الأصلي من الستوك (ما كيتبدلش) */
+  /** Prix unitaire d'origine du stock (immuable) */
   originalUnitPrice: number;
   
-  /** الثمن الحالي للوحدة (بعد التخفيض أو التغيير) */
+  /** Prix unitaire actuel (après remise ou modification) */
   unitPrice: number;
   
-  /** المجموع الكلي للسطر (unitPrice × quantity) */
+  /** Total de la ligne (unitPrice × quantity) */
   lineTotal: number;
 
-  // ========== وضع التسعير ==========
+  // ========== Mode de tarification ==========
   
-  /** كيفاش تحسب الثمن: عادي، متبدل، أو فيه تخفيض */
+  /** Comment le prix est calculé : standard, modifié ou remisé */
   priceMode: PriceMode;
 
-  // ========== معلومات التخفيض ==========
+  // ========== Informations de remise ==========
   
-  /** نسبة التخفيض المئوية (مثلاً 10 = تخفيض 10%) */
+  /** Pourcentage de remise (ex: 10 = remise de 10%) */
   discountPercent?: number;
   
-  /** المبلغ لي تحيد من كل وحدة */
+  /** Montant déduit par unité */
   discountAmount?: number;
   
-  /** سبب تغيير الثمن (اختياري) */
+  /** Motif du changement de prix (optionnel) */
   overrideReason?: string;
 }
 
@@ -69,43 +69,43 @@ export interface PosLineItem {
 // ========================================
 
 /**
- * كيتأكد أن الثمن صحيح (أكبر من 0)
+ * Vérifie que le prix est valide (supérieur à 0)
  */
-function validatePrice(price: number, fieldName: string = 'Price'): void {
+function validatePrice(price: number, fieldName: string = 'Le prix'): void {
   if (price <= 0) {
-    throw new Error(`${fieldName} خاصو يكون أكبر من 0`);
+    throw new Error(`${fieldName} doit être supérieur à 0`);
   }
   if (!isFinite(price)) {
-    throw new Error(`${fieldName} خاصو يكون رقم صحيح`);
+    throw new Error(`${fieldName} doit être un nombre valide`);
   }
 }
 
 /**
- * كيتأكد أن النسبة المئوية صحيحة (بين 0 و 100)
+ * Vérifie que le pourcentage est valide (entre 0 et 100)
  */
 function validatePercent(percent: number): void {
   if (percent < 0 || percent > 100) {
-    throw new Error('النسبة المئوية خاصها تكون بين 0 و 100');
+    throw new Error('Le pourcentage doit être compris entre 0 et 100');
   }
   if (!isFinite(percent)) {
-    throw new Error('النسبة المئوية خاصها تكون رقم صحيح');
+    throw new Error('Le pourcentage doit être un nombre valide');
   }
 }
 
 /**
- * كيتأكد أن الكمية صحيحة (أكبر من 0)
+ * Vérifie que la quantité est valide (supérieure à 0)
  */
 function validateQuantity(quantity: number): void {
   if (quantity <= 0) {
-    throw new Error('الكمية خاصها تكون أكبر من 0');
+    throw new Error('La quantité doit être supérieure à 0');
   }
   if (!isFinite(quantity)) {
-    throw new Error('الكمية خاصها تكون رقم صحيح');
+    throw new Error('La quantité doit être un nombre entier');
   }
 }
 
 /**
- * كيدور الرقم لـ 2 أرقام عشرية (للفلوس)
+ * Arrondit le nombre à 2 décimales (pour la monnaie)
  */
 function roundToTwoDecimals(value: number): number {
   return Math.round(value * 100) / 100;
@@ -116,22 +116,14 @@ function roundToTwoDecimals(value: number): number {
 // ========================================
 
 /**
- * كيرجع السطر للثمن العادي (بدون تخفيض أو تغيير)
+ * Réinitialise la ligne au prix standard (sans remise ou modification)
  * 
- * @param lineItem - السطر لي بغيتي ترجعو للثمن العادي
- * @returns سطر جديد بالثمن العادي
- * 
- * @example
- * ```ts
- * const item = { ...lineItem, priceMode: 'DISCOUNT', unitPrice: 90 };
- * const standardItem = setStandardPrice(item);
- * // standardItem.priceMode === 'STANDARD'
- * // standardItem.unitPrice === originalUnitPrice
- * ```
+ * @param lineItem - La ligne à réinitialiser
+ * @returns Nouvelle ligne au prix standard
  */
 export function setStandardPrice(lineItem: PosLineItem): PosLineItem {
   validateQuantity(lineItem.quantity);
-  validatePrice(lineItem.originalUnitPrice, 'الثمن الأصلي');
+  validatePrice(lineItem.originalUnitPrice, 'Le prix original');
 
   const unitPrice = lineItem.originalUnitPrice;
   const lineTotal = roundToTwoDecimals(unitPrice * lineItem.quantity);
@@ -148,25 +140,16 @@ export function setStandardPrice(lineItem: PosLineItem): PosLineItem {
 }
 
 /**
- * كيبدل الثمن يدويًا (Price Override)
+ * Modifie le prix manuellement (Price Override)
  * 
- * هاد الدالة كتخليك تحط ثمن جديد بيدك، مع إمكانية تزيد سبب التغيير
+ * Cette fonction permet de définir un nouveau prix manuellement, avec un motif optionnel.
  * 
- * @param lineItem - السطر لي بغيتي تبدل الثمن ديالو
- * @param newUnitPrice - الثمن الجديد للوحدة
- * @param reason - سبب التغيير (اختياري)
- * @returns سطر جديد بالثمن المتبدل
+ * @param lineItem - La ligne à modifier
+ * @param newUnitPrice - Le nouveau prix unitaire
+ * @param reason - Le motif du changement (optionnel)
+ * @returns Nouvelle ligne avec le prix modifié
  * 
- * @throws Error إذا كان الثمن الجديد أكبر من الثمن الأصلي أو أصغر من 0
- * 
- * @example
- * ```ts
- * const item = { ...lineItem, originalUnitPrice: 100 };
- * const discounted = applyPriceOverride(item, 80, 'عميل VIP');
- * // discounted.unitPrice === 80
- * // discounted.discountPercent === 20
- * // discounted.overrideReason === 'عميل VIP'
- * ```
+ * @throws Error si le nouveau prix est supérieur au prix original ou inférieur à 0
  */
 export function applyPriceOverride(
   lineItem: PosLineItem,
@@ -174,13 +157,13 @@ export function applyPriceOverride(
   reason?: string
 ): PosLineItem {
   validateQuantity(lineItem.quantity);
-  validatePrice(lineItem.originalUnitPrice, 'الثمن الأصلي');
-  validatePrice(newUnitPrice, 'الثمن الجديد');
+  validatePrice(lineItem.originalUnitPrice, 'Le prix original');
+  validatePrice(newUnitPrice, 'Le nouveau prix');
 
-  // كنتأكدو أن الثمن الجديد ما طلعش فوق الثمن الأصلي
+  // Vérification que le nouveau prix ne dépasse pas le prix original
   if (newUnitPrice > lineItem.originalUnitPrice) {
     throw new Error(
-      `الثمن الجديد (${newUnitPrice}) ما يمكنش يكون أكبر من الثمن الأصلي (${lineItem.originalUnitPrice})`
+      `Le nouveau prix (${newUnitPrice}) ne peut pas être supérieur au prix original (${lineItem.originalUnitPrice})`
     );
   }
 
@@ -202,31 +185,22 @@ export function applyPriceOverride(
 }
 
 /**
- * كيطبق تخفيض بالنسبة المئوية
+ * Applique une remise en pourcentage
  * 
- * مثلاً: إذا حطيتي 10، غادي يطبق تخفيض 10% على الثمن الأصلي
+ * Exemple : si vous mettez 10, une remise de 10% sera appliquée sur le prix original.
  * 
- * @param lineItem - السطر لي بغيتي تطبق عليه التخفيض
- * @param percent - النسبة المئوية للتخفيض (بين 0 و 100)
- * @returns سطر جديد بالتخفيض المطبق
+ * @param lineItem - La ligne à remiser
+ * @param percent - Le pourcentage de remise (entre 0 et 100)
+ * @returns Nouvelle ligne avec la remise appliquée
  * 
- * @throws Error إذا كانت النسبة خارج النطاق 0-100
- * 
- * @example
- * ```ts
- * const item = { ...lineItem, originalUnitPrice: 100 };
- * const discounted = applyPercentDiscount(item, 15);
- * // discounted.unitPrice === 85
- * // discounted.discountPercent === 15
- * // discounted.discountAmount === 15
- * ```
+ * @throws Error si le pourcentage est hors de la plage 0-100
  */
 export function applyPercentDiscount(
   lineItem: PosLineItem,
   percent: number
 ): PosLineItem {
   validateQuantity(lineItem.quantity);
-  validatePrice(lineItem.originalUnitPrice, 'الثمن الأصلي');
+  validatePrice(lineItem.originalUnitPrice, 'Le prix original');
   validatePercent(percent);
 
   const discountPercent = percent;
@@ -248,23 +222,16 @@ export function applyPercentDiscount(
 }
 
 /**
- * كيعاود يحسب المجموع الكلي للسطر
+ * Recalcule le total de la ligne
  * 
- * هاد الدالة كتستعمل ملي كتبدل الكمية (quantity) بدون ما تبدل الثمن
+ * Utilisé après un changement de quantité sans modification de prix.
  * 
- * @param lineItem - السطر لي بغيتي تعاود تحسب المجموع ديالو
- * @returns سطر جديد بالمجموع المحسوب
- * 
- * @example
- * ```ts
- * const item = { ...lineItem, quantity: 2, unitPrice: 50 };
- * const updated = recalculateLineTotal(item);
- * // updated.lineTotal === 100
- * ```
+ * @param lineItem - La ligne à recalculer
+ * @returns Nouvelle ligne avec le total mis à jour
  */
 export function recalculateLineTotal(lineItem: PosLineItem): PosLineItem {
   validateQuantity(lineItem.quantity);
-  validatePrice(lineItem.unitPrice, 'الثمن الحالي');
+  validatePrice(lineItem.unitPrice, 'Le prix actuel');
 
   const lineTotal = roundToTwoDecimals(lineItem.unitPrice * lineItem.quantity);
 
@@ -279,10 +246,10 @@ export function recalculateLineTotal(lineItem: PosLineItem): PosLineItem {
 // ========================================
 
 /**
- * كيرجع معلومات التخفيض بشكل واضح
+ * Retourne les informations de remise de manière lisible
  * 
- * @param lineItem - السطر
- * @returns معلومات التخفيض في format واضح
+ * @param lineItem - La ligne de panier
+ * @returns Informations de remise formatées
  */
 export function getDiscountInfo(lineItem: PosLineItem): {
   hasDiscount: boolean;
@@ -299,9 +266,9 @@ export function getDiscountInfo(lineItem: PosLineItem): {
   let savings = '';
   if (hasDiscount) {
     if (lineItem.priceMode === 'DISCOUNT') {
-      savings = `تخفيض ${discountPercent.toFixed(1)}% (-${totalDiscount.toFixed(2)} MAD)`;
+      savings = `Remise ${discountPercent.toFixed(1)}% (-${totalDiscount.toFixed(2)} MAD)`;
     } else if (lineItem.priceMode === 'OVERRIDE') {
-      savings = `ثمن خاص: -${totalDiscount.toFixed(2)} MAD`;
+      savings = `Prix spécial: -${totalDiscount.toFixed(2)} MAD`;
       if (lineItem.overrideReason) {
         savings += ` (${lineItem.overrideReason})`;
       }
@@ -318,10 +285,10 @@ export function getDiscountInfo(lineItem: PosLineItem): {
 }
 
 /**
- * كيحسب المجموع الكلي ديال السلة (كل الأسطر)
+ * Calcule le total du panier (toutes les lignes)
  * 
- * @param lineItems - كل الأسطر في السلة
- * @returns المجموع الكلي
+ * @param lineItems - Toutes les lignes du panier
+ * @returns Le total calculé
  */
 export function calculateCartTotal(lineItems: PosLineItem[]): {
   subtotal: number;
@@ -355,11 +322,11 @@ export function calculateCartTotal(lineItems: PosLineItem[]): {
 }
 
 /**
- * كيخلق سطر جديد من منتوج
+ * Crée une nouvelle ligne à partir d'un produit
  * 
- * @param product - معلومات المنتوج من الستوك
- * @param quantity - الكمية المطلوبة
- * @returns سطر جديد بالثمن العادي
+ * @param product - Informations sur le produit du stock
+ * @param quantity - La quantité demandée
+ * @returns Nouvelle ligne au prix standard
  */
 export function createLineItem(
   product: {
@@ -369,7 +336,7 @@ export function createLineItem(
   },
   quantity: number = 1
 ): PosLineItem {
-  validatePrice(product.unitPrice, 'ثمن المنتوج');
+  validatePrice(product.unitPrice, 'Le prix du produit');
   validateQuantity(quantity);
 
   const lineId = crypto.randomUUID();

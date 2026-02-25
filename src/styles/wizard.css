@@ -18,7 +18,7 @@
 .step-label { font-size: 11px; margin-top: 6px; color: #64748b; text-align: center; }
 .wizard-step.active .step-label { color: #3b82f6; font-weight: 600; }
 
-/* === Layout عام === */
+/* === Layout Général === */
 .step2-container, .step3-container, .step4-container { display: flex; flex-direction: column; gap: 1rem; }
 .step-hint { background: #eff6ff; border-left: 3px solid #3b82f6; padding: 8px 12px; border-radius: 6px; font-size: 13px; color: #1e40af; }
 .eyes-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }

@@ -63,7 +63,7 @@ export function ManageBrands() {
     setError(null);
     try {
       const data = await getSettings('brands');
-      setBrands(data as Brand[]);
+      setBrands((data as unknown) as Brand[]);
     } catch (err: any) {
       console.error('Error fetching brands:', err);
       setError(err.message || 'Erreur de chargement');
