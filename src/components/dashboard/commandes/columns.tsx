@@ -313,6 +313,16 @@ function OrderActions({ order }: { order: Order }) {
                             Voir les détails
                         </DropdownMenuItem>
 
+                        <DropdownMenuItem onClick={() => window.open(`/print/facture/${order.id}`, "_blank")}>
+                            <span className="mr-2">🖨️</span>
+                            Imprimer le Reçu
+                        </DropdownMenuItem>
+
+                        <DropdownMenuItem onClick={() => window.open(`/dashboard/lens-orders/${order.id}/print`, "_blank")}>
+                            <Glasses className="mr-2 h-4 w-4" />
+                            Bon de Labo
+                        </DropdownMenuItem>
+
                         <DropdownMenuItem onClick={() => setShowPaymentDialog(true)}>
                             <CreditCard className="mr-2 h-4 w-4" />
                             Enregistrer un Paiement

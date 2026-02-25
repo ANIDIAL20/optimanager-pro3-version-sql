@@ -37,8 +37,8 @@ const NullableString = z.string().nullable().optional().or(z.literal(''));
 export const LensOrderSchema = z.object({
   clientId: z.number().int(),
   prescriptionId: z.number().int().optional().nullable(),
-  supplierId: z.number().int(),
-  supplierName: z.string().optional().nullable(), // Allow optional if ID is provided
+  supplierId: z.string().uuid().optional().nullable(),
+  supplierName: z.string().optional().nullable(),
   orderType: z.enum(['progressive', 'bifocal', 'unifocal', 'contact']),
   lensType: z.string().min(1),
   

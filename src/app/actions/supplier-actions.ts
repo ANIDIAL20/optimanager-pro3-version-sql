@@ -47,9 +47,6 @@ function parseContactInfo(notes: string | null) {
 /**
  * Get all suppliers for the current user
  */
-/**
- * Get all suppliers for the current user
- */
 export const getSuppliersList = secureActionWithResponse(async (userId, user) => {
   return await measurePerformance(`getSuppliersList-${userId}`, async () => {
     noStore();
@@ -57,60 +54,52 @@ export const getSuppliersList = secureActionWithResponse(async (userId, user) =>
     console.log('⚡ [v2] Fetching suppliers list for user:', userId);
 
     try {
-      console.log('⚡ [getSuppliersList] Fetching with SELECT * for user:', userId);
-      const results = await db.execute(sql`
-        SELECT * FROM suppliers 
-        WHERE user_id = ${userId}
-        ORDER BY created_at DESC
-      `);
+      const results = await db.query.suppliers.findMany({
+        where: eq(suppliers.userId, userId),
+        orderBy: [desc(suppliers.createdAt)]
+      });
       
-      const rows = results.rows || [];
-      if (rows.length > 0) {
-        console.log(`✅ [getSuppliersList] Fetched ${rows.length} rows. Sample keys:`, Object.keys(rows[0]).join(', '));
-      }
-      
-      const mappedItems = rows.map((row: any) => {
+      const mappedItems = results.map((row: any) => {
         const contactInfo = parseContactInfo(row.notes);
         return {
           id: row.id,
-          userId: row.user_id,
-          name: row.name || row.nomCommercial || '',
+          userId: row.userId,
+          name: row.name || '',
           email: row.email || '',
-          phone: row.phone || row.telephone || '',
-          address: row.address || row.adresse || '',
-          city: row.city || row.ville || '',
+          phone: row.phone || '',
+          address: row.address || '',
+          city: row.city || '',
           ice: row.ice || '',
           if: row.if || '',
           rc: row.rc || '',
-          taxId: row.tax_id || row.taxId || '',
+          taxId: row.taxId || '',
           category: row.category || '',
-          paymentTerms: row.payment_terms || row.delaiPaiement || '30',
-          paymentMethod: row.payment_method || row.modePaiement || '',
-          bank: row.bank || row.banque || '',
+          paymentTerms: row.paymentTerms || '30',
+          paymentMethod: row.paymentMethod || '',
+          bank: row.bank || '',
           rib: row.rib || '',
           notes: contactInfo.cleanNotes,
           status: row.status || 'Actif',
-          createdAt: row.created_at || row.createdAt,
-          updatedAt: row.updated_at || row.updatedAt,
-          nomCommercial: row.name || row.nomCommercial || '',
-          telephone: row.phone || row.telephone || '',
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+          
+          // Legacy/UI Compatibility keys
+          nomCommercial: row.name || '',
+          telephone: row.phone || '',
           typeProduits: (row.category || '').split(', ').filter(Boolean),
-          adresse: row.address || row.adresse || '',
-          ville: row.city || row.ville || '',
-          delaiPaiement: row.payment_terms || row.delaiPaiement || '30',
-          modePaiement: row.payment_method || row.modePaiement || '',
-          banque: row.bank || row.banque || '',
+          adresse: row.address || '',
+          ville: row.city || '',
           contactNom: contactInfo.nom || '',
           contactTelephone: contactInfo.tel || '',
           contactEmail: contactInfo.email || '',
-          defaultTaxMode: row.default_tax_mode || 'HT',
-          currentBalance: Number(row.current_balance || row.currentBalance || 0),
+          defaultTaxMode: row.defaultTaxMode || 'HT',
+          currentBalance: Number(row.currentBalance || 0),
         };
       });
 
       return mappedItems;
     } catch (error: any) {
-      console.error('[getSuppliersList] CRITICAL SQL ERROR:', error);
+      console.error('[getSuppliersList] CRITICAL ERROR:', error);
       throw new Error(`Erreur récupération fournisseurs: ${error.message}`);
     }
   }, { userId });
@@ -123,81 +112,58 @@ export const getSupplier = secureAction(async (userId, user, id: string) => {
   noStore();
 
   try {
-    console.log(`🔍 [getSupplier] Fetching with explicit casting for ${id}`);
+    console.log(`🔍 [getSupplier] Fetching supplier ${id} via Drizzle Query API`);
     
-    // We use explicit casting to ::uuid and ::text to avoid PG type mismatch errors
-    let results;
-    try {
-      results = await db.execute(sql`
-        SELECT * FROM suppliers 
-        WHERE id = ${id}::uuid AND user_id = ${userId}::text
-        LIMIT 1
-      `);
-    } catch (sqlErr: any) {
-      console.warn('⚠️ [getSupplier] Initial attempt failed, trying without casting...', sqlErr.message);
-      // Fallback for different schema versions
-      results = await db.execute(sql`
-        SELECT * FROM suppliers 
-        WHERE (id = ${id} OR id::text = ${id}) AND (user_id = ${userId} OR user_id::text = ${userId})
-        LIMIT 1
-      `);
-    }
+    const row = await db.query.suppliers.findFirst({
+        where: and(eq(suppliers.id, id), eq(suppliers.userId, userId))
+    });
 
-    const rows = results.rows || [];
-    if (rows.length === 0) {
+    if (!row) {
       console.warn(`⚠️ [getSupplier] No supplier found with ID ${id}`);
       return null;
     }
 
-    const row = rows[0] as any;
-    console.log(`✅ [getSupplier] Successfully fetched row. Columns available:`, Object.keys(row).join(', '));
-
-    // Map the row safely, using fallbacks for missing columns
+    // Map the row safely
     const contactInfo = parseContactInfo(row.notes);
     
     return {
         id: row.id,
-        userId: row.user_id,
-        name: row.name || row.nomCommercial || '',
+        userId: row.userId,
+        name: row.name || '',
         email: row.email || '',
-        phone: row.phone || row.telephone || '',
-        address: row.address || row.adresse || '',
-        city: row.city || row.ville || '',
+        phone: row.phone || '',
+        address: row.address || '',
+        city: row.city || '',
         ice: row.ice || '',
         if: row.if || '',
         rc: row.rc || '',
-        taxId: row.tax_id || row.taxId || '',
+        taxId: row.taxId || '',
         category: row.category || '',
-        paymentTerms: row.payment_terms || row.delaiPaiement || '30',
-        paymentMethod: row.payment_method || row.modePaiement || '',
-        bank: row.bank || row.banque || '',
+        paymentTerms: row.paymentTerms || '30',
+        paymentMethod: row.paymentMethod || '',
+        bank: row.bank || '',
         rib: row.rib || '',
         notes: contactInfo.cleanNotes,
         status: row.status || 'Actif',
-        createdAt: row.created_at || row.createdAt,
-        updatedAt: row.updated_at || row.updatedAt,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
         
         // UI compatibility keys
-        nomCommercial: row.name || row.nomCommercial || '',
-        telephone: row.phone || row.telephone || '',
+        nomCommercial: row.name || '',
+        telephone: row.phone || '',
         typeProduits: (row.category || '').split(', ').filter(Boolean),
-        adresse: row.address || row.adresse || '',
-        ville: row.city || row.ville || '',
-        delaiPaiement: row.payment_terms || row.delaiPaiement || '30',
-        modePaiement: row.payment_method || row.modePaiement || '',
-        banque: row.bank || row.banque || '',
+        adresse: row.address || '',
+        ville: row.city || '',
         contactNom: contactInfo.nom || '',
         contactTelephone: contactInfo.tel || '',
         contactEmail: contactInfo.email || '',
-        defaultTaxMode: row.default_tax_mode || 'HT',
+        defaultTaxMode: row.defaultTaxMode || 'HT',
+        currentBalance: Number(row.currentBalance || 0),
     };
+
   } catch (error: any) {
-    console.error('💥 [getSupplier] CRITICAL SQL ERROR:', error);
-    // Log more details if available
-    if (error.hint) console.error('Hint:', error.hint);
-    if (error.detail) console.error('Detail:', error.detail);
-    
-    throw new Error(`Erreur lors de la récupération du fournisseur (DB): ${error.message}`);
+    console.error('💥 [getSupplier] CRITICAL ERROR:', error);
+    return null;
   }
 });
 
@@ -220,14 +186,14 @@ export const createSupplier = secureAction(async (userId, user, data: any) => {
     const [created] = await db
       .insert(suppliers)
       .values({
-        userId, // from secureAction
-        name: data.nomCommercial, // Key from payload
+        userId, 
+        name: data.nomCommercial, 
         email: data.email || null,
         phone: data.phone || null,
         address: data.address || null,
         city: data.city || null,
         ice: data.ice || null,
-        if: data.if || null, // 'if' is a reserved word but key is 'if' in schema
+        if: data.if || null,
         rc: data.rc || null,
         taxId: data.taxId || null,
         category: data.typeProduits ? data.typeProduits.join(', ') : null,
@@ -235,7 +201,7 @@ export const createSupplier = secureAction(async (userId, user, data: any) => {
         paymentMethod: data.paymentMethod || null,
         bank: data.bank || null,
         rib: data.rib || null,
-        notes: notesWithContact, // Save with contact info hidden
+        notes: notesWithContact,
         status: data.status || 'Actif',
         defaultTaxMode: data.defaultTaxMode || 'HT',
       } as any)
@@ -246,12 +212,6 @@ export const createSupplier = secureAction(async (userId, user, data: any) => {
     return created;
   } catch (error: any) {
     console.error('❌ Error creating supplier:', error);
-    console.error('Details:', {
-      message: error.message,
-      code: error.code,
-      detail: error.detail,
-      constraint: error.constraint
-    });
     throw new Error(`Erreur lors de la création: ${error.message}`);
   }
 });
@@ -262,10 +222,8 @@ export const createSupplier = secureAction(async (userId, user, data: any) => {
 export const updateSupplier = secureAction(async (userId, user, id: string, data: any) => {
   console.log('📝 [updateSupplier] Processing update for:', id);
 
-  // 1. Build Payload explicitly to exclude non-schema fields
   const dbPayload: any = {};
 
-  // Map Standard Fields
   if (data.nomCommercial !== undefined) dbPayload.name = data.nomCommercial;
   if (data.email !== undefined) dbPayload.email = data.email;
   if (data.phone !== undefined) dbPayload.phone = data.phone; 
@@ -286,7 +244,6 @@ export const updateSupplier = secureAction(async (userId, user, id: string, data
     dbPayload.category = data.typeProduits.join(', ');
   }
 
-  // 2. Handle Contact Info -> Notes
   if (data.contactNom !== undefined || data.contactTelephone !== undefined || data.contactEmail !== undefined) {
       dbPayload.notes = serializeContactInfo(data);
   } else if (data.notes !== undefined) {
@@ -302,10 +259,7 @@ export const updateSupplier = secureAction(async (userId, user, id: string, data
       .returning();
 
     revalidateTag('suppliers');
-    revalidatePath('/suppliers'); 
     revalidatePath('/dashboard/fournisseurs');
-    revalidatePath(`/dashboard/fournisseurs/${id}`);
-    
     return updated;
   } catch (err: any) {
      console.error("❌ DB Update Error:", err);

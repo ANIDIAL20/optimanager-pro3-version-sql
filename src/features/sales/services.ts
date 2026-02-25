@@ -51,9 +51,6 @@ export class SaleService {
     const currentSettings = await getDocumentSettings(profile?.id || 0);
 
     // 3. Prepare Sale Data
-    const status: 'paye' | 'partiel' | 'impaye' = data.totalPaid >= data.totalTTC ? 'paye' : 
-                   data.totalPaid > 0 ? 'partiel' : 'impaye';
-
     const saleData = {
       userId,
       clientId: data.clientId,
@@ -63,10 +60,10 @@ export class SaleService {
       totalHT: data.totalHT.toString(),
       totalTVA: data.totalTVA.toString(),
       totalTTC: data.totalTTC.toString(),
-      totalPaye: data.totalPaid.toString(),
-      resteAPayer: (data.totalTTC - data.totalPaid).toString(),
+      totalPaye: data.montantPaye.toString(),
+      resteAPayer: data.resteAPayer.toString(),
       
-      status,
+      status: data.status,
       paymentMethod: data.paymentMethod,
       date: new Date(),
       createdAt: new Date(),

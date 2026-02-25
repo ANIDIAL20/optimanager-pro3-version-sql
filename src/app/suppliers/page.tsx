@@ -12,8 +12,10 @@ import {
   Truck,
   Eye,
   Glasses,
-  AlertTriangle
+  AlertTriangle,
+  PackageCheck
 } from 'lucide-react';
+import { BulkReceiveModal } from '@/components/suppliers/BulkReceiveModal';
 import Link from 'next/link';
 import { Separator } from '@/components/ui/separator';
 import { SuppliersClientView } from './_components/suppliers-client-view';
@@ -89,12 +91,15 @@ export default function SuppliersPage() {
           </div>
         </div>
 
-        <Link href="/suppliers/new">
-          <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md gap-2">
-            <Plus className="h-4 w-4" />
-            Nouveau Fournisseur
-          </Button>
-        </Link>
+        <div className="flex gap-3">
+          <BulkReceiveModal />
+          <Link href="/suppliers/new">
+            <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md gap-2">
+              <Plus className="h-4 w-4" />
+              Nouveau Fournisseur
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Stats */}

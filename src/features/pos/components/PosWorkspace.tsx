@@ -23,6 +23,7 @@ import { usePosCartStore } from '@/features/pos/store/use-pos-cart-store';
 
 import { CatalogueProduits } from './CatalogueProduits';
 import { PosCartPanel } from './PosCartPanel';
+import { SaleSuccessModal } from '@/components/vente/SaleSuccessModal';
 
 export function PosWorkspace() {
   const selectedClient = usePosCartStore((s) => s.selectedClient);
@@ -34,6 +35,17 @@ export function PosWorkspace() {
   const [clients, setClients] = React.useState<Client[]>([]);
   const [isLoadingClients, setIsLoadingClients] = React.useState(true);
   const [pendingOrders, setPendingOrders] = React.useState<any[]>([]);
+  
+  // Success Modal State
+  const [successModalOpen, setSuccessModalOpen] = React.useState(false);
+  const [completedSaleId, setCompletedSaleId] = React.useState<string | null>(null);
+
+  const handleSaleSuccess = (saleId?: string) => {
+    if (saleId) {
+      setCompletedSaleId(saleId);
+      setSuccessModalOpen(true);
+    }
+  };
 
   React.useEffect(() => {
     let cancelled = false;
@@ -303,9 +315,18 @@ export function PosWorkspace() {
             </Badge>
             <h3 className="font-semibold text-lg text-slate-800">Encaissement</h3>
           </div>
-          <PosCartPanel />
+          <PosCartPanel onSuccess={(saleId) => handleSaleSuccess(saleId)} />
         </div>
       </div>
+
+      {/* Sale Success Modal */}
+      {completedSaleId && (
+        <SaleSuccessModal 
+          isOpen={successModalOpen} 
+          onClose={() => setSuccessModalOpen(false)} 
+          saleId={completedSaleId} 
+        />
+      )}
     </div>
   );
 }

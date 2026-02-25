@@ -8,6 +8,7 @@ import Step2Mesures from "./Step2Mesures";
 import Step3Produits from "./Step3Produits";
 import Step4Paiement from "./Step4Paiement";
 import WizardProgress from "./WizardProgress";
+import { SaleSuccessModal } from "./SaleSuccessModal";
 import "@/styles/wizard.css";
 
 const STEPS = [
@@ -34,7 +35,8 @@ export default function QuickSaleWizard({ onClose }: { onClose: () => void }) {
     remarques: "" 
   });
   const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(false);
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
+  const [completedSaleId, setCompletedSaleId] = useState<string | number | null>(null);
   const { toast } = useToast();
 
   const totalTTC = lignes.reduce((s: number, l: any) => s + l.prixUnitaire * l.quantite, 0);
@@ -50,6 +52,13 @@ export default function QuickSaleWizard({ onClose }: { onClose: () => void }) {
   const validerVente = async () => {
     setLoading(true);
     try {
+      // Calcul du montant payé effectif
+      const effectivePaid = paiement.mode === "complet" ? totalTTC : paiement.montantPaye;
+      const reste = totalTTC - effectivePaid;
+      
+      // Détermination du statut
+      const saleStatus = reste <= 0 ? "paye" : (effectivePaid > 0 ? "partiel" : "impaye");
+
       const saleData = {
         clientId: client.id,
         clientName: client.nom,
@@ -61,7 +70,7 @@ export default function QuickSaleWizard({ onClose }: { onClose: () => void }) {
           total: l.prixUnitaire * l.quantite,
           brand: l.produit.brand,
           reference: l.produit.reference,
-          lensDetails: index === 0 ? [
+          lensDetails: index === 0 && (l.produit.productType === 'lens' || l.produit.nomProduit.toLowerCase().includes('verre')) ? [
             {
               eye: 'OD' as const,
               sphere: mesures.od.sphere,
@@ -81,16 +90,18 @@ export default function QuickSaleWizard({ onClose }: { onClose: () => void }) {
         totalHT: totalTTC / 1.2,
         totalTVA: totalTTC - (totalTTC / 1.2),
         totalTTC: totalTTC,
-        totalPaid: paiement.mode === "complet" ? totalTTC : (paiement.montantPaye || 0),
+        montantPaye: effectivePaid,
+        resteAPayer: reste,
         paymentMethod: 'ESPECES' as const,
         notes: `${paiement.remarques} ${mesures.remarques}`.trim(),
-        status: (paiement.mode === "complet" || (paiement.montantPaye || 0) >= totalTTC) ? "PAYE" : "PARTIEL" as any
+        status: saleStatus
       };
 
       const result = await createSale(saleData);
       
       if (result) {
-        setDone(true);
+        setCompletedSaleId(result.id);
+        setSuccessModalOpen(true);
         toast({ title: "✅ Enregistré", description: "La vente a été effectuée avec succès." });
       }
     } catch (e: any) {
@@ -105,44 +116,17 @@ export default function QuickSaleWizard({ onClose }: { onClose: () => void }) {
     }
   };
 
-  if (done) return (
-    <div className="wizard-overlay flex items-center justify-center p-4">
-       <motion.div 
-         initial={{ scale: 0.9, opacity: 0 }}
-         animate={{ scale: 1, opacity: 1 }}
-         className="wizard-modal max-w-md w-full p-8 md:p-12 flex flex-col items-center text-center space-y-6 bg-white rounded-3xl shadow-2xl"
-       >
-          <div className="h-24 w-24 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 shadow-inner">
-             <motion.svg 
-               initial={{ pathLength: 0 }}
-               animate={{ pathLength: 1 }}
-               className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-             >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-             </motion.svg>
-          </div>
-          <div className="space-y-2">
-             <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Vente réussie !</h2>
-             <p className="text-slate-500 font-medium italic">L'opération a été enregistrée et le stock a été mis à jour.</p>
-             <div className="inline-block px-4 py-2 bg-blue-50 text-blue-700 rounded-full font-bold text-sm mt-2">
-                Facture N°: #S-{Math.floor(Math.random() * 9000) + 1000}
-             </div>
-          </div>
-          <div className="w-full h-px bg-slate-100" />
-          <div className="space-y-1">
-             <p className="text-slate-500 text-sm">Client : <strong className="text-slate-900">{client?.nom}</strong></p>
-             <p className="text-slate-500 text-sm">Total : <strong className="text-blue-600 font-extrabold">{totalTTC.toFixed(2)} MAD</strong></p>
-          </div>
-          <div className="flex gap-3 w-full">
-             <button className="flex-1 bg-slate-100 text-slate-700 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all border border-slate-200" onClick={onClose}>Fermer</button>
-             <button className="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-extrabold hover:bg-blue-700 transition-all shadow-lg shadow-blue-100">🖨️ Imprimer</button>
-          </div>
-       </motion.div>
-    </div>
-  );
-
   return (
     <div className="wizard-overlay flex items-center justify-center p-2 md:p-4">
+      {/* Modal de Succès */}
+      {completedSaleId && (
+        <SaleSuccessModal 
+          isOpen={successModalOpen}
+          onClose={onClose}
+          saleId={completedSaleId.toString()}
+        />
+      )}
+
       <div className="wizard-modal flex flex-col w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden min-h-[600px] max-h-[90vh]">
         {/* Header */}
         <div className="flex justify-between items-center p-6 bg-white border-b border-slate-50">

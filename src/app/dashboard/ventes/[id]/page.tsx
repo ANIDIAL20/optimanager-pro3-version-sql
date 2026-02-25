@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { InvoiceActions } from '@/components/invoices/invoice-actions';
-import { ArrowLeft, User, Phone, Building2, Receipt, RotateCcw, CreditCard, Wallet } from 'lucide-react';
+import { ArrowLeft, User, Phone, Building2, Receipt, RotateCcw, CreditCard, Wallet, Printer, Glasses } from 'lucide-react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -186,7 +186,17 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
 
                 <div className="flex gap-2">
                     {client && shopSettings && (
-                        <InvoiceActions sale={sale} client={client} shopSettings={shopSettings} />
+                        <>
+                            <InvoiceActions sale={sale} client={client} shopSettings={shopSettings} />
+                            <Button variant="outline" className="gap-2" onClick={() => window.open(`/print/facture/${sale.id}`, "_blank")}>
+                                <Printer className="h-4 w-4" />
+                                Imprimer Reçu
+                            </Button>
+                            <Button variant="outline" className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50" onClick={() => window.open(`/dashboard/lens-orders/${sale.id}/print`, "_blank")}>
+                                <Glasses className="h-4 w-4" />
+                                Bon de Labo
+                            </Button>
+                        </>
                     )}
                     <Button variant="outline" className="gap-2 text-orange-600 border-orange-200 hover:text-orange-700 hover:bg-orange-50" onClick={() => setShowReturnDialog(true)}>
                         <RotateCcw className="h-4 w-4" />

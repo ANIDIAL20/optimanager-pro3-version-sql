@@ -374,39 +374,66 @@ export async function getClientUsageStats(uid: string) {
         }
     };
 
-    // Robust count fetcher with retry logic
-    const fetchCount = async (table: any, name: string) => {
+    // Map of tables for counting
+    const tableMap: Record<string, any> = {
+        products,
+        clients,
+        suppliers
+    };
+
+    // List available query keys to debug
+    const queryKeys = Object.keys(db.query || {});
+    console.log(`📡 [DB] Available query keys: ${queryKeys.join(', ')}`);
+
+    // Robust count fetcher using select with explicit casting for multi-tenant isolation
+    const fetchCount = async (tableName: string) => {
         let attempts = 0;
         const maxAttempts = 2;
+        const targetTable = tableMap[tableName];
+
+        if (!targetTable) {
+            console.error(`❌ [DB ERROR] Table mapping for ${tableName} not found`);
+            return 0;
+        }
 
         while (attempts < maxAttempts) {
             try {
-                // Using explicit SQL count for better compatibility
-                const res = await db.select({ 
-                    value: sql<number>`count(*)` 
-                })
-                .from(table)
-                .where(eq(table.userId, trimmedId));
+                // Use sql template with explicit casting for user_id to handle potential UUID/TEXT mismatch
+                // This is the most compatible way across different Postgres schema versions
+                const res = await db.select({ value: count() })
+                    .from(targetTable)
+                    .where(sql`${targetTable.userId}::text = ${trimmedId}`);
                 
-                return Number(res[0]?.value || 0);
+                const val = Number(res[0]?.value || 0);
+                console.log(`✅ [DB SUCCESS] ${tableName} count: ${val}`);
+                return val;
             } catch (e: any) {
                 attempts++;
-                if (attempts >= maxAttempts) {
-                    console.error(`❌ [DB ERROR] ${name} count failed after ${attempts} attempts:`, e.message);
-                    return 0;
+                console.error(`❌ [DB ATTEMPT ${attempts}] ${tableName} count failed: ${e.message}`);
+                
+                // Fallback attempt without casting if the casting itself caused an error
+                if (attempts === 1) {
+                    try {
+                        const resFallback = await db.select({ value: count() })
+                            .from(targetTable)
+                            .where(eq(targetTable.userId, trimmedId));
+                        return Number(resFallback[0]?.value || 0);
+                    } catch (innerE) {
+                        // Ignore fallback error, continue to next attempt cycle
+                    }
                 }
-                const waitTime = attempts * 500;
-                console.warn(`🔄 Retrying ${name} count in ${waitTime}ms... (${attempts}/${maxAttempts})`);
-                await new Promise(resolve => setTimeout(resolve, waitTime));
+
+                if (attempts >= maxAttempts) return 0;
+                await new Promise(resolve => setTimeout(resolve, attempts * 500));
             }
         }
         return 0;
     };
 
     const [pCount, cCount, sCount, user] = await Promise.all([
-      fetchCount(products, 'products'),
-      fetchCount(clients, 'clients'),
-      fetchCount(suppliers, 'suppliers'),
+      fetchCount('products'),
+      fetchCount('clients'),
+      fetchCount('suppliers'),
       fetchUserLimits()
     ]);
 

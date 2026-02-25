@@ -16,7 +16,7 @@ import { redis } from '@/lib/cache/redis';
 export interface LensOrderInput {
   clientId: number;
   prescriptionId?: number | null;
-  supplierId: number; // Add this
+  supplierId?: string | null;
   orderType: 'progressive' | 'bifocal' | 'unifocal' | 'contact';
   lensType: string;
   treatment?: string | null;
@@ -89,6 +89,7 @@ export interface LensOrder {
   estimatedBuyingPrice: string | null;
   finalBuyingPrice: string | null;
   supplierInvoiceRef: string | null;
+  deliveryNoteRef: string | null;
   estimatedMargin: string | null;
   finalMargin: string | null;
   
@@ -225,18 +226,12 @@ export const getClientLensOrders = secureAction(async (userId, user, clientId: s
  */
 export const createLensOrder = secureAction(async (userId, user, rawInput: LensOrderInput) => {
   try {
-    // 1. Validate & Coerce Data with Zod
-    // Note: Zod parser will return 'any' if not typed, but we know it matches LensOrderInput shape mostly
     const input: any = LensOrderSchema.parse(rawInput);
     
-    // Ensure numeric fields are safe
     if (isNaN(input.sellingPrice)) input.sellingPrice = 0;
     if (isNaN(input.estimatedBuyingPrice)) input.estimatedBuyingPrice = 0;
 
-    // 2. Perform Atomic Transaction
     const result = await db.transaction(async (tx: any) => {
-        // ... (transaction code unchanged) ...
-        // Verify client ownership
         const clientExists = await tx.query.clients.findFirst({
             where: and(eq(clients.id, input.clientId), eq(clients.userId, userId)),
             columns: { id: true }
@@ -246,59 +241,69 @@ export const createLensOrder = secureAction(async (userId, user, rawInput: LensO
             throw new Error('Client introuvable');
         }
 
-        let supplierId = null;
+        let supplierId = input.supplierId || null;
         let supplierOrderId = null;
+        let supplierName = input.supplierName || 'A commander';
 
-        if (input.supplierName) {
+        if (supplierId) {
+            const supplier = await tx.query.suppliers.findFirst({
+                where: and(eq(suppliers.id, supplierId), eq(suppliers.userId, userId))
+            });
+            if (supplier) {
+                supplierName = supplier.name;
+            }
+        } else if (input.supplierName) {
             const supplier = await tx.query.suppliers.findFirst({
                 where: and(eq(suppliers.name, input.supplierName), eq(suppliers.userId, userId))
             });
-            supplierId = supplier?.id;
-
-            if (supplierId) {
-                const items = [];
-                if (input.sphereR || input.cylindreR || input.axeR) {
-                    items.push({ 
-                        side: 'OD', 
-                        type: input.lensType,
-                        sphere: input.sphereR,
-                        cylindre: input.cylindreR,
-                        axe: input.axeR,
-                        addition: input.additionR,
-                        hauteur: input.hauteurR,
-                        ecartPupillaire: input.ecartPupillaireR,
-                        diameter: input.diameterR
-                    });
-                }
-                if (input.sphereL || input.cylindreL || input.axeL) {
-                    items.push({ 
-                        side: 'OG', 
-                        type: input.lensType,
-                        sphere: input.sphereL,
-                        cylindre: input.cylindreL,
-                        axe: input.axeL,
-                        addition: input.additionL,
-                        hauteur: input.hauteurL,
-                        ecartPupillaire: input.ecartPupillaireL,
-                        diameter: input.diameterL
-                    });
-                }
-
-                const [so] = await tx.insert(supplierOrders).values({
-                    userId,
-                    supplierId,
-                    fournisseur: input.supplierName,
-                    dateCommande: new Date(),
-                    statut: 'EN_COURS',
-                    deliveryStatus: 'PENDING',
-                    orderReference: `LENS-${input.clientId}-${Date.now().toString().slice(-4)}`,
-                    items: items,
-                    montantTotal: '0',
-                    createdAt: new Date()
-                }).returning();
-                
-                supplierOrderId = so.id;
+            if (supplier) {
+                supplierId = supplier.id;
             }
+        }
+
+        if (supplierId) {
+            const items = [];
+            if (input.sphereR || input.cylindreR || input.axeR) {
+                items.push({ 
+                    side: 'OD', 
+                    type: input.lensType,
+                    sphere: input.sphereR,
+                    cylindre: input.cylindreR,
+                    axe: input.axeR,
+                    addition: input.additionR,
+                    hauteur: input.hauteurR,
+                    ecartPupillaire: input.ecartPupillaireR,
+                    diameter: input.diameterR
+                });
+            }
+            if (input.sphereL || input.cylindreL || input.axeL) {
+                items.push({ 
+                    side: 'OG', 
+                    type: input.lensType,
+                    sphere: input.sphereL,
+                    cylindre: input.cylindreL,
+                    axe: input.axeL,
+                    addition: input.additionL,
+                    hauteur: input.hauteurL,
+                    ecartPupillaire: input.ecartPupillaireL,
+                    diameter: input.diameterL
+                });
+            }
+
+            const [so] = await tx.insert(supplierOrders).values({
+                userId,
+                supplierId,
+                fournisseur: supplierName,
+                dateCommande: new Date(),
+                statut: 'EN_COURS',
+                deliveryStatus: 'PENDING',
+                orderReference: `LENS-${input.clientId}-${Date.now().toString().slice(-4)}`,
+                items: items,
+                montantTotal: '0',
+                createdAt: new Date()
+            }).returning();
+            
+            supplierOrderId = so.id;
         }
 
         const [created] = await tx.insert(lensOrders)
@@ -308,7 +313,7 @@ export const createLensOrder = secureAction(async (userId, user, rawInput: LensO
                 orderType: input.orderType,
                 lensType: input.lensType,
                 treatment: input.treatment || null,
-                supplierName: input.supplierName,
+                supplierName: supplierName,
                 
                 sphereR: input.sphereR?.toString() || null,
                 cylindreR: input.cylindreR?.toString() || null,
@@ -341,11 +346,10 @@ export const createLensOrder = secureAction(async (userId, user, rawInput: LensO
         return created;
     });
     
-    // 3. Log Success with Action Tracking Context
     await logSuccess(userId, 'CREATE', 'lens_orders', result.id.toString(), {
         clientId: input.clientId,
         orderType: input.orderType,
-        supplier: input.supplierName,
+        supplier: result.supplierName,
         price: input.sellingPrice
     });
 
@@ -361,10 +365,9 @@ export const createLensOrder = secureAction(async (userId, user, rawInput: LensO
   } catch (error: any) {
     console.error("❌ Lens Order Creation Failed:", error);
     await logFailure(userId, 'CREATE', 'lens_orders', error.message);
-    const friendlyMsg = getFriendlyErrorMessage(error);
     return { 
       success: false, 
-      error: friendlyMsg 
+      error: getFriendlyErrorMessage(error)
     };
   }
 });
@@ -390,6 +393,7 @@ export const updateLensOrder = secureAction(
       if (input.orderType) updateData.orderType = input.orderType;
       if (input.lensType) updateData.lensType = input.lensType;
       if (input.treatment !== undefined) updateData.treatment = input.treatment;
+      if (input.supplierId) updateData.supplierId = input.supplierId;
       if (input.supplierName) updateData.supplierName = input.supplierName;
       
       // Explicit Prescription Update
@@ -460,7 +464,7 @@ export const getPendingLensOrders = secureAction(async (userId, user, clientId: 
       ),
       orderBy: [desc(lensOrders.createdAt)],
       with: {
-        prescription: true
+        prescriptionLegacy: true
       }
     });
 
@@ -850,3 +854,83 @@ export const getAdvanceForProduct = secureAction(async (userId, user, clientId: 
         return { success: false, error: error.message };
     }
 });
+
+/**
+ * Get all lens orders for a specific supplier
+ */
+export const getSupplierLensOrders = secureAction(async (userId, user, supplierId: string) => {
+    try {
+        const results = await db.query.lensOrders.findMany({
+            where: eq(lensOrders.supplierId, supplierId),
+            orderBy: [desc(lensOrders.createdAt)],
+            with: {
+                client: {
+                    columns: {
+                        id: true,
+                        fullName: true,
+                        phone: true
+                    }
+                },
+                prescriptionLegacy: true
+            }
+        });
+
+        return { success: true, data: results };
+    } catch (error: any) {
+        console.error("💥 Error fetching supplier lens orders:", error?.message || error);
+        return { success: false, error: error?.message || "Erreur de chargement" };
+    }
+});
+
+/**
+ * Bulk receive lens orders with a delivery note (BL)
+ */
+export const bulkReceiveLensOrders = secureAction(async (userId, user, selectedOrderIds: string[], blNumber: string) => {
+    try {
+        if (!selectedOrderIds || selectedOrderIds.length === 0) {
+            return { success: false, error: "Aucune commande sélectionnée" };
+        }
+
+        const orderIdNums = selectedOrderIds.map(id => parseInt(id)).filter(id => !isNaN(id));
+        
+        if (orderIdNums.length === 0) {
+            return { success: false, error: "IDs de commande invalides" };
+        }
+
+        const now = new Date();
+
+        await db.update(lensOrders)
+            .set({ 
+                status: 'received', 
+                deliveryNoteRef: blNumber, 
+                receivedDate: now,
+                updatedAt: now 
+            })
+            .where(and(
+                eq(lensOrders.userId, userId),
+                inArray(lensOrders.id, orderIdNums)
+            ));
+
+        // Revalidate essential paths
+        revalidatePath('/dashboard/lens-orders');
+        revalidatePath('/dashboard/suppliers');
+        
+        await logSuccess(userId, 'UPDATE', 'lens_orders', 'bulk_receive', { 
+            count: orderIdNums.length, 
+            blNumber 
+        });
+
+        return { 
+            success: true, 
+            message: `${orderIdNums.length} commandes marquées comme 'Reçues' (BL: ${blNumber}).` 
+        };
+    } catch (error: any) {
+        console.error("💥 Error in bulkReceiveLensOrders:", error);
+        await logFailure(userId, 'UPDATE', 'lens_orders', error.message, 'bulk_receive');
+        return { 
+            success: false, 
+            error: "Erreur lors de la réception groupée: " + (error?.message || "Erreur inconnue") 
+        };
+    }
+});
+

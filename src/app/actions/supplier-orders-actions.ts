@@ -8,7 +8,7 @@
 
 import { db } from '@/db';
 import { supplierOrders, suppliers, supplierPayments, supplierOrderPayments, products, stockMovements, supplierOrderItems, reminders } from '@/db/schema';
-import { eq, and, desc, sql, sum } from 'drizzle-orm';
+import { eq, and, desc, sql, sum, count } from 'drizzle-orm';
 import { getSuppliersList as getSuppliers } from '@/app/actions/supplier-actions';
 import type { Supplier } from '@/lib/types';
 import { secureAction } from '@/lib/secure-action';
@@ -38,48 +38,35 @@ export type SupplierOrder = {
  */
 export const getSupplierOrders = secureAction(async (userId, user, supplierId?: string) => {
     try {
-        let query;
-        if (supplierId) {
-            query = sql`
-                SELECT * FROM supplier_orders 
-                WHERE "user_id" = ${userId} AND "supplier_id" = ${supplierId}
-                ORDER BY "created_at" DESC
-            `;
-        } else {
-            query = sql`
-                SELECT * FROM supplier_orders 
-                WHERE "user_id" = ${userId}
-                ORDER BY "created_at" DESC
-            `;
-        }
-
-        const queryResult = await db.execute(query);
-        
-        // Extract rows from the result (Neon returns { rows: [...] })
-        const results = Array.isArray(queryResult) ? queryResult : (queryResult.rows || []);
+        const results = await db.query.supplierOrders.findMany({
+            where: supplierId 
+                ? and(eq(supplierOrders.userId, userId), eq(supplierOrders.supplierId, supplierId))
+                : eq(supplierOrders.userId, userId),
+            orderBy: [desc(supplierOrders.createdAt)],
+        });
 
         // Map to UI friendly format
         const formattedOrders: SupplierOrder[] = results.map((order: any) => ({
             id: order.id,
-            userId: order.user_id,
-            supplierId: order.supplier_id,
-            orderReference: order.order_reference,
-            orderNumber: order.order_number,
+            userId: order.userId,
+            supplierId: order.supplierId,
+            orderReference: order.orderReference,
+            orderNumber: order.orderNumber,
             supplierName: order.fournisseur,
-            supplierPhone: order.supplier_phone,
-            totalAmount: Number(order.montant_total),
-            amountPaid: Number(order.montant_paye),
-            resteAPayer: Number(order.reste_a_payer),
+            supplierPhone: order.supplierPhone,
+            totalAmount: Number(order.montantTotal),
+            amountPaid: Number(order.montantPaye),
+            resteAPayer: Number(order.resteAPayer),
             status: order.statut,
-            deliveryStatus: order.delivery_status,
-            createdAt: order.created_at,
+            deliveryStatus: order.deliveryStatus,
+            createdAt: order.createdAt,
             items: order.items
         }));
 
         return { success: true, orders: formattedOrders };
     } catch (error: any) {
-        console.error("💥 Error fetching supplier orders (SQL):", error);
-        return { success: false, error: "Erreur chargement commandes", orders: [] };
+        console.error("💥 Error fetching supplier orders (Drizzle):", error);
+        return { success: false, error: "Erreur chargement commandes: " + error.message, orders: [] };
     }
 });
 
@@ -104,10 +91,12 @@ export const createSupplierOrder = secureAction(async (userId, user, data: any) 
         }
         return await db.transaction(async (tx: any) => {
             // 2. Generate Order Number
-            const countResult = await tx.execute(sql`SELECT count(*) as count FROM supplier_orders WHERE "user_id" = ${userId}`);
-            const count = Number(countResult[0].count);
+            const countResult = await tx.select({ value: count() })
+                .from(supplierOrders)
+                .where(eq(supplierOrders.userId, userId));
+            const orderCount = countResult[0]?.value || 0;
             const year = new Date().getFullYear();
-            const orderNumber = `BC-${year}-${(count + 1).toString().padStart(4, '0')}`;
+            const orderNumber = `BC-${year}-${(orderCount + 1).toString().padStart(4, '0')}`;
 
             // 3. Calculate Due Date
             let dueDate: string | null = null;
@@ -414,28 +403,27 @@ export const createSupplierPayment = secureAction(async (userId, user, data: { s
  */
 export const getSupplierStats = secureAction(async (userId, user, supplierId: string) => {
     try {
-        const queryResult = await db.execute(sql`
-            SELECT 
-                COALESCE(SUM(montant_total), 0) as total_ordered,
-                COALESCE(SUM(montant_paye), 0) as total_paid,
-                COALESCE(SUM(reste_a_payer), 0) as total_debt,
-                COUNT(*) as orders_count
-            FROM supplier_orders
-            WHERE "user_id" = ${userId} AND "supplier_id" = ${supplierId}
-        `);
+        const result = await db.select({
+            total_ordered: sum(supplierOrders.montantTotal),
+            total_paid: sum(supplierOrders.montantPaye),
+            total_debt: sum(supplierOrders.resteAPayer),
+            orders_count: count()
+        })
+        .from(supplierOrders)
+        .where(and(eq(supplierOrders.userId, userId), eq(supplierOrders.supplierId, supplierId)));
         
-        const statsRows = Array.isArray(queryResult) ? queryResult : (queryResult.rows || []);
-        const stats = statsRows[0];
+        const stats = result[0] || { total_ordered: 0, total_paid: 0, total_debt: 0, orders_count: 0 };
         
-        if (stats) {
-            stats.total_ordered = Number(stats.total_ordered || 0);
-            stats.total_paid = Number(stats.total_paid || 0);
-            stats.total_debt = Number(stats.total_debt || 0);
-            stats.orders_count = Number(stats.orders_count || 0);
-        }
+        // Convert strings to numbers
+        Object.keys(stats).forEach(key => {
+            if (key !== 'orders_count') {
+                stats[key as keyof typeof stats] = Number(stats[key as keyof typeof stats] || 0) as any;
+            }
+        });
 
         return { success: true, stats };
     } catch (error: any) {
+        console.error("💥 Error fetching supplier stats:", error);
         return { success: false, error: error.message };
     }
 });
@@ -445,23 +433,24 @@ export const getSupplierStats = secureAction(async (userId, user, supplierId: st
  */
 export const getGlobalSupplierBalances = secureAction(async (userId) => {
     try {
-        const results = await db.execute(sql`
-            SELECT 
-                COALESCE(SUM(montant_total), 0) as total_purchases,
-                COALESCE(SUM(reste_a_payer), 0) as total_debt
-            FROM supplier_orders
-            WHERE "user_id" = ${userId}
-        `);
-        const rows = Array.isArray(results) ? results : (results.rows || []);
-        const data = rows[0];
+        const result = await db.select({
+            total_purchases: sum(supplierOrders.montantTotal),
+            total_debt: sum(supplierOrders.resteAPayer)
+        })
+        .from(supplierOrders)
+        .where(eq(supplierOrders.userId, userId));
+        
+        const data = result[0] || { total_purchases: 0, total_debt: 0 };
 
-        if (data) {
-            data.total_purchases = Number(data.total_purchases || 0);
-            data.total_debt = Number(data.total_debt || 0);
-        }
-
-        return { success: true, data };
+        return { 
+            success: true, 
+            data: {
+                total_purchases: Number(data.total_purchases || 0),
+                total_debt: Number(data.total_debt || 0)
+            }
+        };
     } catch (error: any) {
+        console.error("💥 Error fetching global supplier balances:", error);
         return { success: false, error: error.message };
     }
 });

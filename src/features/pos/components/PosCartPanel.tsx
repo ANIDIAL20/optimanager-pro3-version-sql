@@ -41,7 +41,7 @@ import { usePosCartStore } from '@/features/pos/store/use-pos-cart-store';
 interface PosCartPanelProps {
   alreadyPaid?: number;
   reservationIds?: number[];
-  onSuccess?: () => void;
+  onSuccess?: (saleId?: string) => void;
   className?: string;
 }
 
@@ -200,9 +200,7 @@ export function PosCartPanel({ alreadyPaid = 0, reservationIds = [], onSuccess, 
           clearCart();
 
           if (onSuccess) {
-            onSuccess();
-          } else {
-            router.push(`/dashboard/ventes/${saleId}`);
+            onSuccess(saleId);
           }
           return;
         }
