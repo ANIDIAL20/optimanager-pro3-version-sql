@@ -27,7 +27,7 @@ export async function autoExpireFrameReservations() {
   
   logger.info('Found expired reservations', {
     count: expiredReservations.length,
-    reservationIds: expiredReservations.map(r => r.id),
+    reservationIds: expiredReservations.map((r: { id: number }) => r.id),
   });
   
   let successCount = 0;

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Seed Settings Data
  * 

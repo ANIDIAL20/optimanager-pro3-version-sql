@@ -1,8 +1,7 @@
 import { db } from '@/db';
-import { sql, eq, and, ne } from 'drizzle-orm';
-import { suppliers } from '@/db/schema/suppliers.schema';
+import { sql, eq, and } from 'drizzle-orm';
+import { suppliers, supplierPayments } from '@/db/schema/suppliers.schema';
 import { supplierOrders } from '@/db/schema/supplier-orders.schema';
-import { supplierPayments } from '@/db/schema/supplier-payments.schema';
 import { products } from '@/db/schema'; 
 
 /**
@@ -99,7 +98,7 @@ export async function validateOrderData(data: {
     .from(supplierOrders)
     .where(and(
       eq(supplierOrders.supplierId, data.supplierId),
-      eq(supplierOrders.reference, data.reference)
+      eq(supplierOrders.orderReference, data.reference)
     ))
     .limit(1);
   const existingOrder = ordersResult[0];

@@ -79,7 +79,7 @@ export const getContactLensPrescriptions = secureAction(async (userId, user, cli
 
     const results = await query;
 
-    const mapped: ContactLensPrescription[] = results.map(p => ({
+    const mapped: ContactLensPrescription[] = results.map((p: typeof results[0]) => ({
       id: p.id.toString(),
       clientId: p.clientId?.toString() || '',
       clientName: p.client?.fullName,

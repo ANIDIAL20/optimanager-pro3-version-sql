@@ -2,6 +2,7 @@
 
 import { db } from '@/db';
 import { expenses as expensesTable } from '@/db/schema/expenses';
+// no cash sessions
 import {
     Expense,
     ExpenseFormData,
@@ -65,6 +66,8 @@ export const createExpense = secureAction(async (userId, user, data: ExpenseForm
             createdAt: new Date(),
             updatedAt: new Date(),
         }).returning();
+
+        // 🔥 CAISSE INTEGRATION REMOVED
 
         console.log(`✅ Charge créée avec ID: ${newExpense.id}`);
         await logSuccess(userId, 'CREATE', 'expenses', newExpense.id.toString(), { title: data.title });

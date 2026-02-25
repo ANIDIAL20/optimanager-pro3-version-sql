@@ -1,0 +1,59 @@
+﻿src/app/api/auth/[...nextauth]/route.ts(10,25): error TS2345: Argument of type 'Request' is not assignable to parameter of type 'NextRequest'.
+  Type 'Request' is missing the following properties from type 'NextRequest': cookies, nextUrl, page, ua
+src/app/api/auth/[...nextauth]/route.ts(15,26): error TS2345: Argument of type 'Request' is not assignable to parameter of type 'NextRequest'.
+  Type 'Request' is missing the following properties from type 'NextRequest': cookies, nextUrl, page, ua
+src/app/dashboard/clients/[id]/_components/lens-order-form.tsx(106,28): error TS2554: Expected 0 arguments, but got 1.
+src/app/dashboard/clients/[id]/_components/pos/cart.tsx(48,42): error TS2304: Cannot find name 'Badge'.
+src/app/dashboard/clients/[id]/_components/pos/cart.tsx(51,43): error TS2304: Cannot find name 'Badge'.
+src/app/dashboard/clients/[id]/_components/prescription-form.tsx(112,31): error TS2304: Cannot find name 'PrescriptionData'.
+src/app/dashboard/clients/[id]/_components/purchase-history-table.tsx(97,20): error TS2552: Cannot find name 'format'. Did you mean 'FormData'?
+src/app/dashboard/clients/[id]/_components/purchase-history-table.tsx(138,45): error TS2552: Cannot find name 'getSales'. Did you mean 'setSales'?
+src/app/dashboard/clients/[id]/_components/purchase-history-table.tsx(141,33): error TS7006: Parameter 's' implicitly has an 'any' type.
+src/app/dashboard/clients/[id]/_components/purchase-history-table.tsx(142,32): error TS7006: Parameter 'a' implicitly has an 'any' type.
+src/app/dashboard/clients/[id]/_components/purchase-history-table.tsx(142,35): error TS7006: Parameter 'b' implicitly has an 'any' type.
+src/app/dashboard/clients/[id]/_components/purchase-history-table.tsx(258,46): error TS2367: This comparison appears to be unintentional because the types '"impaye" | "partiel" | "paye" | "en_attente" | "devis" | "pay├®e" | "impay├®e" | undefined' and '"recue"' have no overlap.
+src/app/dashboard/clients/[id]/_components/purchase-history-table.tsx(258,73): error TS2367: This comparison appears to be unintentional because the types '"impaye" | "partiel" | "paye" | "en_attente" | "devis" | "pay├®e" | "impay├®e" | undefined' and '"livree"' have no overlap.
+src/app/dashboard/clients/[id]/_components/purchase-history-table.tsx(272,46): error TS2367: This comparison appears to be unintentional because the types '"impaye" | "partiel" | "paye" | "en_attente" | "devis" | "pay├®e" | "impay├®e" | undefined' and '"recue"' have no overlap.
+src/app/dashboard/clients/[id]/_components/receive-order-dialog.tsx(153,92): error TS2551: Property 'client' does not exist on type 'LensOrder'. Did you mean 'clientId'?
+src/app/dashboard/clients/[id]/_components/scanner-dialog.tsx(49,9): error TS2739: Type 'PrescriptionData' is missing the following properties from type 'PrescriptionData': od, og
+src/app/dashboard/ventes/[id]/page.tsx(94,54): error TS2339: Property 'telephone1' does not exist on type 'Client'.
+src/app/dashboard/ventes/[id]/page.tsx(100,55): error TS2339: Property 'assuranceId' does not exist on type 'Client'.
+src/app/dashboard/ventes/[id]/page.tsx(182,108): error TS2339: Property 'createdAt' does not exist on type 'Sale'.
+src/app/dashboard/ventes/[id]/page.tsx(247,121): error TS2551: Property 'clientName' does not exist on type 'Sale'. Did you mean 'clientNom'?
+src/app/dashboard/ventes/[id]/page.tsx(253,104): error TS2339: Property 'clientPhone' does not exist on type 'Sale'.
+src/app/dashboard/ventes/[id]/page.tsx(295,97): error TS2339: Property 'brand' does not exist on type 'SaleItem'.
+src/app/dashboard/ventes/[id]/page.tsx(296,97): error TS2551: Property 'model' does not exist on type 'SaleItem'. Did you mean 'modele'?
+src/app/produits/[id]/edit/page.tsx(31,26): error TS2322: Type 'import("C:/Users/ousay/optimanager-pro3/src/app/actions/products-actions").Product' is not assignable to type 'import("C:/Users/ousay/optimanager-pro3/src/lib/types").Product'.
+  Types of property 'type' are incompatible.
+    Type 'string | undefined' is not assignable to type '"MONTURE" | "VERRE" | "ACCESSOIRE" | "AUTRE" | undefined'.
+      Type 'string' is not assignable to type '"MONTURE" | "VERRE" | "ACCESSOIRE" | "AUTRE" | undefined'.
+src/app/produits/[id]/page.tsx(36,56): error TS2339: Property 'name' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(97,55): error TS2339: Property 'name' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(98,59): error TS2339: Property 'salePrice' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(99,59): error TS2339: Property 'purchasePrice' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(100,60): error TS2339: Property 'stock' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(101,50): error TS2339: Property 'minStock' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(101,70): error TS2339: Property 'seuilAlerte' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(102,49): error TS2339: Property 'brand' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(253,47): error TS2339: Property 'createdAt' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(253,68): error TS2339: Property 'createdAt' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(253,105): error TS2339: Property 'createdAt' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(259,47): error TS2339: Property 'updatedAt' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(259,68): error TS2339: Property 'updatedAt' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(259,105): error TS2339: Property 'updatedAt' does not exist on type 'Product'.
+src/app/suppliers/[id]/edit/page.tsx(55,23): error TS2739: Type '{ nomCommercial: any; email: any; telephone: any; adresse: any; ville: any; delaiPaiement: any; modePaiement: any; banque: any; typeProduits: any; id: any; userId: any; name: any; phone: any; address: any; ... 17 more ...; defaultTaxMode: any; }' is missing the following properties from type 'Supplier': statut, dateCreation, dateModification
+src/app/suppliers/[id]/statement.tsx(42,59): error TS2345: Argument of type 'string | number' is not assignable to parameter of type 'number'.
+  Type 'string' is not assignable to type 'number'.
+src/app/suppliers/[id]/statement.tsx(51,26): error TS7006: Parameter 'o' implicitly has an 'any' type.
+src/app/suppliers/[id]/statement.tsx(59,28): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/app/suppliers/[id]/statement.tsx(90,17): error TS2348: Value of type 'typeof jsPDF' is not callable. Did you mean to include 'new'?
+src/app/suppliers/[id]/statement.tsx(114,25): error TS2339: Property 'summary' does not exist on type '{ orders: any; payments: any; totalOrders: any; totalPaid: any; totalBalance: number; }'.
+src/app/suppliers/[id]/statement.tsx(155,30): error TS2322: Type '"success" | "destructive"' is not assignable to type '"default" | "destructive" | "secondary" | "outline" | null | undefined'.
+  Type '"success"' is not assignable to type '"default" | "destructive" | "secondary" | "outline" | null | undefined'.
+src/components/dashboard/lens-orders/update-status-dialog.tsx(51,66): error TS2322: Type 'string' is not assignable to type '"pending" | "received" | "ordered" | "delivered" | undefined'.
+src/components/expenses/expense-form.tsx(58,9): error TS2322: Type '{ attachments: string[]; type: "water" | "electricity" | "rent" | "other"; title: string; notes?: string | null | undefined; status: "pending" | "paid" | "overdue"; category: "maintenance" | "rent" | "other" | "utilities"; ... 6 more ...; period?: string | ... 1 more ... | undefined; }' is not assignable to type 'AsyncDefaultValues<{ type: "water" | "electricity" | "rent" | "other"; title: string; status: "pending" | "paid" | "overdue"; category: "maintenance" | "rent" | "other" | "utilities"; amount: number; ... 5 more ...; attachments?: string[] | undefined; }> | { ...; } | undefined'.
+  Type '{ attachments: string[]; type: "water" | "electricity" | "rent" | "other"; title: string; notes?: string | null | undefined; status: "pending" | "paid" | "overdue"; category: "maintenance" | "rent" | "other" | "utilities"; ... 6 more ...; period?: string | ... 1 more ... | undefined; }' is not assignable to type '{ type?: "water" | "electricity" | "rent" | "other" | undefined; title?: string | undefined; status?: "pending" | "paid" | "overdue" | undefined; category?: "maintenance" | "rent" | "other" | "utilities" | undefined; ... 6 more ...; attachments?: (string | undefined)[] | undefined; }'.
+    Types of property 'notes' are incompatible.
+      Type 'string | null | undefined' is not assignable to type 'string | undefined'.
+        Type 'null' is not assignable to type 'string | undefined'.
+src/components/expenses/expense-form.tsx(67,13): error TS1117: An object literal cannot have multiple properties with the same name.

@@ -88,7 +88,7 @@ export const getDevis = secureAction(async (userId, user) => {
 
         console.log(`✅ Fetched ${resultRows.length} devis rows`);
 
-        const mapped: Devis[] = resultRows.map((d) => ({
+        const mapped: Devis[] = resultRows.map((d: typeof resultRows[0]) => ({
             id: d.id.toString(),
             clientId: d.clientId?.toString(),
             clientName: d.clientName,

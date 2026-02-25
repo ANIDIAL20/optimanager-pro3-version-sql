@@ -171,7 +171,7 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
       fontSize: 64,
       color: secondaryColor || '#94a3b8',
       opacity: 0.15,
-      transform: [{ rotate: '-20deg' }],
+      transform: 'rotate(-20deg)',
     },
     pageNumber: {
       position: 'absolute',
@@ -183,34 +183,31 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
   }), [mappedFontFamily, mappedFontSize, primaryColor, secondaryColor, logoPosition, r, radiusCorners]);
 
   const docTitles: Record<DocType, Record<'fr' | 'ar' | 'en', string>> = {
-    facture: { fr: 'FACTURE', ar: 'فاتورة', en: 'INVOICE' },
-    devis: { fr: 'DEVIS', ar: 'عرض سعر', en: 'QUOTE' },
-    bc: { fr: 'BON DE COMMANDE', ar: 'طلب شراء', en: 'PURCHASE ORDER' },
-    bl: { fr: 'BON DE LIVRAISON', ar: 'وصل توصيل', en: 'DELIVERY NOTE' },
+    facture: { fr: 'FACTURE', ar: 'FACTURE', en: 'INVOICE' },
+    devis: { fr: 'DEVIS', ar: 'DEVIS', en: 'QUOTE' },
+    bc: { fr: 'BON DE COMMANDE', ar: 'BON DE COMMANDE', en: 'PURCHASE ORDER' },
+    bl: { fr: 'BON DE LIVRAISON', ar: 'BON DE LIVRAISON', en: 'DELIVERY NOTE' },
   };
 
   const titleLang = (language === 'ar' || language === 'en') ? language : 'fr';
   const docTitle = docTitles[docType][titleLang];
 
   const amountInWordsLabel = useMemo(() => {
-    if (titleLang === 'ar') {
+    if (titleLang === 'ar' || titleLang === 'fr') {
       return docType === 'devis'
-        ? 'حُدِّد هذا العرض بمبلغ:'
-        : 'حُدِّدت هذه الوثيقة بمبلغ:';
+        ? 'Arrêté le présent devis à la somme de :'
+        : docType === 'facture'
+          ? 'Arrêté la présente facture à la somme de :'
+          : docType === 'bc'
+            ? 'Arrêté le présent bon de commande à la somme de :'
+            : 'Arrêté le présent bon de livraison à la somme de :';
     }
     if (titleLang === 'en') {
       return docType === 'devis'
         ? 'This quote is drawn up for the total amount of:'
         : 'This document is drawn up for the total amount of:';
     }
-    // fr
-    return docType === 'devis'
-      ? 'Arrêté le présent devis à la somme de :'
-      : docType === 'facture'
-        ? 'Arrêté la présente facture à la somme de :'
-        : docType === 'bc'
-          ? 'Arrêté le présent bon de commande à la somme de :'
-          : 'Arrêté le présent bon de livraison à la somme de :';
+    return '';
   }, [docType, titleLang]);
 
   const formatDateSafe = (date: any) => {
@@ -355,10 +352,10 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
         {showSignature && (
           <View style={styles.signatureSection}>
             <View style={styles.signatureBox}>
-              <Text style={styles.label}>{titleLang === 'ar' ? 'التوقيع' : (titleLang === 'en' ? 'Signature' : 'Signature')}</Text>
+              <Text style={styles.label}>Signature</Text>
             </View>
             <View style={styles.signatureBox}>
-              <Text style={styles.label}>{titleLang === 'ar' ? 'الختم' : (titleLang === 'en' ? 'Stamp' : 'Cachet')}</Text>
+              <Text style={styles.label}>Cachet</Text>
             </View>
           </View>
         )}

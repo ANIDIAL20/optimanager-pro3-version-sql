@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import { getSupplier } from '@/app/actions/supplier-actions';

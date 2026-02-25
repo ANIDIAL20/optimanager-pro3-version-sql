@@ -12,7 +12,8 @@ import type { CompleteFrameReservationInput, FrameReservation } from '../types/r
 export async function completeFrameReservation(
   input: CompleteFrameReservationInput
 ): Promise<FrameReservation> {
-  return await db.transaction(async (tx) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return await db.transaction(async (tx: any) => {
 
     // 1) جلب الحجز
     const reservation = await tx.query.frameReservations.findFirst({

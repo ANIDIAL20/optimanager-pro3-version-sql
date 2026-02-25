@@ -36,7 +36,7 @@ export const columns: ColumnDef<SupplierOrderUI>[] = [
             // or checking items if possible. 
             // Ideally this comes from a 'type' field in the order.
             // Using a heuristic or default:
-            return <Box className="h-4 w-4 text-purple-500" title="Montures / Stock" />;
+            return <Box className="h-4 w-4 text-purple-500" />;
         },
     },
     {

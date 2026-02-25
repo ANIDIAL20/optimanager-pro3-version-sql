@@ -78,7 +78,7 @@ export function PrescriptionForm({
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Confidence Warning */}
         {confidence && ['medium', 'low'].includes(confidence) && (
-          <Alert variant="warning">
+          <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
               {confidence === 'low'
@@ -111,7 +111,7 @@ export function PrescriptionForm({
                 <Info className="h-4 w-4 text-muted-foreground" />
               </TooltipTrigger>
               <TooltipContent>
-                <p>Right Eye / العين اليمنى</p>
+                <p>Oculus Dexter (Œil Droit)</p>
               </TooltipContent>
             </Tooltip>
           </div>
@@ -264,7 +264,7 @@ export function PrescriptionForm({
                 <Info className="h-4 w-4 text-muted-foreground" />
               </TooltipTrigger>
               <TooltipContent>
-                <p>Left Eye / العين اليسرى</p>
+                <p>Oculus Sinister (Œil Gauche)</p>
               </TooltipContent>
             </Tooltip>
           </div>

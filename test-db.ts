@@ -1,14 +1,25 @@
+import dotenv from 'dotenv';
+import path from 'path';
+dotenv.config({ path: path.join(process.cwd(), '.env.local') });
+
 import { db } from './src/db';
-import { auditLogs } from './src/db/schema';
-import { count } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 
 async function test() {
-    try {
-        const result = await db.select({ value: count() }).from(auditLogs);
-        console.log('✅ audit_logs table exists. Count:', result[0].value);
-    } catch (e) {
-        console.error('❌ audit_logs table error:', e.message);
-    }
+  try {
+    const result = await db.execute(sql`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'sales';
+    `);
+    console.log('COLUMNS_START');
+    console.log(JSON.stringify(result.rows.map((r: any) => r.column_name)));
+    console.log('COLUMNS_END');
+    process.exit(0);
+  } catch (e) {
+    console.error('Error testing DB:', e);
+    process.exit(1);
+  }
 }
 
 test();

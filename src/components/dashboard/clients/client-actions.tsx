@@ -44,24 +44,13 @@ export function ClientActions({ client }: ClientActionsProps) {
             const result = await deleteClient(client.id);
             
             if (result.success) {
-                toast({
-                    title: 'Client supprimé',
-                    description: result.message,
-                });
+                toast.success('Client supprimé');
                 router.push('/dashboard/clients');
             } else {
-                toast({
-                    title: 'Erreur',
-                    description: result.error,
-                    variant: 'destructive',
-                });
+                toast.error(result.error || 'Erreur lors de la suppression');
             }
         } catch (error) {
-            toast({
-                title: 'Erreur',
-                description: 'Une erreur est survenue lors de la suppression.',
-                variant: 'destructive',
-            });
+            toast.error('Une erreur est survenue lors de la suppression.');
         } finally {
             setIsLoading(false);
             setOpen(false);
@@ -115,7 +104,6 @@ export function ClientActions({ client }: ClientActionsProps) {
             {/* @ts-ignore */}
             <AlertDialog modal={false} open={open} onOpenChange={setOpen}>
                 <AlertDialogContent
-                    onInteractOutside={(e) => e.preventDefault()}
                     onOpenAutoFocus={(e) => e.preventDefault()}
                     onCloseAutoFocus={(e) => {
                         e.preventDefault();

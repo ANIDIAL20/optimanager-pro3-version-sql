@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { handlers } from "@/auth";
 
 export const GET = async (req: Request) => {

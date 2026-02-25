@@ -43,7 +43,7 @@ export default function Step1Client({ selectedClient, onNext }: Props) {
 
   const handleQuickAdd = async () => {
     if (!newClient.fullName || !newClient.phone) {
-      toast({ title: "خطأ", description: "يجب إدخال الاسم والهاتف", variant: "destructive" });
+      toast({ title: "Erreur", description: "Le nom et le téléphone sont obligatoires", variant: "destructive" });
       return;
     }
 
@@ -60,7 +60,7 @@ export default function Step1Client({ selectedClient, onNext }: Props) {
         onNext(mapped);
       }
     } catch (e: any) {
-      toast({ title: "خطأ", description: e.message, variant: "destructive" });
+      toast({ title: "Erreur", description: e.message, variant: "destructive" });
     } finally {
       setIsCreating(false);
     }
@@ -73,14 +73,14 @@ export default function Step1Client({ selectedClient, onNext }: Props) {
            <Button variant="ghost" size="icon" onClick={() => setIsAddingNew(false)}>
               <ArrowLeft className="h-4 w-4" />
            </Button>
-           <h3 className="font-bold text-lg">عميل جديد (سريع)</h3>
+           <h3 className="font-bold text-lg">Nouveau client (Rapide)</h3>
         </div>
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-700">الاسم الكامل *</label>
+            <label className="text-sm font-bold text-slate-700">Nom complet *</label>
             <Input
-              placeholder="مثال: محمد العلوي"
+              placeholder="Ex: Mohammed Alawi"
               value={newClient.fullName}
               onChange={(e) => setNewClient({ ...newClient, fullName: e.target.value })}
               className="h-12 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
@@ -89,7 +89,7 @@ export default function Step1Client({ selectedClient, onNext }: Props) {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-700">رقم الهاتف *</label>
+            <label className="text-sm font-bold text-slate-700">Numéro de téléphone *</label>
             <Input
               placeholder="0612345678"
               value={newClient.phone}
@@ -100,7 +100,7 @@ export default function Step1Client({ selectedClient, onNext }: Props) {
 
           <div className="bg-blue-50 p-4 rounded-xl text-blue-700 text-xs flex gap-3 items-start">
              <div className="bg-blue-200 p-1 rounded-full text-blue-700">ℹ️</div>
-             <p>يمكنك إكمال باقي المعلومات (العنوان، البريد الإلكتروني، إلخ) لاحقاً من ملف العميل.</p>
+             <p>Vous pourrez compléter les autres informations (adresse, email, etc.) plus tard dans le profil du client.</p>
           </div>
 
           <Button 
@@ -108,7 +108,7 @@ export default function Step1Client({ selectedClient, onNext }: Props) {
             onClick={handleQuickAdd}
             disabled={isCreating}
           >
-            {isCreating ? "جاري الحفظ..." : "حفظ والمتابعة"}
+            {isCreating ? "Enregistrement..." : "Enregistrer et continuer"}
           </Button>
         </div>
       </div>
@@ -120,7 +120,7 @@ export default function Step1Client({ selectedClient, onNext }: Props) {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
         <Input
-          placeholder="ابحث عن عميل..."
+          placeholder="Rechercher un client..."
           className="pl-10 h-11 border-slate-200 rounded-xl"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -129,15 +129,15 @@ export default function Step1Client({ selectedClient, onNext }: Props) {
 
       <div className="max-h-[350px] overflow-y-auto border border-slate-100 rounded-2xl divide-y bg-white shadow-inner">
         {loading ? (
-          <div className="p-8 text-center text-slate-400">جاري التحميل...</div>
+          <div className="p-8 text-center text-slate-400">Chargement...</div>
         ) : filtered.length === 0 ? (
           <div className="p-12 text-center space-y-4">
              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-slate-300">
                 <Search className="h-8 w-8" />
              </div>
-             <p className="text-slate-500">لا يوجد عميل بهذا الاسم.</p>
+             <p className="text-slate-500">Aucun client trouvé avec ce nom.</p>
              <Button variant="outline" className="gap-2 rounded-xl border-blue-200 text-blue-600 hover:bg-blue-50" onClick={() => setIsAddingNew(true)}>
-                <UserPlus className="h-4 w-4" /> إضافة عميل جديد
+                <UserPlus className="h-4 w-4" /> Ajouter un nouveau client
              </Button>
           </div>
         ) : (
@@ -155,7 +155,7 @@ export default function Step1Client({ selectedClient, onNext }: Props) {
                 </div>
                 <div>
                   <p className="font-bold text-slate-900">{c.nom}</p>
-                  <p className="text-xs text-slate-500">{c.phone || "بدون هاتف"}</p>
+                  <p className="text-xs text-slate-500">{c.phone || "Sans téléphone"}</p>
                 </div>
               </div>
               {selectedClient?.id === c.id && <CheckCircle2 className="h-5 w-5 text-blue-600" />}
@@ -169,7 +169,7 @@ export default function Step1Client({ selectedClient, onNext }: Props) {
         className="w-full h-12 text-blue-600 hover:text-blue-700 hover:bg-blue-50 gap-2 border-2 border-dashed border-blue-100 rounded-xl"
         onClick={() => setIsAddingNew(true)}
       >
-        <UserPlus className="h-4 w-4" /> عميل جديد (سريع)
+        <UserPlus className="h-4 w-4" /> Nouveau client (Rapide)
       </Button>
     </div>
   );

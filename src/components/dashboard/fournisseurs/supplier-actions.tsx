@@ -137,7 +137,6 @@ export function SupplierActions({ supplierId, supplierName, variant = "dropdown"
                 {/* @ts-ignore - modal prop exists in Radix but sometimes missing in TS types */}
                 <AlertDialog modal={false} open={open} onOpenChange={setOpen}>
                     <AlertDialogContent 
-                        onInteractOutside={(e) => e.preventDefault()}
                         onOpenAutoFocus={(e) => e.preventDefault()}
                         onCloseAutoFocus={(e) => {
                             e.preventDefault();
@@ -211,7 +210,6 @@ export function SupplierActions({ supplierId, supplierName, variant = "dropdown"
             {/* @ts-ignore */}
             <AlertDialog modal={false} open={open} onOpenChange={setOpen}>
                 <AlertDialogContent 
-                    onInteractOutside={(e) => e.preventDefault()}
                     onOpenAutoFocus={(e) => e.preventDefault()}
                     onCloseAutoFocus={(e) => {
                         e.preventDefault();

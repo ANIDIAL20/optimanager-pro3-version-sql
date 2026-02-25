@@ -1,0 +1,138 @@
+﻿src/app/actions/products-actions-secure-example.ts(26,50): error TS2345: Argument of type 'undefined' is not assignable to parameter of type 'string | number'.
+src/app/actions/products-actions-secure-example.ts(185,50): error TS2345: Argument of type 'undefined' is not assignable to parameter of type 'string | number'.
+src/app/actions/products-actions-secure-example.ts(205,36): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/app/actions/products-actions-secure-example.ts(207,48): error TS2345: Argument of type 'undefined' is not assignable to parameter of type 'string | number'.
+src/app/actions/products-actions.ts(158,22): error TS2769: No overload matches this call.
+  Overload 1 of 3, '(left: PgColumn<{ name: "product_type"; tableName: "products"; dataType: "string"; columnType: "PgText"; data: "frame" | "lens" | "contact_lens" | "accessory" | "service"; driverParam: string; notNull: false; ... 7 more ...; generated: undefined; }, {}, { ...; }>, right: SQLWrapper | ... 4 more ... | "service"): SQL<...>', gave the following error.
+    Argument of type 'string' is not assignable to parameter of type 'SQLWrapper | "frame" | "lens" | "contact_lens" | "accessory" | "service"'.
+  Overload 2 of 3, '(left: Aliased<string>, right: string | SQLWrapper): SQL<unknown>', gave the following error.
+    Argument of type 'PgColumn<{ name: "product_type"; tableName: "products"; dataType: "string"; columnType: "PgText"; data: "frame" | "lens" | "contact_lens" | "accessory" | "service"; driverParam: string; notNull: false; ... 7 more ...; generated: undefined; }, {}, { ...; }>' is not assignable to parameter of type 'Aliased<string>'.
+      Type 'PgColumn<{ name: "product_type"; tableName: "products"; dataType: "string"; columnType: "PgText"; data: "frame" | "lens" | "contact_lens" | "accessory" | "service"; driverParam: string; notNull: false; ... 7 more ...; generated: undefined; }, {}, { ...; }>' is missing the following properties from type 'Aliased<string>': sql, fieldAlias
+  Overload 3 of 3, '(left: never, right: unknown): SQL<unknown>', gave the following error.
+    Argument of type 'PgColumn<{ name: "product_type"; tableName: "products"; dataType: "string"; columnType: "PgText"; data: "frame" | "lens" | "contact_lens" | "accessory" | "service"; driverParam: string; notNull: false; ... 7 more ...; generated: undefined; }, {}, { ...; }>' is not assignable to parameter of type 'never'.
+src/app/actions/products-actions.ts(411,9): error TS2554: Expected 2 arguments, but got 1.
+src/app/actions/products-actions.ts(514,9): error TS2554: Expected 2 arguments, but got 1.
+src/app/actions/products-actions.ts(584,17): error TS2554: Expected 2 arguments, but got 1.
+src/app/actions/products-actions.ts(628,9): error TS2554: Expected 2 arguments, but got 1.
+src/app/actions/products-actions.ts(903,9): error TS2554: Expected 2 arguments, but got 1.
+src/app/actions/reminder-actions.ts(126,34): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/app/actions/reminder-actions.ts(127,33): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/app/actions/reminder-actions.ts(128,32): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/app/actions/reminder-actions.ts(228,5): error TS2554: Expected 2 arguments, but got 1.
+src/app/actions/reminder-actions.ts(244,5): error TS2554: Expected 2 arguments, but got 1.
+src/app/actions/reminder-actions.ts(275,3): error TS2554: Expected 2 arguments, but got 1.
+src/app/actions/reminder-actions.ts(305,3): error TS2554: Expected 2 arguments, but got 1.
+src/app/actions/reminder-actions.ts(331,3): error TS2554: Expected 2 arguments, but got 1.
+src/app/actions/reminder-actions.ts(363,3): error TS2554: Expected 2 arguments, but got 1.
+src/app/actions/reminder-actions.ts(562,5): error TS2554: Expected 2 arguments, but got 1.
+src/app/actions/seed-settings-actions.ts(340,51): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/actions/seed-settings-actions.ts(379,51): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/actions/seed-settings-actions.ts(420,51): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/actions/seed-settings-actions.ts(457,51): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/actions/seed-settings-actions.ts(494,51): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/actions/seed-settings-actions.ts(531,51): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/actions/seed-settings-actions.ts(568,51): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/actions/seed-settings-actions.ts(605,51): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/actions/supplier-actions.ts(243,5): error TS2554: Expected 2 arguments, but got 1.
+src/app/actions/supplier-actions.ts(303,5): error TS2554: Expected 2 arguments, but got 1.
+src/app/actions/supplier-actions.ts(328,3): error TS2554: Expected 2 arguments, but got 1.
+src/app/actions/supplier-statement.ts(43,36): error TS7006: Parameter 'o' implicitly has an 'any' type.
+src/app/actions/supplier-statement.ts(51,40): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/app/actions/supplier-statement.ts(57,43): error TS7006: Parameter 's' implicitly has an 'any' type.
+src/app/actions/supplier-statement.ts(57,46): error TS7006: Parameter 'o' implicitly has an 'any' type.
+src/app/actions/supplier-statement.ts(58,45): error TS7006: Parameter 's' implicitly has an 'any' type.
+src/app/actions/supplier-statement.ts(58,48): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/app/admin/ClientActions.tsx(56,45): error TS2339: Property 'message' does not exist on type '{ success: boolean; error: string; }'.
+src/app/admin/ClientActions.tsx(83,45): error TS2339: Property 'message' does not exist on type '{ success: boolean; error: string; }'.
+src/app/admin/components/PlanManagementModal.tsx(66,29): error TS2339: Property 'paymentMode' does not exist on type 'ClientData'.
+src/app/admin/components/PlanManagementModal.tsx(67,30): error TS2339: Property 'billingCycle' does not exist on type 'ClientData'.
+src/app/admin/components/PlanManagementModal.tsx(68,36): error TS2339: Property 'agreedPrice' does not exist on type 'ClientData'.
+src/app/admin/components/PlanManagementModal.tsx(69,38): error TS2339: Property 'trainingPrice' does not exist on type 'ClientData'.
+src/app/admin/components/PlanManagementModal.tsx(70,35): error TS2339: Property 'setupPrice' does not exist on type 'ClientData'.
+src/app/admin/components/PlanManagementModal.tsx(71,35): error TS2339: Property 'amountPaid' does not exist on type 'ClientData'.
+src/app/admin/components/PlanManagementModal.tsx(72,35): error TS2339: Property 'installmentsCount' does not exist on type 'ClientData'.
+src/app/admin/components/PlanManagementModal.tsx(81,42): error TS2339: Property 'lastPaymentDate' does not exist on type 'ClientData'.
+src/app/admin/components/PlanManagementModal.tsx(82,42): error TS2339: Property 'nextPaymentDate' does not exist on type 'ClientData'.
+src/app/admin/components/PlanManagementModal.tsx(83,37): error TS2339: Property 'subscriptionExpiry' does not exist on type 'ClientData'.
+src/app/api/auth/[...nextauth]/route.ts(10,25): error TS2345: Argument of type 'Request' is not assignable to parameter of type 'NextRequest'.
+  Type 'Request' is missing the following properties from type 'NextRequest': cookies, nextUrl, page, ua
+src/app/api/auth/[...nextauth]/route.ts(15,26): error TS2345: Argument of type 'Request' is not assignable to parameter of type 'NextRequest'.
+  Type 'Request' is missing the following properties from type 'NextRequest': cookies, nextUrl, page, ua
+src/app/api/cron/reminders/route.ts(34,23): error TS2339: Property 'notificationDate' does not exist on type 'PgTableWithColumns<{ name: "reminders"; schema: undefined; columns: { id: PgColumn<{ name: "id"; tableName: "reminders"; dataType: "number"; columnType: "PgSerial"; data: number; driverParam: number; notNull: true; hasDefault: true; ... 6 more ...; generated: undefined; }, {}, {}>; ... 11 more ...; updatedAt: PgColu...'.
+src/app/api/cron/reminders/route.ts(36,22): error TS2339: Property 'notificationSent' does not exist on type 'PgTableWithColumns<{ name: "reminders"; schema: undefined; columns: { id: PgColumn<{ name: "id"; tableName: "reminders"; dataType: "number"; columnType: "PgSerial"; data: number; driverParam: number; notNull: true; hasDefault: true; ... 6 more ...; generated: undefined; }, {}, {}>; ... 11 more ...; updatedAt: PgColu...'.
+src/app/api/cron/reminders/route.ts(38,17): error TS7006: Parameter 'reminders' implicitly has an 'any' type.
+src/app/api/cron/reminders/route.ts(38,30): error TS7031: Binding element 'asc' implicitly has an 'any' type.
+src/app/api/cron/reminders/route.ts(80,23): error TS2339: Property 'targetDate' does not exist on type 'PgTableWithColumns<{ name: "reminders"; schema: undefined; columns: { id: PgColumn<{ name: "id"; tableName: "reminders"; dataType: "number"; columnType: "PgSerial"; data: number; driverParam: number; notNull: true; hasDefault: true; ... 6 more ...; generated: undefined; }, {}, {}>; ... 11 more ...; updatedAt: PgColu...'.
+src/app/api/cron/reminders/route.ts(82,22): error TS2339: Property 'isRecurring' does not exist on type 'PgTableWithColumns<{ name: "reminders"; schema: undefined; columns: { id: PgColumn<{ name: "id"; tableName: "reminders"; dataType: "number"; columnType: "PgSerial"; data: number; driverParam: number; notNull: true; hasDefault: true; ... 6 more ...; generated: undefined; }, {}, {}>; ... 11 more ...; updatedAt: PgColu...'.
+src/app/api/preview/pdf/route.ts(35,29): error TS2345: Argument of type 'ReadableStream' is not assignable to parameter of type 'BodyInit | null | undefined'.
+src/app/dashboard/clients/[id]/_components/lens-order-form.tsx(106,28): error TS2554: Expected 0 arguments, but got 1.
+src/app/dashboard/clients/[id]/_components/pos/cart.tsx(48,42): error TS2304: Cannot find name 'Badge'.
+src/app/dashboard/clients/[id]/_components/pos/cart.tsx(51,43): error TS2304: Cannot find name 'Badge'.
+src/app/dashboard/clients/[id]/_components/prescription-form.tsx(112,31): error TS2304: Cannot find name 'PrescriptionData'.
+src/app/dashboard/clients/[id]/_components/purchase-history-table.tsx(97,20): error TS2552: Cannot find name 'format'. Did you mean 'FormData'?
+src/app/dashboard/clients/[id]/_components/purchase-history-table.tsx(138,45): error TS2552: Cannot find name 'getSales'. Did you mean 'setSales'?
+src/app/dashboard/clients/[id]/_components/purchase-history-table.tsx(141,33): error TS7006: Parameter 's' implicitly has an 'any' type.
+src/app/dashboard/clients/[id]/_components/purchase-history-table.tsx(142,32): error TS7006: Parameter 'a' implicitly has an 'any' type.
+src/app/dashboard/clients/[id]/_components/purchase-history-table.tsx(142,35): error TS7006: Parameter 'b' implicitly has an 'any' type.
+src/app/dashboard/clients/[id]/_components/purchase-history-table.tsx(258,46): error TS2367: This comparison appears to be unintentional because the types '"impaye" | "partiel" | "paye" | "en_attente" | "devis" | "pay├®e" | "impay├®e" | undefined' and '"recue"' have no overlap.
+src/app/dashboard/clients/[id]/_components/purchase-history-table.tsx(258,73): error TS2367: This comparison appears to be unintentional because the types '"impaye" | "partiel" | "paye" | "en_attente" | "devis" | "pay├®e" | "impay├®e" | undefined' and '"livree"' have no overlap.
+src/app/dashboard/clients/[id]/_components/purchase-history-table.tsx(272,46): error TS2367: This comparison appears to be unintentional because the types '"impaye" | "partiel" | "paye" | "en_attente" | "devis" | "pay├®e" | "impay├®e" | undefined' and '"recue"' have no overlap.
+src/app/dashboard/clients/[id]/_components/receive-order-dialog.tsx(153,92): error TS2551: Property 'client' does not exist on type 'LensOrder'. Did you mean 'clientId'?
+src/app/dashboard/clients/[id]/_components/scanner-dialog.tsx(49,9): error TS2739: Type 'PrescriptionData' is missing the following properties from type 'PrescriptionData': od, og
+src/app/dashboard/test-invoice/page.tsx(3,38): error TS2307: Cannot find module '@/app/actions/document-actions' or its corresponding type declarations.
+src/app/dashboard/ventes/[id]/page.tsx(94,54): error TS2339: Property 'telephone1' does not exist on type 'Client'.
+src/app/dashboard/ventes/[id]/page.tsx(100,55): error TS2339: Property 'assuranceId' does not exist on type 'Client'.
+src/app/dashboard/ventes/[id]/page.tsx(182,108): error TS2339: Property 'createdAt' does not exist on type 'Sale'.
+src/app/dashboard/ventes/[id]/page.tsx(247,121): error TS2551: Property 'clientName' does not exist on type 'Sale'. Did you mean 'clientNom'?
+src/app/dashboard/ventes/[id]/page.tsx(253,104): error TS2339: Property 'clientPhone' does not exist on type 'Sale'.
+src/app/dashboard/ventes/[id]/page.tsx(295,97): error TS2339: Property 'brand' does not exist on type 'SaleItem'.
+src/app/dashboard/ventes/[id]/page.tsx(296,97): error TS2551: Property 'model' does not exist on type 'SaleItem'. Did you mean 'modele'?
+src/app/produits/[id]/edit/page.tsx(31,26): error TS2322: Type 'import("C:/Users/ousay/optimanager-pro3/src/app/actions/products-actions").Product' is not assignable to type 'import("C:/Users/ousay/optimanager-pro3/src/lib/types").Product'.
+  Types of property 'type' are incompatible.
+    Type 'string | undefined' is not assignable to type '"MONTURE" | "VERRE" | "ACCESSOIRE" | "AUTRE" | undefined'.
+      Type 'string' is not assignable to type '"MONTURE" | "VERRE" | "ACCESSOIRE" | "AUTRE" | undefined'.
+src/app/produits/[id]/page.tsx(36,56): error TS2339: Property 'name' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(97,55): error TS2339: Property 'name' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(98,59): error TS2339: Property 'salePrice' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(99,59): error TS2339: Property 'purchasePrice' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(100,60): error TS2339: Property 'stock' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(101,50): error TS2339: Property 'minStock' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(101,70): error TS2339: Property 'seuilAlerte' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(102,49): error TS2339: Property 'brand' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(253,47): error TS2339: Property 'createdAt' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(253,68): error TS2339: Property 'createdAt' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(253,105): error TS2339: Property 'createdAt' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(259,47): error TS2339: Property 'updatedAt' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(259,68): error TS2339: Property 'updatedAt' does not exist on type 'Product'.
+src/app/produits/[id]/page.tsx(259,105): error TS2339: Property 'updatedAt' does not exist on type 'Product'.
+src/app/produits/_components/product-form.tsx(318,18): error TS2322: Type '{ reference: string; matiereId: string | undefined; couleurId: string | undefined; categorie: string | undefined; marque: string | undefined; fournisseur: string | undefined; hasTva: boolean | undefined; ... 11 more ...; isAchatTTC?: boolean | undefined; }[]' is not assignable to type 'ProductInput[]'.
+  Type '{ reference: string; matiereId: string | undefined; couleurId: string | undefined; categorie: string | undefined; marque: string | undefined; fournisseur: string | undefined; hasTva: boolean | undefined; ... 11 more ...; isAchatTTC?: boolean | undefined; }' is not assignable to type 'ProductInput'.
+    Types of property 'marqueId' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+src/app/suppliers/[id]/edit/page.tsx(55,23): error TS2739: Type '{ nomCommercial: any; email: any; telephone: any; adresse: any; ville: any; delaiPaiement: any; modePaiement: any; banque: any; typeProduits: any; id: any; userId: any; name: any; phone: any; address: any; ... 17 more ...; defaultTaxMode: any; }' is missing the following properties from type 'Supplier': statut, dateCreation, dateModification
+src/app/suppliers/[id]/statement.tsx(42,59): error TS2345: Argument of type 'string | number' is not assignable to parameter of type 'number'.
+  Type 'string' is not assignable to type 'number'.
+src/app/suppliers/[id]/statement.tsx(51,26): error TS7006: Parameter 'o' implicitly has an 'any' type.
+src/app/suppliers/[id]/statement.tsx(59,28): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/app/suppliers/[id]/statement.tsx(90,17): error TS2348: Value of type 'typeof jsPDF' is not callable. Did you mean to include 'new'?
+src/app/suppliers/[id]/statement.tsx(114,25): error TS2339: Property 'summary' does not exist on type '{ orders: any; payments: any; totalOrders: any; totalPaid: any; totalBalance: number; }'.
+src/app/suppliers/[id]/statement.tsx(155,30): error TS2322: Type '"success" | "destructive"' is not assignable to type '"default" | "secondary" | "destructive" | "outline" | null | undefined'.
+  Type '"success"' is not assignable to type '"default" | "secondary" | "destructive" | "outline" | null | undefined'.
+src/components/admin/CreateClientForm.tsx(25,49): error TS2686: 'React' refers to a UMD global, but the current file is a module. Consider adding an import instead.
+src/components/admin/CreateClientForm.tsx(25,74): error TS2686: 'React' refers to a UMD global, but the current file is a module. Consider adding an import instead.
+src/components/admin/CreateClientForm.tsx(25,96): error TS2686: 'React' refers to a UMD global, but the current file is a module. Consider adding an import instead.
+src/components/admin/GlobalBannerManager.tsx(24,44): error TS2339: Property 'message' does not exist on type '{ success: boolean; error: string; }'.
+src/components/clients/receive-lens-modal.tsx(91,50): error TS7006: Parameter 'supplier' implicitly has an 'any' type.
+src/components/clients/receive-lens-modal.tsx(126,17): error TS2353: Object literal may only specify known properties, and 'supplierId' does not exist in type '{ blRef: string; finalCost: number; }'.
+src/components/dashboard/clients/client-header.tsx(65,38): error TS2367: This comparison appears to be unintentional because the types '"Homme" | "Femme"' and '"M"' have no overlap.
+src/components/dashboard/clients/client-header.tsx(93,29): error TS2339: Property 'hasProgressiveLenses' does not exist on type 'Client'.
+src/components/dashboard/clients/client-header.tsx(98,29): error TS2339: Property 'wearContactLenses' does not exist on type 'Client'.
+src/components/dashboard/devis/columns.tsx(48,66): error TS2322: Type '{ className: string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/dashboard/lens-orders/update-status-dialog.tsx(51,66): error TS2322: Type 'string' is not assignable to type '"pending" | "delivered" | "received" | "ordered" | undefined'.
+src/components/dashboard/supplier-orders/columns.tsx(39,61): error TS2322: Type '{ className: string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/expenses/expense-form.tsx(64,13): error TS2322: Type 'string[] | null' is not assignable to type '(string | undefined)[] | undefined'.
+  Type 'null' is not assignable to type '(string | undefined)[] | undefined'.
+src/features/notifications/components/notifications-wrapper.tsx(39,17): error TS2339: Property 'success' does not exist on type '() => Promise<ActionResponse<{ success: boolean; }>>'.

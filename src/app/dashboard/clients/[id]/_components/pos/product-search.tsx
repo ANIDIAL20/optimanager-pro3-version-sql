@@ -7,11 +7,12 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { Product } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { BrandLoader } from '@/components/ui/loader-brand';
 import { ClientLensesSection } from '@/components/pos/client-lenses-section';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { getCategoryIcon } from '@/lib/category-icons';
 
 // Simple debounce hook implementation if not available
 function useDebounceValue<T>(value: T, delay: number): T {
@@ -46,7 +47,6 @@ export function ProductSearch({ onProductSelect, clientLenses = [], onLensSelect
     
     // Filters
     const [activeTab, setActiveTab] = React.useState('Tout');
-    const [selectedCategory, setSelectedCategory] = React.useState<string>('all');
 
     // Load initial data (Categories & First Batch of Products)
     React.useEffect(() => {
@@ -83,12 +83,10 @@ export function ProductSearch({ onProductSelect, clientLenses = [], onLensSelect
              // We'll simplisticly set isLoading(true) to show feedback
              setIsLoading(true);
              try {
-                 const typeFilter = activeTab === 'Tout' ? undefined : (activeTab === 'Montures' ? 'MONTURE' : (activeTab === 'Accessoires' ? 'ACCESSOIRE' : activeTab));
-                 
                  const res = await searchProducts({
                      query: debouncedSearchTerm,
-                     type: typeFilter,
-                     category: selectedCategory === 'all' ? undefined : selectedCategory,
+                     type: undefined,
+                     category: activeTab === 'Tout' ? undefined : (activeTab !== 'Verres' ? activeTab : undefined),
                      limit: 50 
                  });
 
@@ -108,51 +106,48 @@ export function ProductSearch({ onProductSelect, clientLenses = [], onLensSelect
 
         doSearch();
 
-    }, [debouncedSearchTerm, activeTab, selectedCategory]);
+    }, [debouncedSearchTerm, activeTab]);
 
     return (
         <div className="flex flex-col gap-4 h-full">
-            {/* Tabs */}
-            <div className="flex gap-1 border-b pb-2 overflow-x-auto no-scrollbar">
-                <TabButton label="Tout" active={activeTab === 'Tout'} onClick={() => setActiveTab('Tout')} icon={<Package className="h-3 w-3" />} />
-                <TabButton label="Montures" active={activeTab === 'Montures'} onClick={() => setActiveTab('Montures')} icon={<Glasses className="h-3 w-3" />} />
-                <TabButton label="Solaire" active={activeTab === 'SOLAIRE'} onClick={() => setActiveTab('SOLAIRE')} icon={<Sun className="h-3 w-3" />} />
-                <TabButton label="Accessoires" active={activeTab === 'Accessoires'} onClick={() => setActiveTab('Accessoires')} icon={<Shapes className="h-3 w-3" />} />
-                
-                <TabButton 
-                    label="Verres" 
-                    active={activeTab === 'Verres'} 
-                    onClick={() => setActiveTab('Verres')} 
-                    badge={clientLenses.length > 0 ? clientLenses.length : undefined}
-                    badgeVariant="success"
-                    icon={<Eye className="h-3 w-3" />}
-                />
-            </div>
-
             {activeTab !== 'Verres' && (
-                <div className="flex gap-2">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder="Rechercher produit..."
-                            className="pl-8"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </div>
-                    <SearchableSelect
-                        options={[
-                            { label: 'Toutes les catégories', value: 'all' },
-                            ...categories.map(cat => ({ label: cat.name, value: cat.id }))
-                        ]}
-                        value={selectedCategory}
-                        onChange={setSelectedCategory}
-                        placeholder="Catégorie"
-                        searchPlaceholder="Filtre..."
-                        className="w-[160px]"
+                <div className="relative mb-2">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                    <Input
+                        placeholder="Rechercher un produit par nom ou référence..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-12 bg-white h-14 rounded-xl border-slate-200 text-base shadow-sm focus:border-indigo-500 focus:ring-indigo-500 transition-all"
                     />
                 </div>
             )}
+
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <TabsList className="w-full justify-start bg-white border h-auto flex-wrap gap-1 p-1 rounded-xl">
+                    <TabsTrigger value="Tout" className="gap-2">
+                        <Package className="h-4 w-4" />
+                        Tout
+                    </TabsTrigger>
+                    {categories.map((cat) => {
+                        const Icon = getCategoryIcon(cat.name);
+                        return (
+                            <TabsTrigger key={cat.id} value={cat.id} className="gap-2">
+                                <Icon className="h-4 w-4" />
+                                {cat.name}
+                            </TabsTrigger>
+                        );
+                    })}
+                    <TabsTrigger value="Verres" className="gap-2 relative">
+                        <Eye className="h-4 w-4" />
+                        Verres Prêts
+                        {clientLenses.length > 0 && (
+                            <span className="ml-1 bg-green-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold shadow-sm">
+                                {clientLenses.length}
+                            </span>
+                        )}
+                    </TabsTrigger>
+                </TabsList>
+            </Tabs>
 
             <ScrollArea className="flex-1 h-[400px] border rounded-md p-4 bg-slate-50/30">
                 {activeTab === 'Verres' ? (
@@ -235,29 +230,3 @@ export function ProductSearch({ onProductSelect, clientLenses = [], onLensSelect
     );
 }
 
-function TabButton({ label, active, badge, badgeVariant, onClick, icon }: any) {
-    return (
-      <button
-        onClick={onClick}
-        className={cn(
-          'px-3 py-2 relative flex items-center gap-2 text-sm font-medium transition-colors rounded-md',
-          active ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
-        )}
-      >
-        {icon}
-        {label}
-        
-        {/* Badge si disponible */}
-        {badge ? (
-          <span className={cn(
-            'ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none',
-            badgeVariant === 'success' 
-              ? 'bg-green-500 text-white' 
-              : 'bg-indigo-500 text-white'
-          )}>
-            {badge}
-          </span>
-        ) : null}
-      </button>
-    );
-}

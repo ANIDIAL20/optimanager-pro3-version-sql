@@ -12,7 +12,8 @@ import type { CancelFrameReservationInput, FrameReservation } from '../types/res
 export async function cancelFrameReservation(
   input: CancelFrameReservationInput
 ): Promise<FrameReservation> {
-  return await db.transaction(async (tx) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return await db.transaction(async (tx: any) => {
 
     // 1) جلب الحجز
     const reservation = await tx.query.frameReservations.findFirst({

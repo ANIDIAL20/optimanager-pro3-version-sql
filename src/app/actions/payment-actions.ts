@@ -1,14 +1,21 @@
 'use server';
 
 import { db } from '@/db';
-import { clients, clientTransactions } from '@/db/schema';
+import { clients, clientTransactions, lensOrders, reservations } from '@/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
 import { revalidatePath } from 'next/cache';
 
+import { DrizzleTx } from '@/types/db';
+
 /**
  * Enregistre une avance (paiement partiel) reçue lors d'une commande ou réservation
+ * ✅ Met à jour :
+ *   1. clientTransactions (historique)
+ *   2. clients.balance (solde)
+ *   3. lensOrders.amountPaid  (si referenceType === 'LENS_ORDER')
+ *   4. reservations.depositAmount (si referenceType === 'RESERVATION')
  */
 export const recordAdvancePayment = secureAction(async (userId, user, { clientId, amount, notes, referenceId, referenceType }: {
     clientId: number,
@@ -18,9 +25,14 @@ export const recordAdvancePayment = secureAction(async (userId, user, { clientId
     referenceType?: 'LENS_ORDER' | 'RESERVATION'
 }) => {
     try {
-        if (amount <= 0) return { success: true }; // Rien à enregistrer si le montant est 0
+        console.log('🔵 [recordAdvancePayment] CALLED with:', { clientId, amount, referenceId, referenceType, amountType: typeof amount });
 
-        return await db.transaction(async (tx) => {
+        if (amount <= 0) {
+          console.log('🟡 [recordAdvancePayment] amount <= 0, early return (amount:', amount, ')');
+          return { success: true }; // Rien à enregistrer si le montant est 0
+        }
+
+        return await db.transaction(async (tx: DrizzleTx) => {
             // 1. Récupérer le client pour obtenir le solde actuel
             const client = await tx.query.clients.findFirst({
                 where: eq(clients.id, clientId),
@@ -53,6 +65,37 @@ export const recordAdvancePayment = secureAction(async (userId, user, { clientId
                     updatedAt: new Date()
                 })
                 .where(eq(clients.id, clientId));
+
+            // 4. ✅ FIX : Persister l'avance sur la ligne concernée
+            //    (logique supprimée avec le module Caisse — restaurée ici)
+            if (referenceId) {
+                const refIdNum = parseInt(referenceId);
+
+                if (referenceType === 'LENS_ORDER' && !isNaN(refIdNum)) {
+                    console.log('🟢 [recordAdvancePayment] Updating lensOrders.amountPaid:', { refIdNum, amount: amount.toString() });
+                    const updateResult = await tx.update(lensOrders)
+                        .set({
+                            amountPaid: amount.toString(),
+                            updatedAt: new Date(),
+                        })
+                        .where(eq(lensOrders.id, refIdNum))
+                        .returning();
+
+                    console.log('✅ [recordAdvancePayment] lensOrders updated. Returned rows:', updateResult?.length, 'amountPaid stored:', updateResult?.[0]?.amountPaid);
+                }
+
+                if (referenceType === 'RESERVATION' && !isNaN(refIdNum)) {
+                    const updateResult = await tx.update(reservations)
+                        .set({
+                            depositAmount: amount.toString(),
+                            updatedAt: new Date(),
+                        })
+                        .where(eq(reservations.id, refIdNum))
+                        .returning();
+
+                    console.log('✅ Avance saved on reservations:', updateResult);
+                }
+            }
 
             await logSuccess(userId, 'CREATE', 'payments', clientId.toString(), { amount, type: referenceType, referenceId });
 

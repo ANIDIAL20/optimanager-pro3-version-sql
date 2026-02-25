@@ -129,8 +129,7 @@ export function SupplierPaymentDialog({
             <Dialog modal={false} open={open} onOpenChange={onOpenChange}>
             <DialogContent 
                 className="sm:max-w-[425px]"
-                onInteractOutside={(e) => e.preventDefault()}
-                onOpenAutoFocus={(e) => e.preventDefault()}
+            onOpenAutoFocus={(e) => e.preventDefault()}
                 onCloseAutoFocus={(e) => {
                     e.preventDefault();
                     document.body.style.pointerEvents = 'auto';
@@ -180,7 +179,7 @@ export function SupplierPaymentDialog({
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Mode</FormLabel>
-                                        <Select modal={false} onValueChange={field.onChange} value={field.value}>
+                                        <Select onValueChange={field.onChange} value={field.value}>
                                             <FormControl>
                                                 <SelectTrigger className="bg-slate-50 border-slate-200 h-11">
                                                     <SelectValue />

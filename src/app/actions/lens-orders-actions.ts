@@ -4,9 +4,10 @@ import { db } from '@/db';
 import { lensOrders, clients, prescriptionsLegacy as prescriptions, supplierOrders, suppliers, supplierOrderItems, reminders, products } from '@/db/schema';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
-import { eq, and, desc, lt, gt } from 'drizzle-orm';
+import { eq, and, desc, lt, gt, inArray, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { LensOrderSchema } from '@/lib/validations/optical';
+import { redis } from '@/lib/cache/redis';
 
 // ========================================
 // TYPE DEFINITIONS
@@ -101,6 +102,7 @@ export interface LensOrder {
   receivedDate: Date | null;
   deliveredDate: Date | null;
   notes: string | null;
+  amountPaid: string | null; // ✅ Avance versée à la commande
   createdAt: Date | null;
   updatedAt: Date | null;
 }
@@ -141,7 +143,7 @@ export const getLensOrders = secureAction(async (userId, user) => {
     });
     
     // ... mapping code ...
-    const mapped = results.map(order => ({
+    const mapped = results.map((order: typeof results[0]) => ({
       ...order,
       id: order.id,
       totalPrice: order.totalPrice?.toString() || '0',
@@ -186,18 +188,21 @@ export const getClientLensOrders = secureAction(async (userId, user, clientId: s
     });
     
     // ... mapping code ...
-    const mapped = results.map(order => ({
+    const mapped = results.map((order: typeof results[0]) => ({
       ...order,
       id: order.id,
       totalPrice: order.totalPrice?.toString() || '0',
       unitPrice: order.unitPrice?.toString() || '0',
       sellingPrice: order.sellingPrice?.toString() || '0',
+      amountPaid: order.amountPaid?.toString() || '0', // ✅ Avance versée
       orderDate: order.orderDate instanceof Date ? order.orderDate.toISOString() : order.orderDate,
       receivedDate: order.receivedDate instanceof Date ? order.receivedDate.toISOString() : order.receivedDate,
       deliveredDate: order.deliveredDate instanceof Date ? order.deliveredDate.toISOString() : order.deliveredDate,
       createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
       updatedAt: order.updatedAt instanceof Date ? order.updatedAt.toISOString() : order.updatedAt,
     }));
+
+    console.log('🟢 [getClientLensOrders] Sample amountPaid from DB:', mapped.slice(0, 3).map((o: { id: number; amountPaid: string | null }) => ({ id: o.id, amountPaid: o.amountPaid })));
     
     await logSuccess(userId, 'READ', 'lens_orders', `client-${clientId}`, { clientId, count: results.length });
     return { success: true, data: mapped };
@@ -440,25 +445,13 @@ import { isNull } from 'drizzle-orm';
  * Get billable lens orders for a client (pending/ordered/received AND not billed)
  */
 export const getPendingLensOrders = secureAction(async (userId, user, clientId: string) => {
-  console.log('🔍 [START] getPendingLensOrders');
-  console.log('📌 Client ID:', clientId);
-  console.log('👤 User Session ID:', userId);
-
   try {
     const clientIdNum = parseInt(clientId);
     if (isNaN(clientIdNum)) {
-        console.error('❌ Invalid Client ID:', clientId);
         return { success: false, error: 'ID Client invalide' };
     }
 
-    // A. Check for any orders for this client regardless of status (Deep Diagnostic)
-    const allClientOrders = await db.query.lensOrders.findMany({
-        where: and(eq(lensOrders.userId, userId), eq(lensOrders.clientId, clientIdNum))
-    });
-    console.log(`📊 Total orders for client ${clientId} in DB:`, allClientOrders.length);
-    console.log(`📄 Status breakdown:`, allClientOrders.map(o => ({ id: o.id, status: o.status, saleId: o.saleId })));
-
-    // B. Main query: Not yet billed (saleId is NULL)
+    // Commandes non encore facturées (saleId NULL)
     const results = await db.query.lensOrders.findMany({
       where: and(
         eq(lensOrders.userId, userId),
@@ -471,14 +464,6 @@ export const getPendingLensOrders = secureAction(async (userId, user, clientId: 
       }
     });
 
-    console.log(`🔗 ORM pending results:`, results.length, 'orders found');
-    if (results.length > 0) {
-        console.log('✅ Found:', results.map(r => `[ID:${r.id}, Stat:${r.status}]`).join(', '));
-    } else {
-        console.warn('⚠️ No pending orders found for this client.');
-    }
-    
-    console.log('✅ [END] getPendingLensOrders');
     return { success: true, data: results };
 
   } catch (error: any) {
@@ -617,6 +602,12 @@ export const receiveLensOrder = secureAction(async (userId, user, orderId: strin
     revalidatePath('/dashboard/clients');
     revalidatePath(`/dashboard/clients/${result.clientId}`);
     revalidatePath('/dashboard/stock'); 
+
+    try {
+        await redis?.del(`notifications:verres-prets:${userId}`);
+    } catch {
+        // ignore cache errors
+    }
     
     return { 
       success: true, 
@@ -661,6 +652,12 @@ export const deliverLensOrder = secureAction(async (userId, user, orderId: strin
 
     revalidatePath('/dashboard/clients');
     revalidatePath(`/dashboard/clients/${updated.clientId}`);
+
+    try {
+      await redis?.del(`notifications:verres-prets:${userId}`);
+    } catch {
+      // ignore cache errors
+    }
     
     return { 
       success: true, 
@@ -699,6 +696,12 @@ export const deleteLensOrder = secureAction(async (userId, user, orderId: string
 
     revalidatePath('/dashboard/clients');
     revalidatePath(`/dashboard/clients/${deleted.clientId}`);
+
+    try {
+      await redis?.del(`notifications:verres-prets:${userId}`);
+    } catch {
+      // ignore cache errors
+    }
     
     return { 
       success: true, 
@@ -802,6 +805,48 @@ export const getGlobalAvailableLenses = secureAction(async (userId, user) => {
         return { success: true, data: results };
     } catch (error: any) {
         console.error("💥 Error fetching global available lenses:", error);
+        return { success: false, error: error.message };
+    }
+});
+/**
+ * Detect automatic advance for a catalog product (Smart Detection)
+ */
+export const getAdvanceForProduct = secureAction(async (userId, user, clientId: string, productReference: string) => {
+    try {
+        if (!productReference.startsWith('VERRE-')) return { success: true, data: null };
+        
+        const lensOrderIdStr = productReference.replace('VERRE-', '');
+        const lensOrderIdNum = parseInt(lensOrderIdStr);
+        
+        if (isNaN(lensOrderIdNum)) return { success: true, data: null };
+
+        // Chercher UNIQUEMENT dans les orders "reçues" avec une avance > 0
+        const order = await db.query.lensOrders.findFirst({
+            where: and(
+                eq(lensOrders.id, lensOrderIdNum),
+                eq(lensOrders.userId, userId),
+                eq(lensOrders.clientId, parseInt(clientId)),
+                inArray(lensOrders.status, ['received', 'reçue', 'Reçue', 'delivered']), // Allow delivered too in case it was marked delivered but not sold
+                sql`CAST(${lensOrders.amountPaid} AS NUMERIC) > 0`
+            ),
+            columns: {
+                id: true,
+                amountPaid: true,
+                status: true,
+            }
+        });
+
+        if (!order || order.status === 'sold') return { success: true, data: null };
+
+        return {
+            success: true,
+            data: {
+                lensOrderId: order.id,
+                advance: parseFloat(order.amountPaid || '0')
+            }
+        };
+    } catch (error: any) {
+        console.error('💥 Error in getAdvanceForProduct:', error);
         return { success: false, error: error.message };
     }
 });

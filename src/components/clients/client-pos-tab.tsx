@@ -15,6 +15,18 @@ import { cn } from '@/lib/utils';
 import { usePosCartStore } from '@/features/pos/store/use-pos-cart-store';
 import { createLineItem, recalculateLineTotal, calculateCartTotal } from '@/features/pos/utils/pricing';
 import { DiscountDialog } from './discount-dialog';
+import { PrintPreviewDialog } from '@/components/printing/print-preview-dialog';
+import { Receipt, AlertTriangle } from 'lucide-react';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 // Server Actions
 import { getProducts, getCategories } from '@/app/actions/products-actions';
@@ -74,7 +86,7 @@ const getCategoryIconByName = (name: string = '') => {
 };
 
 export function ClientPOSTab({ client, clientId, initialReservationId, initialOrderId }: ClientPOSTabProps) {
-    const { items: cartItems, setItems, updateLinePricing, totalAmount } = usePosCartStore();
+    const { items: cartItems, setItems, updateLinePricing, totalAmount, factureOfficielle, setFactureOfficielle } = usePosCartStore();
     const [products, setProducts] = React.useState<Product[]>([]);
     const [categories, setCategories] = React.useState<Category[]>([]);
     const [searchQuery, setSearchQuery] = React.useState('');
@@ -84,6 +96,11 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
     const [pendingOrders, setPendingOrders] = React.useState<LensOrder[]>([]);
     const [showAdvanceDialog, setShowAdvanceDialog] = React.useState(false);
     const [isFinalizingReservation, setIsFinalizingReservation] = React.useState(false);
+
+    // Official Invoice Flow
+    const [showConfirmDialog, setShowConfirmDialog] = React.useState(false);
+    const [showPrintPreview, setShowPrintPreview] = React.useState(false);
+    const [lastSaleId, setLastSaleId] = React.useState<string | null>(null);
 
     const { toast } = useToast();
     const router = useRouter();
@@ -134,9 +151,12 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
     // Handle Reservation Loading (from prop or URL)
     React.useEffect(() => {
         const loadReservation = async (id: string) => {
-            getClientReservationsAction(clientId).then(res => {
-                if (res.success && res.data) {
-                    const reservation = (res.data as any[]).find(r => r.id.toString() === id);
+            const parsedClientId = parseInt(clientId);
+            if (isNaN(parsedClientId)) return;
+            
+            getClientReservationsAction(parsedClientId).then(reservations => {
+                if (reservations && Array.isArray(reservations)) {
+                    const reservation = reservations.find(r => r.id.toString() === id);
                     if (reservation && reservation.status === 'PENDING') {
 
                         // Avoid duplicates: Check if any item from this reservation is already in cart
@@ -368,7 +388,9 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                     total: item.lineTotal,
                 })),
                 paymentMethod: 'cash',
-                notes: `Vente POS pour ${client.prenom} ${client.nom}`
+                notes: `Vente POS pour ${client.prenom} ${client.nom}`,
+                isDeclared: factureOfficielle,
+                factureOfficielle,
             };
 
             const result = await createSale(saleData);
@@ -400,7 +422,13 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                     className: "bg-green-50 border-green-200 text-green-800",
                 });
                 setItems([]); // Clear store
-                router.push(`/dashboard/ventes/${result.id}`);
+
+                if (factureOfficielle) {
+                    setLastSaleId(result.id || null);
+                    setShowPrintPreview(true);
+                } else {
+                    router.push(`/dashboard/ventes/${result.id}`);
+                }
             } else {
                 toast({
                     variant: 'destructive',
@@ -863,9 +891,71 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                             </div>
                         </div>
 
-                        {/* Validate Button */}
+                        {/* Official Invoice Toggle - Same premium design as main POS */}
+                        <div className="bg-white rounded-2xl border-2 border-slate-100 p-1 shadow-sm mt-2">
+                            <button
+                                onClick={() => {
+                                    if (factureOfficielle) {
+                                        setShowConfirmDialog(true);
+                                    } else {
+                                        setFactureOfficielle(true);
+                                    }
+                                }}
+                                className={cn(
+                                    "w-full flex items-center justify-between p-3 rounded-xl transition-all duration-300",
+                                    factureOfficielle
+                                        ? "bg-indigo-50/50 border border-indigo-100 shadow-inner"
+                                        : "bg-orange-50/30 border border-orange-100/50 hover:bg-orange-50/50"
+                                )}
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div
+                                        className={cn(
+                                            'w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-sm',
+                                            factureOfficielle
+                                                ? 'bg-indigo-600 text-white shadow-indigo-200'
+                                                : 'bg-orange-100 text-orange-600 shadow-orange-100'
+                                        )}
+                                    >
+                                        <Receipt size={22} className={factureOfficielle ? 'stroke-[2.5px]' : ''} />
+                                    </div>
+                                    <div className="flex flex-col text-left">
+                                        <p className="text-[15px] font-bold italic uppercase tracking-wide">
+                                            Facture Officielle
+                                        </p>
+                                        <p className={cn(
+                                            "text-[10px] font-medium italic mt-0.5 tracking-wider",
+                                            factureOfficielle ? "text-indigo-600/80" : "text-orange-600/80"
+                                        )}>
+                                            {factureOfficielle
+                                                ? '• TVA 20% INCLUSE • DÉCLARATION FISCALE ACTIVE'
+                                                : '⚠️ HORS-BILAN • AUCUNE TRACE COMPTABLE'}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex-shrink-0">
+                                    <div
+                                        className={cn(
+                                            'w-10 h-6 rounded-full transition-all duration-300 relative border-2',
+                                            factureOfficielle
+                                                ? 'bg-indigo-500 border-indigo-600'
+                                                : 'bg-orange-200 border-orange-300'
+                                        )}
+                                    >
+                                        <span
+                                            className={cn(
+                                                'absolute top-[2px] w-4 h-4 rounded-full transition-all duration-300 shadow-sm',
+                                                factureOfficielle ? 'right-[2px] bg-white' : 'left-[2px] bg-orange-500'
+                                            )}
+                                        />
+                                    </div>
+                                </div>
+                            </button>
+                        </div>
+
                         {/* Validation Actions */}
-                        <div className="flex gap-3">
+                        <div className="flex gap-3 pt-2">
                             <Button
                                 onClick={handleReserveFrame}
                                 disabled={cartItems.length === 0 || isSubmitting || !cartItems.some(i => !i.productId.startsWith('LO-') && !i.fromReservation)}
@@ -879,7 +969,12 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                             <Button
                                 onClick={handleValidateOrder}
                                 disabled={cartItems.length === 0 || isSubmitting}
-                                className="flex-[2] h-12 text-base font-semibold"
+                                className={cn(
+                                    "flex-[2] h-12 text-base font-semibold transition-all duration-300 shadow-lg",
+                                    factureOfficielle 
+                                        ? "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100" 
+                                        : "bg-blue-600 hover:bg-blue-700 shadow-blue-100"
+                                )}
                             >
                                 {isSubmitting && <BrandLoader size="sm" className="mr-2" />}
                                 Valider la Vente
@@ -896,6 +991,50 @@ export function ClientPOSTab({ client, clientId, initialReservationId, initialOr
                 isSubmitting={isFinalizingReservation}
                 title="Avance sur réservation"
             />
+
+            <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+                <AlertDialogContent className="rounded-3xl border-2 border-orange-100">
+                    <AlertDialogHeader>
+                        <div className="mx-auto w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center mb-4">
+                            <AlertTriangle className="h-6 w-6 text-orange-600" />
+                        </div>
+                        <AlertDialogTitle className="text-center font-black text-slate-900 uppercase tracking-tight">
+                            ⚠️ Désactiver la Facture Officielle ?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-center text-slate-600">
+                            Si vous désactivez cette option, cette vente ne passera pas en comptabilité (Hors-Bilan). Êtes-vous sûr de vouloir continuer ?
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="flex-col sm:flex-row gap-2 mt-4">
+                        <AlertDialogCancel className="rounded-xl border-2 flex-1">
+                            Garder Officielle
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => {
+                                setFactureOfficielle(false);
+                                setShowConfirmDialog(false);
+                            }}
+                            className="bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl flex-1 shadow-lg shadow-orange-200"
+                        >
+                            Oui, Hors-Bilan
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {lastSaleId && (
+                <PrintPreviewDialog
+                    open={showPrintPreview}
+                    onOpenChange={(open) => {
+                        setShowPrintPreview(open);
+                        if (!open) {
+                            router.push(`/dashboard/ventes/${lastSaleId}`);
+                        }
+                    }}
+                    url={`/print/facture/${lastSaleId}?preview=true`}
+                    title={`Facture #${lastSaleId}`}
+                />
+            )}
         </div>
     );
 }

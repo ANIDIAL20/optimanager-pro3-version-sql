@@ -79,7 +79,7 @@ export const updateSupplierOrder = createAction(
       
       const oldOrder = results[0];
 
-      if (!oldOrder) throw new Error('الطلبية غير موجودة أو محذوفة');
+      if (!oldOrder) throw new Error('La commande est inexistante ou a été supprimée');
 
       // 2. Update
       const [updatedOrder] = await tx.update(supplierOrders)
@@ -169,7 +169,7 @@ export const cancelSupplierOrder = createAction(
 );
 
 /**
- * جلب الطلبيات للمورد لاختيارها عند الدفع (Legacy & Unified)
+ * Récupérer les commandes du fournisseur pour sélection lors du paiement (Legacy & Unified)
  */
 export const getOrdersForPaymentSelect = createAction(
   [authenticate()],

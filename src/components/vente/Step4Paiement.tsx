@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
-import { Banknote, CreditCard, ChevronRight, AlertCircle, CheckCircle } from "lucide-react";
-import { motion } from "framer-motion";
+import { Banknote, CreditCard, ChevronRight, AlertCircle, CheckCircle, Tag } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface PaiementInfo {
   mode: "complet" | "acompte";
@@ -27,7 +27,7 @@ export default function Step4Paiement({ total, paiement, onChange }: Props) {
               <div className="h-6 w-6 bg-white/20 rounded-lg flex items-center justify-center">
                  <Tag className="h-4 w-4" />
               </div>
-              <span className="text-xs font-bold uppercase tracking-widest">المبلغ المطلوب استخلاصه</span>
+              <span className="text-xs font-bold uppercase tracking-widest">Montant total à encaisser</span>
            </div>
            <h4 className="text-4xl font-black">{total.toFixed(2)} <span className="text-xl font-medium">MAD</span></h4>
         </div>
@@ -41,7 +41,7 @@ export default function Step4Paiement({ total, paiement, onChange }: Props) {
         {/* Payment Options */}
         <div className="space-y-4">
            <h3 className="font-extrabold text-slate-800 flex items-center gap-2 px-2">
-              <Banknote className="h-5 w-5 text-emerald-500" /> طريقة الأداء
+              <Banknote className="h-5 w-5 text-emerald-500" /> Mode de paiement
            </h3>
            
            <div className="grid gap-3">
@@ -63,8 +63,8 @@ export default function Step4Paiement({ total, paiement, onChange }: Props) {
                       {paiement.mode === "complet" && <div className="h-3 w-3 rounded-full bg-emerald-500" />}
                    </div>
                    <div className="space-y-0.5">
-                      <p className="font-extrabold text-slate-900 leading-none">دفع كامل (Total)</p>
-                      <p className="text-[10px] text-slate-400 font-medium">العميل أدى المبلغ بالكامل الآن</p>
+                      <p className="font-extrabold text-slate-900 leading-none">Paiement complet (Total)</p>
+                      <p className="text-[10px] text-slate-400 font-medium">Le client a réglé la totalité maintenant</p>
                    </div>
                 </div>
                 {paiement.mode === "complet" && <CheckCircle className="h-5 w-5 text-emerald-500" />}
@@ -88,8 +88,8 @@ export default function Step4Paiement({ total, paiement, onChange }: Props) {
                       {paiement.mode === "acompte" && <div className="h-3 w-3 rounded-full bg-amber-500" />}
                    </div>
                    <div className="space-y-0.5">
-                      <p className="font-extrabold text-slate-900 leading-none">تسبيق (Acompte)</p>
-                      <p className="text-[10px] text-slate-400 font-medium">دفع جزء من المبلغ والباقي دين</p>
+                      <p className="font-extrabold text-slate-900 leading-none">Acompte</p>
+                      <p className="text-[10px] text-slate-400 font-medium">Paiement partiel, le reste est une dette</p>
                    </div>
                 </div>
                 {paiement.mode === "acompte" && <AlertCircle className="h-5 w-5 text-amber-500" />}
@@ -108,7 +108,7 @@ export default function Step4Paiement({ total, paiement, onChange }: Props) {
                  exit={{ opacity: 0, y: -10 }}
                  className="space-y-4"
                >
-                 <label className="text-sm font-bold text-slate-700">المبلغ المدفوع الآن (MAD)</label>
+                 <label className="text-sm font-bold text-slate-700">Montant payé maintenant (MAD)</label>
                  <div className="relative group">
                     <input
                       type="number"
@@ -122,7 +122,7 @@ export default function Step4Paiement({ total, paiement, onChange }: Props) {
                  </div>
                  
                  <div className="bg-amber-100 overflow-hidden relative rounded-2xl p-4 flex justify-between items-center shadow-sm">
-                    <span className="text-amber-900 font-bold text-xs uppercase tracking-wider">الباقي (Dette):</span>
+                    <span className="text-amber-900 font-bold text-xs uppercase tracking-wider">Reste (Dette) :</span>
                     <strong className="text-xl font-black text-amber-700">{reste.toFixed(2)} MAD</strong>
                  </div>
                </motion.div>
@@ -136,7 +136,7 @@ export default function Step4Paiement({ total, paiement, onChange }: Props) {
                   <div className="h-16 w-16 bg-emerald-100 rounded-3xl flex items-center justify-center text-emerald-600">
                      <CheckCircle className="h-8 w-8" />
                   </div>
-                  <p className="text-slate-500 text-sm font-medium">سيتم تسجيل العملية كدفع كامل بقيمة <br/><strong className="text-slate-900">{total.toFixed(2)} MAD</strong></p>
+                  <p className="text-slate-500 text-sm font-medium">L'opération sera enregistrée comme paiement complet de <br/><strong className="text-slate-900">{total.toFixed(2)} MAD</strong></p>
                </motion.div>
              )}
            </AnimatePresence>
@@ -146,10 +146,10 @@ export default function Step4Paiement({ total, paiement, onChange }: Props) {
       {/* Remarks */}
       <div className="space-y-2">
          <label className="text-sm font-bold text-slate-700 px-2 flex items-center gap-2">
-            <CreditCard className="h-4 w-4 text-slate-400" /> ملاحظات أو مرجع الدفع
+            <CreditCard className="h-4 w-4 text-slate-400" /> Notes ou référence de paiement
          </label>
          <textarea
-            placeholder="مثلاً: الشيك رقم 12345، أو تحويل بنكي..."
+            placeholder="Ex: Chèque N° 12345, ou virement..."
             className="w-full p-5 bg-slate-50 border-none rounded-3xl text-sm font-medium focus:ring-2 focus:ring-blue-500 transition-all outline-none"
             rows={2}
             value={paiement.remarques}
@@ -159,6 +159,3 @@ export default function Step4Paiement({ total, paiement, onChange }: Props) {
     </div>
   );
 }
-
-// Missing import fix
-import { Tag } from "lucide-react";

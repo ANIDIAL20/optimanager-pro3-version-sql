@@ -29,7 +29,7 @@ export const getClientTransactions = secureAction(async (userId, user, clientId:
             .where(eq(clientTransactions.clientId, id))
             .orderBy(desc(clientTransactions.date));
 
-        const mapped: ClientTransaction[] = txs.map(t => ({
+        const mapped: ClientTransaction[] = txs.map((t: typeof txs[0]) => ({
             id: t.id,
             type: t.type,
             amount: Number(t.amount),

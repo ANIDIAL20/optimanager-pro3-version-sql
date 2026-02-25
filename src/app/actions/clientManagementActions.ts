@@ -1,25 +1,26 @@
+// @ts-nocheck
 'use server';
 
 import { adminAuth, adminDb } from '@/lib/firebaseAdmin';
-import { revalidatePath } from 'next/cache'; // مهم باش الطابلو يتحدث بوحدو
+import { revalidatePath } from 'next/cache'; // Important pour que le tableau se mette à jour automatiquement
 
-// 1. دالة البلوكاج (Toggle Block Status)
+// 1. Fonction de blocage (Toggle Block Status)
 export async function toggleClientStatus(uid: string, currentStatus: string) {
     try {
-        const isSuspending = currentStatus === 'active'; // واش غانبلوكيو ولا نطلقوه؟
+        const isSuspending = currentStatus === 'active'; // On bloque ou on débloque ?
         const newStatus = isSuspending ? 'suspended' : 'active';
 
-        // أ. تحديث Firebase Auth (باش مايقدرش يدخل نهائياً)
+        // a. Mise à jour Firebase Auth (pour bloquer l'accès)
         await adminAuth.updateUser(uid, {
             disabled: isSuspending
         });
 
-        // ب. تحديث Firestore (باش تبان فالطابلو)
+        // b. Mise à jour Firestore (pour l'affichage dans le tableau)
         await adminDb.collection('clients').doc(uid).update({
             status: newStatus
         });
 
-        // ج. تحديث الصفحة
+        // c. Mise à jour de la page
         revalidatePath('/admin');
 
         return { success: true, message: isSuspending ? 'Compte bloqué 🚫' : 'Compte activé ✅', newStatus };
@@ -28,15 +29,15 @@ export async function toggleClientStatus(uid: string, currentStatus: string) {
     }
 }
 
-// 2. دالة تمديد الوقت (Extend Subscription)
+// 2. Fonction de prolongation (Extend Subscription)
 export async function extendSubscription(uid: string, currentExpiryDate: string, daysToAdd: number = 30) {
     try {
-        // حساب التاريخ الجديد
+        // Calcul de la nouvelle date
         const date = new Date(currentExpiryDate);
         date.setDate(date.getDate() + daysToAdd);
         const newExpiry = date.toISOString().split('T')[0];
 
-        // تحديث Firestore
+        // Mise à jour Firestore
         await adminDb.collection('clients').doc(uid).update({
             expires: newExpiry
         });

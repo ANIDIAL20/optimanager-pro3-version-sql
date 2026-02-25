@@ -16,7 +16,9 @@
     "db:migrate": "tsx scripts/migrate-firebase-to-neon.ts",
     "db:migrate:all": "tsx scripts/migrate-all-collections.ts",
     "set-admin": "tsx scripts/set-admin.ts",
-    "test:ratelimit": "tsx scripts/test-rate-limit.ts"
+    "test:ratelimit": "tsx scripts/test-rate-limit.ts",
+    "test": "vitest",
+    "test:ui": "vitest --ui"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.1",
@@ -94,19 +96,28 @@
     "zustand": "^5.0.10"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.3",
+    "@eslint/js": "^10.0.1",
+    "@next/eslint-plugin-next": "^16.1.6",
     "@playwright/test": "^1.58.0",
     "@types/bcryptjs": "^2.4.6",
+    "@types/lodash": "^4.17.23",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@typescript-eslint/eslint-plugin": "^8.56.0",
+    "@typescript-eslint/parser": "^8.56.0",
     "cross-env": "^10.1.0",
     "dotenv": "^17.2.3",
     "drizzle-kit": "^0.31.8",
+    "eslint": "^10.0.1",
+    "eslint-config-next": "^16.1.6",
     "genkit-cli": "^1.20.0",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.21.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.18"
   },
   "overrides": {
     "react": "$react",

@@ -15,6 +15,9 @@ async function run() {
     await db.execute(sql`ALTER TABLE supplier_orders ADD COLUMN IF NOT EXISTS status text DEFAULT 'pending'`);
     await db.execute(sql`ALTER TABLE supplier_orders ADD COLUMN IF NOT EXISTS currency text DEFAULT 'MAD'`);
     
+    console.log('--- Migrating sales ---');
+    await db.execute(sql`ALTER TABLE sales ADD COLUMN IF NOT EXISTS delivery_status text DEFAULT 'en_attente'`);
+    
     console.log('✅ Manual migration complete!');
   } catch (e: any) {
     console.error('❌ Migration error:', e.message);

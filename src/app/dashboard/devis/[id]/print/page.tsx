@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Printer, ArrowLeft } from 'lucide-react';
 import { getPrintData } from '@/app/actions/print-actions';
 import { PrintDocumentTemplate } from '@/components/printing/print-document-template';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { BrandLoader } from '@/components/ui/loader-brand';
 
 
@@ -35,18 +35,14 @@ export default function DevisPrintPage({ params }: DevisPrintPageProps) {
             if (result.success) {
                 setData(result.data);
             } else {
-                toast({
-                    variant: 'destructive',
-                    title: 'Erreur',
-                    description: result.error
-                });
+                toast.error(result.error || 'Erreur chargement');
                 // router.push('/dashboard/devis'); // Optional: redirect on error
             }
             setIsLoading(false);
         };
 
         fetchData();
-    }, [id, router, toast]);
+    }, [id, router]);
 
     // Auto-print effect
     React.useEffect(() => {

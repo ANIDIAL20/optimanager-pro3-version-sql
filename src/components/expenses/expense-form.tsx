@@ -56,13 +56,17 @@ export function ExpenseForm({ defaultValues, onSubmit, isSubmitting = false }: E
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
         defaultValues: {
-            title: '',
-            amount: 0,
-            type: 'other',
-            category: 'other',
-            status: 'pending',
-            attachments: [],
-            ...defaultValues,
+            title: defaultValues?.title ?? '',
+            amount: defaultValues?.amount ?? 0,
+            type: defaultValues?.type ?? 'other',
+            category: defaultValues?.category ?? 'other',
+            status: defaultValues?.status ?? 'pending',
+            paymentDate: defaultValues?.paymentDate ?? undefined,
+            dueDate: defaultValues?.dueDate ?? undefined,
+            provider: defaultValues?.provider ?? '',
+            invoiceNumber: defaultValues?.invoiceNumber ?? '',
+            notes: defaultValues?.notes ?? '',
+            attachments: (defaultValues?.attachments?.filter((a): a is string => a != null) ?? []) as string[],
         },
     });
 

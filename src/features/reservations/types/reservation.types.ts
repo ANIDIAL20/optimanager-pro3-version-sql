@@ -21,12 +21,16 @@ export interface FrameReservation {
   items: FrameReservationItem[];
   reservationDate: Date;
   expiryDate: Date;
+  totalAmount?: number;
+  depositAmount?: number;
+  remainingAmount?: number;
   completedAt?: Date | null;
   saleId?: number | null;
   notes?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
+
 
 export interface CreateFrameReservationInput {
   storeId: string;

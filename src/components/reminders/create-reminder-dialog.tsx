@@ -192,14 +192,14 @@ export function CreateReminderDialog() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="daily">Quotidienne (كل يوم)</SelectItem>
-                      <SelectItem value="weekly">Hebdomadaire (كل أسبوع)</SelectItem>
-                      <SelectItem value="bimensuelle">Bimensuelle (كل أسبوعين)</SelectItem>
-                      <SelectItem value="monthly">Mensuelle (كل شهر)</SelectItem>
-                      <SelectItem value="bimestrielle">Bimestrielle (كل شهرين)</SelectItem>
-                      <SelectItem value="trimestrielle">Trimestrielle (كل 3 أشهر)</SelectItem>
-                      <SelectItem value="semestrielle">Semestrielle (كل 6 أشهر)</SelectItem>
-                      <SelectItem value="annuelle">Annuelle (كل سنة)</SelectItem>
+                      <SelectItem value="daily">Quotidienne</SelectItem>
+                      <SelectItem value="weekly">Hebdomadaire</SelectItem>
+                      <SelectItem value="bimensuelle">Bimensuelle (tous les 15j)</SelectItem>
+                      <SelectItem value="monthly">Mensuelle</SelectItem>
+                      <SelectItem value="bimestrielle">Bimestrielle (tous les 2 mois)</SelectItem>
+                      <SelectItem value="trimestrielle">Trimestrielle (tous les 3 mois)</SelectItem>
+                      <SelectItem value="semestrielle">Semestrielle (tous les 6 mois)</SelectItem>
+                      <SelectItem value="annuelle">Annuelle</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -238,7 +238,7 @@ export function CreateReminderDialog() {
                   })}
                 />
                 <Label htmlFor="infinite" className="text-sm font-medium cursor-pointer">
-                  Répéter indéfiniment (بدون حد)
+                  Répéter indéfiniment
                 </Label>
               </div>
 

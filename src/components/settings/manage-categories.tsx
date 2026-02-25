@@ -23,7 +23,7 @@ export function ManageCategories() {
     setError(null);
     try {
       const data = await getSettings('categories');
-      setCategories(data as Category[]);
+      setCategories((data as unknown) as Category[]);
     } catch (err: any) {
       console.error('Error fetching categories:', err);
       setError(err.message || 'Erreur de chargement');

@@ -1,55 +1,55 @@
-# نظام التسعير والتخفيضات في نقطة البيع (POS)
+# Système de tarification et remises POS
 
-## 📋 نظرة عامة
+## 📋 Aperçu
 
-هاد النظام كيوفر لك تحكم كامل في الأسعار والتخفيضات ديال المنتجات في نقطة البيع. كيخليك:
+Ce système vous offre un contrôle complet sur les prix et les remises des produits au point de vente. Il vous permet de :
 
-- تحتافظ على الثمن الأصلي ديال المنتوج
-- تطبق تخفيضات بالنسبة المئوية
-- تبدل الثمن يدويًا مع إمكانية تزيد سبب التغيير
-- تحسب المجاميع بدقة
+- Conserver le prix d'origine du produit
+- Appliquer des remises en pourcentage
+- Modifier le prix manuellement avec la possibilité d'ajouter un motif
+- Calculer les totaux avec précision
 
-## 🎯 الميزات الرئيسية
+## 🎯 Caractéristiques principales
 
-### 1. ثلاثة أوضاع للتسعير (Price Modes)
+### 1. Trois modes de tarification (Price Modes)
 
 ```typescript
 type PriceMode = "STANDARD" | "OVERRIDE" | "DISCOUNT";
 ```
 
-- **STANDARD**: الثمن العادي من الستوك (بدون تخفيض)
-- **OVERRIDE**: الثمن متبدل يدويًا
-- **DISCOUNT**: فيه تخفيض بالنسبة المئوية
+- **STANDARD**: Prix normal du stock (sans remise)
+- **OVERRIDE**: Prix modifié manuellement
+- **DISCOUNT**: Avec remise en pourcentage
 
-### 2. معلومات كاملة على كل سطر
+### 2. Informations complètes sur chaque ligne
 
-كل سطر في السلة كيحتافظ على:
+Chaque ligne du panier conserve :
 
-- الثمن الأصلي (`originalUnitPrice`)
-- الثمن الحالي (`unitPrice`)
-- نسبة ومبلغ التخفيض
-- سبب تغيير الثمن (إذا كان)
+- Le prix d'origine (`originalUnitPrice`)
+- Le prix actuel (`unitPrice`)
+- Le pourcentage et le montant de la remise
+- Le motif du changement de prix (le cas échéant)
 
-## 📦 الملفات
+## 📦 Fichiers
 
 ```
 src/lib/pos/
-├── pricing.ts           # الدوال الأساسية
-├── pricing.examples.ts  # أمثلة الاستعمال
-├── pricing.test.ts      # الاختبارات
-└── README.md           # هاد الملف
+├── pricing.ts           # Fonctions de base
+├── pricing.examples.ts  # Exemples d'utilisation
+├── pricing.test.ts      # Tests
+└── README.md           # Ce fichier
 ```
 
-## 🚀 الاستعمال السريع
+## 🚀 Démarrage rapide
 
-### خلق سطر جديد
+### Créer une nouvelle ligne
 
 ```typescript
 import { createLineItem } from "@/lib/pos/pricing";
 
 const product = {
   id: "prod_123",
-  name: "نظارة Ray-Ban",
+  name: "Lunettes Ray-Ban",
   unitPrice: 500,
 };
 
@@ -57,29 +57,29 @@ const lineItem = createLineItem(product, 2);
 // lineItem.lineTotal === 1000 MAD
 ```
 
-### تطبيق تخفيض بالنسبة المئوية
+### Appliquer une remise en pourcentage
 
 ```typescript
 import { applyPercentDiscount } from "@/lib/pos/pricing";
 
-// تخفيض 15%
+// remise 15%
 const discounted = applyPercentDiscount(lineItem, 15);
 // discounted.unitPrice === 425 MAD
-// discounted.lineTotal === 850 MAD (للكمية 2)
+// discounted.lineTotal === 850 MAD (pour la quantité 2)
 ```
 
-### تغيير الثمن يدويًا
+### Modifier le prix manuellement
 
 ```typescript
 import { applyPriceOverride } from "@/lib/pos/pricing";
 
-const custom = applyPriceOverride(lineItem, 400, "عميل VIP");
+const custom = applyPriceOverride(lineItem, 400, "Client VIP");
 // custom.unitPrice === 400 MAD
-// custom.overrideReason === 'عميل VIP'
-// custom.discountPercent === 20% (محسوبة تلقائيًا)
+// custom.overrideReason === 'Client VIP'
+// custom.discountPercent === 20% (calculé automatiquement)
 ```
 
-### الرجوع للثمن العادي
+### Retour au prix standard
 
 ```typescript
 import { setStandardPrice } from "@/lib/pos/pricing";
@@ -89,17 +89,17 @@ const standard = setStandardPrice(lineItem);
 // standard.priceMode === 'STANDARD'
 ```
 
-### تغيير الكمية
+### Changer la quantité
 
 ```typescript
 import { recalculateLineTotal } from "@/lib/pos/pricing";
 
 let item = { ...lineItem, quantity: 5 };
 item = recalculateLineTotal(item);
-// item.lineTotal محسوب من جديد
+// item.lineTotal est recalculé
 ```
 
-## 📊 حساب مجموع السلة
+## 📊 Calcul du total du panier
 
 ```typescript
 import { calculateCartTotal } from "@/lib/pos/pricing";
@@ -107,13 +107,13 @@ import { calculateCartTotal } from "@/lib/pos/pricing";
 const cart = [lineItem1, lineItem2, lineItem3];
 const totals = calculateCartTotal(cart);
 
-console.log(totals.subtotal); // المجموع قبل التخفيض
-console.log(totals.totalDiscount); // التخفيض الكلي
-console.log(totals.total); // المجموع النهائي
-console.log(totals.itemCount); // عدد المنتجات
+console.log(totals.subtotal); // Total avant remise
+console.log(totals.totalDiscount); // Remise totale
+console.log(totals.total); // Total final
+console.log(totals.itemCount); // Nombre de produits
 ```
 
-## 🔍 معلومات التخفيض
+## 🔍 Informations sur la remise
 
 ```typescript
 import { getDiscountInfo } from "@/lib/pos/pricing";
@@ -122,8 +122,8 @@ const info = getDiscountInfo(lineItem);
 
 if (info.hasDiscount) {
   console.log(info.savings);
-  // مثلاً: "تخفيض 15.0% (-150.00 MAD)"
-  // أو: "ثمن خاص: -200.00 MAD (عميل VIP)"
+  // Exemple: "Remise 15.0% (-150.00 MAD)"
+  // Ou: "Prix spécial: -200.00 MAD (Client VIP)"
 }
 ```
 
@@ -174,24 +174,24 @@ import {
   calculateCartTotal,
 } from "@/lib/pos/pricing";
 
-// خلق السلة
+// Création du panier
 let cart = [
-  createLineItem({ id: "1", name: "نظارة شمسية", unitPrice: 300 }, 1),
-  createLineItem({ id: "2", name: "عدسات لاصقة", unitPrice: 150 }, 2),
-  createLineItem({ id: "3", name: "محلول تنظيف", unitPrice: 50 }, 3),
+  createLineItem({ id: "1", name: "Lunettes de soleil", unitPrice: 300 }, 1),
+  createLineItem({ id: "2", name: "Lentilles de contact", unitPrice: 150 }, 2),
+  createLineItem({ id: "3", name: "Solution de nettoyage", unitPrice: 50 }, 3),
 ];
 
-// تطبيق تخفيضات مختلفة
+// Application de différentes remises
 cart[0] = applyPercentDiscount(cart[0], 10); // -10%
-cart[1] = applyPriceOverride(cart[1], 120, "عرض خاص"); // ثمن خاص
-// cart[2] يبقى بالثمن العادي
+cart[1] = applyPriceOverride(cart[1], 120, "Offre spéciale"); // prix spécial
+// cart[2] reste au prix normal
 
 const totals = calculateCartTotal(cart);
-console.log(`المجموع: ${totals.total} MAD`);
-console.log(`وفرتي: ${totals.totalDiscount} MAD`);
+console.log(`Total: ${totals.total} MAD`);
+console.log(`Économie: ${totals.totalDiscount} MAD`);
 ```
 
-### مثال 2: تطبيق تخفيض على السلة الكاملة
+### Exemple 2: Application d'une remise sur tout le panier
 
 ```typescript
 function applyCartDiscount(
@@ -205,7 +205,7 @@ function applyCartDiscount(
 const discountedCart = applyCartDiscount(cart, 20);
 ```
 
-### مثال 3: التحقق من الحد الأقصى للتخفيض
+### Exemple 3: Vérification de la remise maximale
 
 ```typescript
 function canApplyDiscount(
@@ -219,13 +219,13 @@ function canApplyDiscount(
 if (canApplyDiscount(lineItem, 60, 50)) {
   // تطبيق التخفيض
 } else {
-  console.log("التخفيض كبير بزاف!");
+  console.log("Remise trop élevée !");
 }
 ```
 
-## 🎨 التكامل مع React
+## 🎨 Intégration avec React
 
-### مثال: Hook مخصص للسلة
+### Exemple: Hook personnalisé pour le panier
 
 ```typescript
 import { useState, useCallback } from "react";
