@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getCategoryIcon } from '@/lib/category-icons';
+import { BulkReceiveModal } from '@/components/suppliers/BulkReceiveModal';
 
 interface SuppliersClientViewProps {
   suppliers: any[];
@@ -48,14 +49,20 @@ export function SuppliersClientView({ suppliers, columns }: SuppliersClientViewP
         <div className="flex flex-col gap-4">
           <Tabs value={activeCategory} onValueChange={setActiveCategory} className="w-full">
             <div className="flex flex-col md:flex-row gap-4 items-center">
-              <div className="relative flex-1 w-full">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Rechercher un fournisseur..."
-                  className="pl-10 bg-white border-slate-200 focus:border-blue-500"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+              <div className="relative flex-1 w-full flex gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    placeholder="Rechercher un fournisseur..."
+                    className="pl-10 bg-white border-slate-200 focus:border-blue-500"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+                <div className="hidden md:block">
+                   {/* Adding button here too for density/discoverability */}
+                   <BulkReceiveModal />
+                </div>
               </div>
             </div>
 

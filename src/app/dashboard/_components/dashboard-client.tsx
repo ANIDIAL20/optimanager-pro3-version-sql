@@ -23,12 +23,14 @@ import {
     Database,
     Truck,
     Briefcase,
-    Banknote
+    Banknote,
+    PackageCheck
 } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
 import { ExpiringReservationsWidget } from '@/features/reservations/components/expiring-reservations-widget';
 import { ReadyLensesDashboardWidget } from '@/features/lens-orders/components/ready-lenses-widget';
 import { useMode } from '@/contexts/mode-context';
+import { BulkReceiveModal } from '@/components/suppliers/BulkReceiveModal';
 
 interface DashboardData {
     globalRevenue: number;
@@ -212,12 +214,19 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                             <span className="text-sm font-bold text-slate-700">Devis</span>
                         </Link>
 
-                        <Link href="/dashboard/suppliers" className="group p-4 bg-white rounded-2xl border border-slate-100 hover:border-amber-200 hover:bg-amber-50/30 transition-all flex flex-col items-center justify-center text-center gap-2 shadow-sm">
+                        <Link href="/suppliers" className="group p-4 bg-white rounded-2xl border border-slate-100 hover:border-amber-200 hover:bg-amber-50/30 transition-all flex flex-col items-center justify-center text-center gap-2 shadow-sm">
                             <div className="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center group-hover:scale-110 transition-transform">
                                 <Truck className="h-5 w-5 text-amber-600" />
                             </div>
                             <span className="text-sm font-bold text-slate-700">Fournisseurs</span>
                         </Link>
+
+                        <div className="group p-4 bg-white rounded-2xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/30 transition-all flex flex-col items-center justify-center text-center gap-2 shadow-sm cursor-pointer">
+                            <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <PackageCheck className="h-5 w-5 text-indigo-600" />
+                            </div>
+                            <BulkReceiveModal />
+                        </div>
                     </>
                 )}
             </div>

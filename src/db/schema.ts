@@ -583,6 +583,7 @@ export const lensOrders = pgTable('lens_orders', {
 
   // Référence BL/Facture Fournisseur
   supplierInvoiceRef: text('supplier_invoice_ref'),
+  deliveryNoteRef: text('delivery_note_ref'),
 
   // Marges calculées
   estimatedMargin: decimal('estimated_margin', { precision: 10, scale: 2 }), // sellingPrice - estimatedBuyingPrice
@@ -662,6 +663,15 @@ export const lensOrdersRelations = relations(lensOrders, ({ one }) => ({
     fields: [lensOrders.prescriptionId],
     references: [prescriptionsLegacy.id],
   }),
+  supplier: one(suppliers, {
+    fields: [lensOrders.supplierId],
+    references: [suppliers.id],
+  }),
+}));
+
+export const suppliersRelations = relations(suppliers, ({ many }) => ({
+  orders: many(supplierOrders),
+  payments: many(supplierPayments),
 }));
 
 export const salesRelations = relations(sales, ({ one, many }) => ({
@@ -670,6 +680,7 @@ export const salesRelations = relations(sales, ({ one, many }) => ({
     references: [clients.id],
   }),
   saleItems: many(saleItems),
+  lensOrders: many(lensOrders),
 }));
 
 export const saleItemsRelations = relations(saleItems, ({ one, many }) => ({

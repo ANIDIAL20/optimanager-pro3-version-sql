@@ -42,6 +42,7 @@ import { UserProfile } from "@/components/user-profile";
 import { RemindersBadge } from "@/components/reminders/reminders-badge";
 import { useMode } from "@/contexts/mode-context";
 import { cn } from "@/lib/utils";
+import { BulkReceiveModal } from "@/components/suppliers/BulkReceiveModal";
 
 import Image from 'next/image';
 
@@ -148,6 +149,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                             <Truck className="size-5" strokeWidth={1.5} />
                                             <span>Fournisseurs</span>
                                         </Link>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton asChild tooltip="Réception Groupée">
+                                        <BulkReceiveModal />
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
 

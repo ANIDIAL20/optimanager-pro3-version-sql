@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { deleteSupplier } from '@/app/actions/supplier-actions';
+import { BulkReceiveModal } from '@/components/suppliers/BulkReceiveModal';
 import {
     Card,
     CardContent,
@@ -36,10 +37,11 @@ interface SupplierViewProps {
     supplier: any; 
     orders?: any[];
     payments?: any[];
+    lensOrders?: any[];
     error?: string;
 }
 
-export default function SupplierView({ supplier, orders = [], payments = [], error }: SupplierViewProps) {
+export default function SupplierView({ supplier, orders = [], payments = [], lensOrders = [], error }: SupplierViewProps) {
     const router = useRouter();
     const { toast } = useToast();
     const { setLabel } = useBreadcrumbStore();
@@ -180,11 +182,14 @@ export default function SupplierView({ supplier, orders = [], payments = [], err
                     </div>
                 </div>
 
-                <SupplierActions 
-                    supplierId={s.id} 
-                    supplierName={s.nomCommercial} 
-                    variant="header" 
-                />
+                <div className="flex items-center gap-3">
+                    <BulkReceiveModal initialSupplierId={s.id} />
+                    <SupplierActions 
+                        supplierId={s.id} 
+                        supplierName={s.nomCommercial} 
+                        variant="header" 
+                    />
+                </div>
             </div>
 
             {/* Financial Summary Cards */}
@@ -229,6 +234,9 @@ export default function SupplierView({ supplier, orders = [], payments = [], err
                     </TabsTrigger>
                     <TabsTrigger value="history" className="px-4 py-2 flex items-center gap-2">
                         <FileText className="h-4 w-4" /> Historique (Relevé)
+                    </TabsTrigger>
+                    <TabsTrigger value="lens-orders" className="px-4 py-2 flex items-center gap-2">
+                        <Truck className="h-4 w-4 text-blue-500" /> Commandes de Verres (Labo)
                     </TabsTrigger>
                     <TabsTrigger value="products" className="px-4 py-2 flex items-center gap-2">
                         <Package className="h-4 w-4" /> Catalogue Produits
@@ -284,6 +292,92 @@ export default function SupplierView({ supplier, orders = [], payments = [], err
                 {/* HISTORY (RELEVE) TAB */}
                 <TabsContent value="history">
                     <SupplierStatement supplierId={s.id} />
+                </TabsContent>
+
+                {/* LENS ORDERS TAB */}
+                <TabsContent value="lens-orders">
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <div>
+                                <CardTitle>Commandes de Verres (Labo)</CardTitle>
+                                <p className="text-sm text-slate-500">Liste des verres commandés chez ce laboratoire</p>
+                            </div>
+                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-100">
+                                {lensOrders.length} commandes
+                            </Badge>
+                        </CardHeader>
+                        <CardContent>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="bg-slate-50/50">
+                                        <TableHead className="font-bold">Date</TableHead>
+                                        <TableHead className="font-bold">Client</TableHead>
+                                        <TableHead className="font-bold">Réf Vente</TableHead>
+                                        <TableHead className="font-bold">Type de Verre</TableHead>
+                                        <TableHead className="font-bold">Correction</TableHead>
+                                        <TableHead className="font-bold">Statut</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {lensOrders.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="text-center py-12 text-slate-400 italic">
+                                                Aucune commande de verres trouvée pour ce fournisseur.
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        lensOrders.map((order) => (
+                                            <TableRow key={order.id} className="hover:bg-slate-50/50 transition-colors">
+                                                <TableCell className="font-medium whitespace-nowrap">
+                                                    {order.createdAt ? format(new Date(order.createdAt), 'dd MMM yyyy', { locale: fr }) : '-'}
+                                                </TableCell>
+                                                <TableCell className="font-bold text-slate-900">
+                                                    {order.client?.fullName || 'Client inconnu'}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {order.sale?.saleNumber ? (
+                                                        <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold">
+                                                            #{order.sale.saleNumber}
+                                                        </Badge>
+                                                    ) : (
+                                                        <span className="text-slate-400 italic text-xs">Non facturé</span>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-slate-700 capitalize">{order.lensType}</span>
+                                                        <span className="text-[10px] text-slate-400 uppercase font-black">{order.orderType}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-[11px] font-mono text-slate-500">
+                                                    <div className="grid grid-cols-2 gap-x-2">
+                                                        <span>OD: {order.sphereR || '0'}({order.cylindreR || '0'})</span>
+                                                        <span>OG: {order.sphereL || '0'}({order.cylindreL || '0'})</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge 
+                                                        className={`
+                                                            font-bold uppercase text-[10px] px-2 py-0.5 rounded-full
+                                                            ${order.status === 'pending' ? 'bg-amber-100 text-amber-700' : ''}
+                                                            ${order.status === 'ordered' ? 'bg-blue-100 text-blue-700' : ''}
+                                                            ${order.status === 'received' ? 'bg-emerald-100 text-emerald-700' : ''}
+                                                            ${order.status === 'delivered' ? 'bg-slate-100 text-slate-600' : ''}
+                                                        `}
+                                                    >
+                                                        {order.status === 'pending' && 'En attente'}
+                                                        {order.status === 'ordered' && 'Commandé'}
+                                                        {order.status === 'received' && 'Reçu'}
+                                                        {order.status === 'delivered' && 'Livré'}
+                                                    </Badge>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
                 </TabsContent>
 
                 {/* PRODUCTS CATALOGUE TAB */}

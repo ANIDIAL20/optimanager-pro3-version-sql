@@ -50,77 +50,103 @@ export class SaleRepository extends BaseRepository<Sale, typeof sales> {
   }
 
   /**
-   * CRITICAL: Crée une vente ET met à jour le stock
-   * Note: HTTP driver doesn't support transactions, so we do sequential operations
+   * CRITICAL: Crée une vente, met à jour le stock, et gère les commandes de verres
    */
   async createSale(data: NewSale, items: any[], lensOrderIds?: number[]): Promise<Sale> {
-    
-    // 1. Create Sale first
-    const saleResult = await db.insert(sales).values(data).returning();
-    const newSale = saleResult[0];
+    return await db.transaction(async (tx) => {
+      // 1. Create Sale
+      const saleResult = await tx.insert(sales).values(data).returning();
+      const newSale = saleResult[0];
 
-    try {
-      // 2. Update Stock for each item
+      // 2. Process Items
       for (const item of items) {
-         if (item.productId) {
-             const productId = parseInt(item.productId);
+        // Stock management
+        if (item.productId) {
+          const productId = typeof item.productId === 'string' ? parseInt(item.productId) : item.productId;
+          if (!isNaN(productId)) {
+            // Decrement stock
+            await tx
+              .update(products)
+              .set({ 
+                quantiteStock: sql`${products.quantiteStock} - ${item.quantity}`,
+                updatedAt: new Date()
+              })
+              .where(and(
+                eq(products.id, productId), 
+                eq(products.userId, data.userId)
+              ));
 
-             if (isNaN(productId)) continue;
+            // Log movement
+            await tx.insert(stockMovements).values({
+              userId: data.userId,
+              productId: productId,
+              quantite: -item.quantity,
+              type: 'Vente',
+              ref: `Vente #${newSale.saleNumber || newSale.id}`,
+              date: new Date(),
+              createdAt: new Date()
+            });
+          }
+        }
 
-             
-             // Decrement stock using SQL
-             await db
-                 .update(products)
-                 .set({ 
-                     quantiteStock: sql`${products.quantiteStock} - ${item.quantity}`,
-                     updatedAt: new Date()
-                 })
-                 .where(and(
-                     eq(products.id, productId), 
-                     eq(products.userId, data.userId)
-                 ));
+        // 3. SMART LOGIC: Auto-create lens_orders if item is a lens
+        const isLens = item.productType === 'lens' || 
+                      item.name?.toLowerCase().includes('verre') || 
+                      (item.lensDetails && item.lensDetails.length > 0);
 
-             // Log movement
-             await db.insert(stockMovements).values({
-                 userId: data.userId,
-                 productId: productId,
-                 quantite: -item.quantity,
-                 type: 'Vente',
-                 ref: `Vente #${newSale.saleNumber || newSale.id}`,
-                 date: new Date(),
-                 createdAt: new Date()
-             });
-         }
+        if (isLens && item.lensDetails && item.lensDetails.length >= 2) {
+          const od = item.lensDetails.find((d: any) => d.eye === 'OD');
+          const og = item.lensDetails.find((d: any) => d.eye === 'OG');
+
+          await tx.insert(lensOrders).values({
+            userId: data.userId,
+            clientId: data.clientId,
+            saleId: newSale.id,
+            supplierName: 'A commander', // Default
+            orderType: 'unifocal', // Default or detect from name
+            lensType: item.name || 'Verres',
+            
+            // Optical specs
+            sphereR: od?.sphere || '',
+            cylindreR: od?.cylinder || '',
+            axeR: od?.axis || '',
+            additionR: od?.addition || '',
+            
+            sphereL: og?.sphere || '',
+            cylindreL: og?.cylinder || '',
+            axeL: og?.axis || '',
+            additionL: og?.addition || '',
+
+            unitPrice: item.price.toString(),
+            quantity: item.quantity,
+            totalPrice: item.total.toString(),
+            sellingPrice: item.price.toString(),
+            status: 'pending',
+            createdAt: new Date()
+          });
+        }
       }
 
-      // Invalidate caches
+      // 4. Link existing lens orders if any (from reservations/prescriptions)
+      if (lensOrderIds && lensOrderIds.length > 0) {
+        await tx.update(lensOrders)
+          .set({
+            saleId: newSale.id,
+            status: 'delivered',
+            deliveredDate: new Date(),
+            updatedAt: new Date()
+          })
+          .where(and(
+            inArray(lensOrders.id, lensOrderIds),
+            eq(lensOrders.userId, data.userId)
+          ));
+      }
+
+      // Invalidate caches after transaction success
       await this.invalidateListCache(data.userId);
 
-      // 3. Link Lens Orders (New Feature)
-      if (lensOrderIds && lensOrderIds.length > 0) {
-          try {
-              await db.update(lensOrders)
-                  .set({
-                      saleId: newSale.id,
-                      status: 'delivered', // Assume sale = delivery
-                      deliveredDate: new Date(),
-                      updatedAt: new Date()
-                  })
-                  .where(and(
-                      inArray(lensOrders.id, lensOrderIds),
-                      eq(lensOrders.userId, data.userId)
-                  ));
-          } catch (err) {
-              console.error('Failed to link lens orders to sale:', err);
-          }
-      }
-
       return newSale;
-    } catch (error) {
-      // If stock update fails, we should ideally delete the sale, but for now just log
-      console.error('Error updating stock for sale:', newSale.id, error);
-      throw error;
-    }
+    });
   }
 
   private async invalidateListCache(userId: string) {

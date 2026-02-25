@@ -114,10 +114,7 @@ export const supplierOrderPayments = pgTable('supplier_order_payments', {
 // RELATIONS
 // ========================================
 
-export const suppliersRelations = relations(suppliers, ({ many }) => ({
-  orders: many(supplierOrders),
-  payments: many(supplierPayments),
-}));
+// Relations moved to main schema.ts to avoid circularity with lensOrders
 
 export const supplierOrdersRelations = relations(supplierOrders, ({ one, many }) => ({
   supplier: one(suppliers, {

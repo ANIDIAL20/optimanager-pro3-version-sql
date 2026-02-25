@@ -26,18 +26,22 @@ export const saleItemSchema = z.object({
 export const saleSchema = z.object({
   clientId: z.number().optional(),
   clientName: z.string().optional(),
-  lensOrderIds: z.array(z.number()).optional(), // Add this
+  lensOrderIds: z.array(z.number()).optional(),
   items: z.array(saleItemSchema).min(1, "La vente doit contenir au moins un article"),
   
   // Financial
   totalHT: z.number().min(0),
   totalTVA: z.number().min(0),
   totalTTC: z.number().min(0),
-  totalPaid: z.number().min(0).default(0),
+  
+  // Map UI names to schema
+  montantPaye: z.number().min(0).default(0),
+  resteAPayer: z.number().min(0).default(0),
+  
   paymentMethod: z.enum(['ESPECES', 'CARTE', 'VIREMENT', 'CHEQUE', 'AUTRE']).default('ESPECES'),
   
   notes: z.string().optional(),
-  status: z.enum(['PAYE', 'IMPAYE', 'PARTIEL']).default('PAYE')
+  status: z.enum(['paye', 'impaye', 'partiel']).default('paye')
 });
 
 export type SaleInput = z.infer<typeof saleSchema>;
