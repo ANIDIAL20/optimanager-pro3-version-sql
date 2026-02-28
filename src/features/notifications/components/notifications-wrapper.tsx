@@ -4,15 +4,32 @@ import * as React from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Bell, Check, X } from 'lucide-react';
+import { Bell, Check, X, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useNotifications } from '@/hooks/use-notifications';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 
 export function NotificationsWrapper() {
   const [isOpen, setIsOpen] = React.useState(false);
   const { notifications, isLoading, markAsRead, markAllAsRead } = useNotifications();
   const { toast } = useToast();
+
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'LENS_ORDER_PENDING':
+        return <div className="p-1.5 bg-orange-100 rounded-full"><Clock className="h-4 w-4 text-orange-600" /></div>;
+      case 'LOW_STOCK':
+        return <div className="p-1.5 bg-red-100 rounded-full"><AlertTriangle className="h-4 w-4 text-red-600" /></div>;
+      case 'RESERVATION_EXPIRING':
+      case 'RESERVATION_EXPIRED':
+        return <div className="p-1.5 bg-amber-100 rounded-full"><Clock className="h-4 w-4 text-amber-600" /></div>;
+      case 'LENS_READY':
+        return <div className="p-1.5 bg-emerald-100 rounded-full"><CheckCircle2 className="h-4 w-4 text-emerald-600" /></div>;
+      default:
+        return <div className="p-1.5 bg-blue-100 rounded-full"><Bell className="h-4 w-4 text-blue-600" /></div>;
+    }
+  };
 
   const unreadCount = notifications.filter((n: any) => !n.read).length;
 
@@ -90,9 +107,12 @@ export function NotificationsWrapper() {
                     !notification.read && 'bg-muted/20'
                   )}
                 >
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-3">
+                    <div className="shrink-0 mt-0.5">
+                      {getNotificationIcon(notification.type)}
+                    </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium mb-1">
+                      <p className="text-sm font-semibold text-slate-900 mb-0.5">
                         {notification.title}
                       </p>
                       <p className="text-xs text-muted-foreground mb-2">
@@ -104,6 +124,19 @@ export function NotificationsWrapper() {
                           minute: '2-digit',
                         })}
                       </p>
+                      
+                      {/* Actions Rapides dynamiques */}
+                      {notification.type === 'LENS_ORDER_PENDING' && (
+                        <Button asChild variant="secondary" size="sm" className="h-6 text-[10px] px-2 mt-1" onClick={() => setIsOpen(false)}>
+                          <Link href="/dashboard/suppliers">Réceptionner →</Link>
+                        </Button>
+                      )}
+                      {notification.type === 'LENS_READY' && notification.relatedEntityId && (
+                        <Button asChild variant="secondary" size="sm" className="h-6 text-[10px] px-2 mt-1" onClick={() => setIsOpen(false)}>
+                          <Link href={`/dashboard/clients`}>Livrer →</Link>
+                        </Button>
+                      )}
+                      
                     </div>
                     <div className="flex items-center gap-1">
                       {!notification.read && (

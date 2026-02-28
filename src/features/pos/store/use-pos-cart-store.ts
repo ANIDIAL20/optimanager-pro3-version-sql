@@ -54,6 +54,7 @@ interface PosCartState {
     payload?: { newPrice?: number; percent?: number; reason?: string }
   ) => void;
   updateLensDetails: (lineId: string, details: any[]) => void;
+  addReservedItem: (reservation: any) => void; // ✅ Ajouté
 }
 
 export const usePosCartStore = create<PosCartState>((set) => ({
@@ -181,6 +182,43 @@ export const usePosCartStore = create<PosCartState>((set) => ({
             items: newItems, 
             totalAmount: newItems.reduce((sum, it) => sum + it.lineTotal, 0),
             totalAdvancePaid,
+        };
+    });
+  },
+
+  addReservedItem: (reservation) => {
+    set((state) => {
+        if (state.items.some(item => item.fromReservation === reservation.id)) {
+            return state;
+        }
+
+        const totalAmount = parseFloat(reservation.totalAmount || '0');
+        const depositAmount = parseFloat(reservation.depositAmount || '0');
+
+        // On crée une ligne résumée pour la réservation
+        const productNames = (reservation.items as any[])?.map(it => it.productName).join(', ') || 'Produits Réservés';
+
+        const newLine = {
+            ...createLineItem(
+                `RES-${reservation.id}`,
+                `Réservation #${reservation.id} : ${productNames}`,
+                totalAmount,
+                1,
+                'AUTRE'
+            ),
+            fromReservation: reservation.id,
+            advanceAlreadyPaid: depositAmount,
+        };
+
+        const newItems = [...state.items, newLine];
+        const newTotalAdvancePaid = newItems.reduce(
+            (sum, it) => sum + ((it as PosLineItemWithAdvance).advanceAlreadyPaid ?? 0), 0
+        );
+
+        return {
+            items: newItems,
+            totalAmount: newItems.reduce((sum, it) => sum + it.lineTotal, 0),
+            totalAdvancePaid: newTotalAdvancePaid,
         };
     });
   },

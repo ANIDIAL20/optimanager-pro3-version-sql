@@ -630,7 +630,7 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                             saleId: createdSaleId,
                             orderType: m.lensOrder.orderType,
                             lensType: item.productName,
-                            supplierId: m.lensOrder.supplierId,
+                            supplierId: (m.lensOrder.supplierId && m.lensOrder.supplierId !== "") ? m.lensOrder.supplierId : null,
                             supplierName: m.lensOrder.supplierName || 'Fournisseur externe (Pack)', 
                             indice: m.lensOrder.index, // 🆕 Lens Index 
                             
@@ -673,6 +673,53 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                             inArray(lensOrders.id, data.lensOrderIds),
                             eq(lensOrders.userId, userId)
                         ));
+
+                    // 🔥 CLEANUP: Delete the auto-generated VERRE- products
+                    const verreRefs = data.lensOrderIds.map(id => `VERRE-${id}`);
+                    await tx.delete(products)
+                        .where(and(
+                            inArray(products.reference, verreRefs),
+                            eq(products.userId, userId)
+                        ));
+                }
+
+                // ✅ HANDLE SCANNED VERRE- PRODUCTS (Fallback for barcodes)
+                const scannedVerreItems = data.items.filter(item => 
+                    (item.productRef || '').startsWith('VERRE-') || (item.reference || '').startsWith('VERRE-')
+                );
+
+                if (scannedVerreItems.length > 0) {
+                    const scannedRefs: string[] = [];
+                    const scannedLensIds: number[] = [];
+
+                    for (const item of scannedVerreItems) {
+                        const ref = item.reference || item.productRef || '';
+                        scannedRefs.push(ref);
+                        const id = parseInt(ref.replace('VERRE-', ''), 10);
+                        if (!isNaN(id)) scannedLensIds.push(id);
+                    }
+
+                    if (scannedLensIds.length > 0) {
+                        await tx.update(lensOrders)
+                            .set({ 
+                                status: 'sold', 
+                                saleId: createdSaleId,
+                                updatedAt: new Date() 
+                            })
+                            .where(and(
+                                inArray(lensOrders.id, scannedLensIds),
+                                eq(lensOrders.userId, userId),
+                                eq(lensOrders.status, 'received')
+                            ));
+                    }
+
+                    if (scannedRefs.length > 0) {
+                        await tx.delete(products)
+                            .where(and(
+                                inArray(products.reference, scannedRefs),
+                                eq(products.userId, userId)
+                            ));
+                    }
                 }
 
                 // 8. CLIENT LEDGER
@@ -720,8 +767,9 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
 
                 revalidatePath('/dashboard/ventes');
                 revalidatePath('/dashboard/stock');
-                // revalidateTag('sales');
-                // revalidateTag('products');
+                revalidatePath('/dashboard/lens-orders');
+                revalidatePath('/dashboard/notifications');
+                revalidatePath('/dashboard/clients', 'layout'); // refreshes client POS tab too
 
                 try {
                     await redis?.del(`notifications:count:${userId}`);
@@ -805,6 +853,7 @@ export const deleteSale = secureAction(async (userId, user, saleId: string) => {
         await logSuccess(userId, 'DELETE', 'sales', saleId, { action: 'delete_sale' });
         revalidatePath('/dashboard/ventes');
         revalidatePath('/dashboard/stock');
+        revalidatePath('/dashboard/clients', 'layout');
         return { success: true, message: 'Vente supprimée et stock restauré avec succès' };
     } catch (error: any) {
         return { success: false, error: error.message };
@@ -825,6 +874,7 @@ export const updateDeliveryStatus = secureAction(async (userId, user, saleId: st
 
         await logSuccess(userId, 'UPDATE', 'sales', saleId, { action: 'update_delivery_status', status });
         revalidatePath('/dashboard/ventes');
+        revalidatePath('/dashboard/clients', 'layout');
         return { success: true, message: `Statut de livraison mis Ã  jour: ${status}` };
     } catch (error: any) {
         return { success: false, error: error.message };
@@ -955,6 +1005,7 @@ export const processReturn = secureAction(async (userId, user, saleId: string, r
         revalidatePath('/dashboard/ventes');
         revalidatePath(`/dashboard/ventes/${saleId}`);
         revalidatePath('/dashboard/stock');
+        revalidatePath('/dashboard/clients', 'layout');
         return { success: true, message: 'Retour effectué avec succès' };
 
     } catch (error: any) {

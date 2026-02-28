@@ -78,6 +78,54 @@ export const getVerresPrets = secureAction(async (userId) => {
   }
 });
 
+export type CommandeEnAttenteItem = {
+  id: number;
+  lensType: string;
+  sellingPrice: string;
+  updatedAt: Date | null;
+  client: {
+    id: number;
+    fullName: string;
+    phone: string | null;
+  };
+};
+
+export const getCommandesEnAttente = secureAction(async (userId) => {
+  const cacheKey = `notifications:commandes-en-attente:${userId}`;
+  const cached = await getCached<CommandeEnAttenteItem[]>(cacheKey);
+  if (cached) return { success: true as const, data: cached };
+
+  try {
+    const results = await db.query.lensOrders.findMany({
+      where: and(
+        eq(lensOrders.userId, userId),
+        eq(lensOrders.status, 'pending') // Only pending orders
+      ),
+      columns: {
+        id: true,
+        lensType: true,
+        sellingPrice: true,
+        updatedAt: true,
+      },
+      with: {
+        client: {
+          columns: {
+            id: true,
+            fullName: true,
+            phone: true,
+          },
+        },
+      },
+      orderBy: [desc(lensOrders.updatedAt)],
+    });
+
+    await setCached(cacheKey, results as any);
+    return { success: true as const, data: results as any };
+  } catch (error: any) {
+    return { success: false as const, error: error.message };
+  }
+});
+
 export type ReservationExpiringItem = {
   id: number;
   clientId: number;
@@ -163,6 +211,7 @@ export const getStockCritique = secureAction(async (userId) => {
 export const getNotificationsCount = secureAction(async (userId) => {
   const cacheKey = `notifications:count:${userId}`;
   const cached = await getCached<{
+    commandesEnAttente: number;
     verresPrets: number;
     reservationsExpiring: number;
     stockCritique: number;
@@ -171,7 +220,16 @@ export const getNotificationsCount = secureAction(async (userId) => {
   if (cached) return { success: true as const, data: cached };
 
   try {
-    const [verres, reservations, stock] = await Promise.all([
+    const [commandes, verres, reservations, stock] = await Promise.all([
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(lensOrders)
+        .where(
+          and(
+            eq(lensOrders.userId, userId),
+            eq(lensOrders.status, 'pending')
+          )
+        ),
       db
         .select({ count: sql<number>`count(*)` })
         .from(lensOrders)
@@ -207,15 +265,17 @@ export const getNotificationsCount = secureAction(async (userId) => {
         ),
     ]);
 
+    const commandesEnAttente = Number(commandes[0]?.count || 0);
     const verresPrets = Number(verres[0]?.count || 0);
     const reservationsExpiring = Number(reservations[0]?.count || 0);
     const stockCritique = Number(stock[0]?.count || 0);
 
     const data = {
+      commandesEnAttente,
       verresPrets,
       reservationsExpiring,
       stockCritique,
-      total: verresPrets + reservationsExpiring + stockCritique,
+      total: commandesEnAttente + verresPrets + reservationsExpiring + stockCritique,
     };
 
     await setCached(cacheKey, data);

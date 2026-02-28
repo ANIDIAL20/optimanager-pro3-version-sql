@@ -4,7 +4,7 @@ export const notifications = pgTable('notifications', {
   id: serial('id').primaryKey(),
   userId: text('user_id'), // No foreign key constraint to avoid circular deps
   type: text('type')
-    .$type<'RESERVATION_EXPIRING' | 'RESERVATION_EXPIRED' | 'LOW_STOCK' | 'LENS_READY' | 'OTHER'>()
+    .$type<'RESERVATION_EXPIRING' | 'RESERVATION_EXPIRED' | 'LOW_STOCK' | 'LENS_READY' | 'LENS_ORDER_PENDING' | 'OTHER'>()
     .notNull(),
   title: text('title').notNull(),
   message: text('message').notNull(),

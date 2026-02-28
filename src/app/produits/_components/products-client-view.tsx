@@ -20,7 +20,8 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { getCategoryIcon } from '@/lib/category-icons';
 import { InvoiceScannerDialog } from '@/components/products/invoice-scanner-dialog';
-import { getProducts, getCategories } from '@/app/actions/products-actions';
+import { getCategories } from '@/app/actions/products-actions';
+import { useProducts } from '@/hooks/use-products';
 import { useToast } from '@/hooks/use-toast';
 
 interface ProductsClientViewProps {
@@ -31,77 +32,61 @@ interface ProductsClientViewProps {
 
 export function ProductsClientView({ initialProducts, initialCategories, usageStats }: ProductsClientViewProps) {
   const [searchTerm, setSearchTerm] = React.useState('');
+  const [debouncedSearch, setDebouncedSearch] = React.useState('');
   const [categoryFilter, setCategoryFilter] = React.useState<string>('all');
-  const [products, setProducts] = React.useState<ProductWithRelations[]>(initialProducts);
-  const [optimisticProducts, addOptimisticProduct] = React.useOptimistic(
-    products,
-    (state, productId: string) => state.filter(p => p.id.toString() !== productId)
-  );
-
   const [categories, setCategories] = React.useState<{id: string, name: string}[]>(initialCategories);
-  const [isLoading, setIsLoading] = React.useState(false);
+  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 15 });
+
   const { toast } = useToast();
+
+  React.useEffect(() => {
+     const timer = setTimeout(() => {
+         setDebouncedSearch(searchTerm);
+         setPagination(prev => ({ ...prev, pageIndex: 0 })); // Reset page on search
+     }, 400);
+     return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  const { data: serverResult, isLoading } = useProducts(
+      { query: debouncedSearch, page: pagination.pageIndex + 1, limit: pagination.pageSize, category: categoryFilter !== 'all' ? categoryFilter : undefined }, 
+      debouncedSearch === '' && pagination.pageIndex === 0 && categoryFilter === 'all' ? { data: initialProducts, meta: { total: initialProducts.length, page: 1, limit: 15, totalPages: Math.ceil(initialProducts.length / 15) } } : undefined
+  );
+  
+  const serverProducts = serverResult?.data || [];
+  const meta = serverResult?.meta;
+  
+  const [optimisticProducts, addOptimisticProduct] = React.useOptimistic(
+    serverProducts,
+    (state, productId: string) => state.filter((p: any) => p.id.toString() !== productId)
+  );
 
   const deleteProductLocally = (productId: string) => {
     addOptimisticProduct(productId);
   };
 
-  // Sync props to state when Router refreshes (e.g. after delete)
+  // Sync props to state when Router refreshes
   React.useEffect(() => {
-      setProducts(initialProducts);
       setCategories(initialCategories);
-  }, [initialProducts, initialCategories]);
+  }, [initialCategories]);
 
-  // Handle Search
-  React.useEffect(() => {
-    // If search is empty, revert to initial products from server
-    if (searchTerm === '') {
-         setProducts(initialProducts);
-         setIsLoading(false);
-         return;
-    }
+  // Handle category change -> Reset page back to 1
+  const handleCategoryChange = (val: string) => {
+      setCategoryFilter(val);
+      setPagination(prev => ({ ...prev, pageIndex: 0 }));
+  };
 
-    let isMounted = true;
-    const timer = setTimeout(async () => {
-      // Prevent overlapping calls
-      if (isLoading) return; 
+  const filteredProducts = optimisticProducts;
 
-      setIsLoading(true);
-      try {
-        const result = await getProducts(searchTerm);
-        
-        if (isMounted) {
-            if (result.success && result.data) {
-                setProducts(result.data as ProductWithRelations[]);
-            }
-        }
-      } catch (err) {
-        console.error("Error searching:", err);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    }, 400); // Slightly longer debounce for stability
-
-    return () => {
-        isMounted = false;
-        clearTimeout(timer);
-    };
-  }, [searchTerm]); // Removed initialProducts from here to break potential loops
-
-  // Filter products by Category Tab (Client-side filtering of current set)
-  const filteredProducts = React.useMemo(() => {
-    if (categoryFilter === 'all') return optimisticProducts;
-    return optimisticProducts.filter(p => p.categorie === categoryFilter);
-  }, [optimisticProducts, categoryFilter]);
-
-  // Stats
+  // Stats - NOTE: we are displaying stats for the CURRENT page + global total, since we don't fetch all.
+  // Ideally stats should be passed from server independently if we want global lowStock counts,
+  // but for now we'll do our best with meta.
   const stats = React.useMemo(() => {
     return {
-      total: optimisticProducts.length,
-      lowStock: optimisticProducts.filter(p => p.quantiteStock < (p.stockMin || 5)).length,
-      totalValue: optimisticProducts.reduce((acc, p) => acc + (p.prixVente * p.quantiteStock), 0),
+      total: meta?.total || filteredProducts.length,
+      lowStock: filteredProducts.filter((p: any) => p.quantiteStock < (p.stockMin || 5)).length,
+      totalValue: filteredProducts.reduce((acc: number, p: any) => acc + (p.prixVente * p.quantiteStock), 0),
     };
-  }, [optimisticProducts]);
+  }, [filteredProducts, meta?.total]);
 
   return (
     <div className="space-y-6 p-6">
@@ -187,7 +172,7 @@ export function ProductsClientView({ initialProducts, initialCategories, usageSt
       {/* Search & Filter Bar */}
       <SpotlightCard className="p-4">
         <div className="flex flex-col gap-4">
-          <Tabs value={categoryFilter} onValueChange={setCategoryFilter} className="w-full">
+          <Tabs value={categoryFilter} onValueChange={handleCategoryChange} className="w-full">
             <div className="flex flex-col md:flex-row gap-4 items-center">
               <div className="relative flex-1 w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -227,10 +212,13 @@ export function ProductsClientView({ initialProducts, initialCategories, usageSt
               <Skeleton className="h-96 w-full rounded-xl" />
           </div>
       ) : (
-        <DataTable
+          <DataTable
             columns={columns}
             data={filteredProducts}
-            // @ts-ignore - custom meta for optimistic updates
+            manualPagination
+            pageCount={meta?.totalPages || 1}
+            pagination={pagination}
+            onPaginationChange={setPagination}
             meta={{
                 deleteProduct: deleteProductLocally
             }}

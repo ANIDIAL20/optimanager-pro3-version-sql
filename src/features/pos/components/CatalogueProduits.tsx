@@ -1,7 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { Package, Plus, Search } from 'lucide-react';
+import { Package, Plus, Search, Loader2 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 
 import type { Product } from '@/app/actions/products-actions';
 import { getCategories, getProducts } from '@/app/actions/products-actions';
@@ -16,38 +17,86 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BrandLoader } from '@/components/ui/loader-brand';
 
 import { usePosCartStore } from '@/features/pos/store/use-pos-cart-store';
+import { useInfiniteProducts } from '@/hooks/use-products';
+import { useDebounce } from '@/hooks/use-debounce';
 
 export function CatalogueProduits() {
   const addItem = usePosCartStore((s) => s.addItem);
   const items = usePosCartStore((s) => s.items);
-
-  const [products, setProducts] = React.useState<Product[]>([]);
-  const [isLoading, setIsLoading] = React.useState(true);
+  const queryClient = useQueryClient();
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
 
   const [searchQuery, setSearchQuery] = React.useState('');
+  const debouncedSearch = useDebounce(searchQuery, 400);
+
   const [activeCategory, setActiveCategory] = React.useState('all');
   const [categories, setCategories] = React.useState<Array<{ id: string; name: string }>>([]);
+
+  // Fetch products seamlessly with infinite scrolling
+  const { 
+      data: infiniteData, 
+      isLoading,
+      fetchNextPage,
+      hasNextPage,
+      isFetchingNextPage
+  } = useInfiniteProducts({ 
+      query: debouncedSearch, 
+      category: activeCategory !== 'all' ? activeCategory : undefined,
+      limit: 20 
+  });
+
+  // FIX 1: Listen for sale success to invalidate cache
+  React.useEffect(() => {
+    const handleSaleConfirmed = () => {
+      queryClient.invalidateQueries({ queryKey: ['products', 'list'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    };
+
+    window.addEventListener('sale-success', handleSaleConfirmed);
+    return () => window.removeEventListener('sale-success', handleSaleConfirmed);
+  }, [queryClient]);
+
+  // FIX 5: Keyboard shortcut "/"
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const productsData = React.useMemo(() => {
+     if (!infiniteData) return [];
+     const allData = infiniteData.pages.flatMap(page => page.data);
+     
+     // De-duplicate items by ID to avoid React Key warnings (common in infinite scroll with changing counts)
+     const seen = new Set();
+     return allData.filter((p: any) => {
+         if (!p?.id || seen.has(p.id)) return false;
+         seen.add(p.id);
+         return true;
+     }) as Product[];
+  }, [infiniteData]);
 
   React.useEffect(() => {
     let cancelled = false;
 
     async function load() {
       try {
-        setIsLoading(true);
-        const [productsRes, categoriesRes] = await Promise.all([
-          getProducts(undefined),
-          getCategories(),
-        ]);
-
+        const categoriesRes = await getCategories();
         if (cancelled) return;
 
-        if (productsRes.success && productsRes.data) setProducts(productsRes.data);
-        else setProducts([]);
-
-        if (categoriesRes.success && categoriesRes.data) setCategories(categoriesRes.data);
-        else setCategories([]);
+        if (categoriesRes.success && categoriesRes.data) {
+           // Provide fallback typing as per existing UI logic
+           setCategories(categoriesRes.data as { id: string, name: string }[]);
+        } else {
+           setCategories([]);
+        }
       } finally {
-        if (!cancelled) setIsLoading(false);
+        // empty block
       }
     }
 
@@ -57,28 +106,7 @@ export function CatalogueProduits() {
     };
   }, []);
 
-  const filteredProducts = React.useMemo(() => {
-    let filtered = products;
-
-    if (activeCategory !== 'all') {
-      filtered = filtered.filter(
-        (p) => p.category === activeCategory || p.categorie === activeCategory
-      );
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (p) =>
-          p.nomProduit?.toLowerCase().includes(q) ||
-          p.reference?.toLowerCase().includes(q) ||
-          p.brand?.toLowerCase().includes(q) ||
-          p.marque?.toLowerCase().includes(q)
-      );
-    }
-
-    return filtered;
-  }, [products, activeCategory, searchQuery]);
+  const filteredProducts = productsData as Product[]; // Filtering is already done server-side via hook
 
   return (
     <div className="space-y-4">
@@ -92,7 +120,8 @@ export function CatalogueProduits() {
       <div className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
         <Input
-          placeholder="Rechercher un produit par nom ou référence..."
+          ref={searchInputRef}
+          placeholder="Rechercher un produit par nom ou référence... (appuyez sur /)"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="pl-12 bg-white h-14 rounded-xl border-slate-200 text-base shadow-sm focus:border-indigo-500 focus:ring-indigo-500 transition-all"
@@ -122,6 +151,9 @@ export function CatalogueProduits() {
             isLoading={isLoading}
             inCartProductIds={new Set(items.map((it) => it.productId))}
             onAdd={(p) => addItem(p as any)}
+            hasNextPage={!!hasNextPage}
+            fetchNextPage={fetchNextPage}
+            isFetchingNextPage={isFetchingNextPage}
           />
         </TabsContent>
       </Tabs>
@@ -134,12 +166,41 @@ function ProductList({
   isLoading,
   inCartProductIds,
   onAdd,
+  hasNextPage,
+  fetchNextPage,
+  isFetchingNextPage
 }: {
   products: Product[];
   isLoading: boolean;
   inCartProductIds: Set<string>;
   onAdd: (p: Product) => void;
+  hasNextPage: boolean;
+  fetchNextPage: () => void;
+  isFetchingNextPage: boolean;
 }) {
+  const loadMoreRef = React.useRef<HTMLDivElement>(null);
+
+  // FIX 4: IntersectionObserver for auto infinite scroll
+  React.useEffect(() => {
+    if (!hasNextPage || isFetchingNextPage) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentRef = loadMoreRef.current;
+    if (currentRef) observer.observe(currentRef);
+
+    return () => {
+      if (currentRef) observer.unobserve(currentRef);
+    };
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
   if (isLoading) {
     return (
       <div className="text-center py-12">
@@ -161,18 +222,23 @@ function ProductList({
   return (
     <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
       {products.map((product) => {
-        const Icon = getCategoryIcon(product.category || product.categorie || '');
-        const inCart = inCartProductIds.has(product.id);
-        const isOutOfStock = product.isStockManaged ? product.quantiteStock <= 0 : false;
+          const Icon = getCategoryIcon(product.category || product.categorie || '');
+          const inCart = inCartProductIds.has(product.id);
+          
+          // FIX 2: Disable button when stock = 0 (excluding VERRE- products)
+          const isStockDepleted = 
+            !product.reference?.toUpperCase().startsWith('VERRE-') && 
+            product.isStockManaged && 
+            product.quantiteStock <= 0;
 
-        return (
-          <div
-            key={product.id}
-            className={cn(
-              'flex items-center justify-between p-3 bg-white border rounded-lg hover:shadow-sm transition-shadow',
-              isOutOfStock && 'opacity-50'
-            )}
-          >
+          return (
+            <div
+              key={product.id}
+              className={cn(
+                'flex items-center justify-between p-3 bg-white border rounded-lg hover:shadow-sm transition-shadow',
+                isStockDepleted && 'opacity-60 grayscale-[0.5]'
+              )}
+            >
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
                 <Icon className="h-5 w-5 text-slate-600" />
@@ -205,17 +271,37 @@ function ProductList({
 
             <Button
               onClick={() => onAdd(product)}
-              disabled={isOutOfStock}
+              disabled={isStockDepleted}
+              title={isStockDepleted ? 'Stock épuisé' : undefined}
               size="sm"
               variant={inCart ? 'secondary' : 'outline'}
-              className="gap-2 whitespace-nowrap"
+              className={cn(
+                  "gap-2 whitespace-nowrap min-w-[100px]",
+                  isStockDepleted && "border-red-200 text-red-500 bg-red-50"
+              )}
             >
-              <Plus className="h-4 w-4" />
-              {inCart ? 'Ajouté' : 'Ajouter'}
+              {isStockDepleted ? (
+                  'Épuisé'
+              ) : (
+                  <>
+                    <Plus className="h-4 w-4" />
+                    {inCart ? 'Ajouté' : 'Ajouter'}
+                  </>
+              )}
             </Button>
           </div>
         );
       })}
+      
+      {/* FIX 4: Sentinel for Infinite Scroll */}
+      <div ref={loadMoreRef} className="h-12 w-full flex items-center justify-center p-4">
+        {isFetchingNextPage && (
+          <div className="flex items-center gap-2 text-slate-400">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-xs">Chargement des produits...</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

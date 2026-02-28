@@ -29,6 +29,7 @@ import type { Product as ProductType } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { deleteProduct } from "@/app/actions/products-actions";
 import { BrandLoader } from '@/components/ui/loader-brand';
+import { useDeleteProduct } from "@/hooks/use-products";
 
 // Extend Product type for table display with optional populated fields
 export type ProductWithRelations = ProductType & {
@@ -187,16 +188,7 @@ function ProductActions({ product, onDelete }: { product: ProductWithRelations, 
     const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
     const { toast } = useToast();
 
-    // Fix Zombie Overlay: Cleanup body styles when dialog closes
-    React.useEffect(() => {
-        if (!showDeleteDialog) {
-            const timer = setTimeout(() => {
-                document.body.style.pointerEvents = "";
-                document.body.style.overflow = "";
-            }, 300);
-            return () => clearTimeout(timer);
-        }
-    }, [showDeleteDialog]);
+    const { mutateAsync: deleteProductAsync } = useDeleteProduct();
 
     const handleDelete = async () => {
         setIsDeleting(true);
@@ -210,26 +202,12 @@ function ProductActions({ product, onDelete }: { product: ProductWithRelations, 
                     onDelete(product.id.toString());
                 }
 
-                const result = await deleteProduct(product.id);
+                await deleteProductAsync(product.id.toString());
                 
-                if (!result.success) {
-                    throw new Error(result.error || "Erreur inconnue");
-                }
-
-                toast({
-                    title: "Produit supprimé",
-                    description: `Le produit "${product.nomProduit}" a été supprimé avec succès.`,
-                });
-                
-                router.refresh();
+                // router.refresh(); // No longer necessary since useDeleteProduct handles cache invalidation
 
             } catch (error: any) {
                 console.error("Error deleting product:", error);
-                toast({
-                    variant: "destructive",
-                    title: "Erreur",
-                    description: error.message || "Une erreur s'est produite lors de la suppression.",
-                });
             } finally {
                 setIsDeleting(false);
             }

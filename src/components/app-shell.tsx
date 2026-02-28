@@ -11,7 +11,7 @@ import { BreadcrumbCustom } from "@/components/ui/breadcrumb-custom";
 import { useBreadcrumbStore } from "@/hooks/use-breadcrumb-store";
 
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
-import { getNotificationsCount } from "@/app/actions/notifications-actions";
+import { useNotificationCount } from "@/hooks/use-notification-count";
 import { Bell } from 'lucide-react';
 
 export default function AppShell({ children, banner }: { children: React.ReactNode, banner?: any }) {
@@ -19,34 +19,16 @@ export default function AppShell({ children, banner }: { children: React.ReactNo
     const router = useRouter();
     const pathname = usePathname();
     const [isBannerVisible, setIsBannerVisible] = useState(true);
-    const [notificationsCount, setNotificationsCount] = useState(0);
+    
+    // Use TanStack Query for optimal real-time feeling without manual polling
+    const { data: notificationsData } = useNotificationCount();
+    const notificationsCount = notificationsData?.total || 0;
     
     // Breadcrumb store - must be called before any early returns
     const { labels } = useBreadcrumbStore();
 
     // Initialize global keyboard shortcuts (Power Users)
     useKeyboardShortcuts();
-
-    useEffect(() => {
-        let cancelled = false;
-
-        async function loadCount() {
-            try {
-                const res = await getNotificationsCount();
-                if (cancelled) return;
-                if (res.success && res.data) setNotificationsCount(res.data.total || 0);
-            } catch {
-                // ignore
-            }
-        }
-
-        loadCount();
-        const interval = setInterval(loadCount, 2 * 60 * 1000);
-        return () => {
-            cancelled = true;
-            clearInterval(interval);
-        };
-    }, []);
 
     // 1. Define Public and Print Routes
     // Using explicit check to prevent any undefined errors

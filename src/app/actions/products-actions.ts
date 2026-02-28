@@ -53,9 +53,15 @@ export interface Product {
  * Get all products with optional search
  * ✅ SECURED - Multi-tenant
  */
-export const getProducts = secureAction(async (userId, user, searchQuery?: string) => {
+export const getProducts = secureAction(async (userId, user, params?: string | { query?: string; page?: number; limit?: number; category?: string }) => {
     return await measurePerformance(`getProducts-${userId}`, async () => {
-        console.log(`📦 Fetching products for user: ${userId} (Drizzle)`);
+        const searchQuery = typeof params === 'string' ? params : params?.query;
+        const page = (typeof params === 'object' && params?.page) ? params.page : 1;
+        const limit = (typeof params === 'object' && params?.limit) ? params.limit : 50;
+        const categoryFilter = typeof params === 'object' ? params?.category : undefined;
+        const offset = (page - 1) * limit;
+
+        console.log(`📦 Fetching products for user: ${userId} (Drizzle) - Page: ${page}, Limit: ${limit}, Category: ${categoryFilter || 'ALL'}`);
 
         try {
             const filters = [
@@ -68,16 +74,35 @@ export const getProducts = secureAction(async (userId, user, searchQuery?: strin
                 filters.push(or(
                     ilike(products.nom, search),
                     ilike(products.reference, search),
-                    ilike(products.category, search), // Use new col
-                    ilike(products.categorie, search), // Fallback
-                    ilike(products.brand, search),    // Use new col
-                    ilike(products.marque, search)    // Fallback
+                    ilike(products.category, search),
+                    ilike(products.categorie, search),
+                    ilike(products.brand, search),
+                    ilike(products.marque, search)
                 )!);
             }
 
+            if (categoryFilter && categoryFilter !== 'all') {
+                filters.push(or(
+                    eq(products.category, categoryFilter),
+                    eq(products.categorie, categoryFilter)
+                )!);
+            }
+
+            const countResult = await db.select({ count: sql<number>`count(*)` })
+                .from(products)
+                .where(and(...filters));
+            const totalElements = Number(countResult[0]?.count || 0);
+            const totalPages = Math.ceil(totalElements / limit);
+
             const results = await db.select().from(products)
                 .where(and(...filters))
-                .orderBy(desc(products.createdAt));
+                .orderBy(
+                    desc(sql`CASE WHEN ${products.quantiteStock} > 0 THEN 1 ELSE 0 END`),
+                    asc(products.nom),
+                    desc(products.id) // Tie-breaker for stable sorting!
+                )
+                .limit(limit)
+                .offset(offset);
 
             // Transform Drizzle results to frontend interface
             const mappedProducts: Product[] = results.map((p: any) => ({
@@ -113,10 +138,19 @@ export const getProducts = secureAction(async (userId, user, searchQuery?: strin
                 isStockManaged: p.isStockManaged !== false // Default true
             }));
 
-            console.log(`✅ Found ${mappedProducts.length} products (Drizzle)`);
-            await logSuccess(userId, 'READ', 'products', 'list', { count: mappedProducts.length, searchQuery });
+            console.log(`✅ Found ${mappedProducts.length} products (Total: ${totalElements})`);
+            await logSuccess(userId, 'READ', 'products', 'list', { count: mappedProducts.length, total: totalElements, page, searchQuery });
 
-            return { success: true, data: mappedProducts };
+            return { 
+                success: true, 
+                data: mappedProducts,
+                meta: {
+                    total: totalElements,
+                    page,
+                    limit,
+                    totalPages
+                }
+            };
 
         } catch (error: any) {
             console.error('💥 Error fetching products (Drizzle):', error);
