@@ -5,6 +5,7 @@ import {
   getReservationsExpiring,
   getStockCritique,
   getVerresPrets,
+  getCommandesEnAttente,
 } from '@/app/actions/notifications-actions';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -19,12 +20,14 @@ export default async function NotificationsPage() {
   const user = await getCurrentUser();
   if (!user) redirect('/login');
 
-  const [verresRes, reservationsRes, stockRes] = await Promise.all([
+  const [commandesRes, verresRes, reservationsRes, stockRes] = await Promise.all([
+    getCommandesEnAttente(),
     getVerresPrets(),
     getReservationsExpiring(),
     getStockCritique(),
   ]);
 
+  const commandes = commandesRes.success ? commandesRes.data : [];
   const verres = verresRes.success ? verresRes.data : [];
   const reservations = reservationsRes.success ? reservationsRes.data : [];
   const stock = stockRes.success ? stockRes.data : [];
@@ -34,12 +37,16 @@ export default async function NotificationsPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Notifications</h1>
         <p className="text-muted-foreground mt-1">
-          Accès rapide aux verres prêts, réservations expirantes et stock critique.
+          Accès rapide aux commandes en attente, verres prêts, réservations expirantes et stock critique.
         </p>
       </div>
 
       <Tabs defaultValue="verres" className="w-full">
         <TabsList className="w-full justify-start">
+          <TabsTrigger value="commandes" className="gap-2">
+            ⏳ En attente
+            <Badge variant="secondary">{commandes.length}</Badge>
+          </TabsTrigger>
           <TabsTrigger value="verres" className="gap-2">
             📦 Verres Prêts
             <Badge variant="secondary">{verres.length}</Badge>
@@ -53,6 +60,39 @@ export default async function NotificationsPage() {
             <Badge variant="secondary">{stock.length}</Badge>
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="commandes" className="mt-6">
+          <div className="space-y-3">
+            {commandes.length === 0 ? (
+              <Card>
+                <CardContent className="p-6 text-sm text-muted-foreground">
+                  Aucune commande de verres en attente.
+                </CardContent>
+              </Card>
+            ) : (
+              commandes.map((o: any) => (
+                <Card key={o.id}>
+                  <CardContent className="p-4 flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="font-semibold truncate">{o.client?.fullName || 'Client'}</div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {o.lensType} • {parseFloat(o.sellingPrice || '0').toFixed(2)} MAD
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button asChild size="sm">
+                        <Link href="/dashboard/suppliers">Réceptionner →</Link>
+                      </Button>
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/dashboard/clients/${o.client?.id}`}>Dossier</Link>
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+        </TabsContent>
 
         <TabsContent value="verres" className="mt-6">
           <div className="space-y-3">

@@ -18,6 +18,7 @@ import { SaisieMesuresVerres } from '@/components/sales/saisie-mesures-verres';
 
 import { getClients } from '@/features/clients/actions';
 import { getPendingLensOrders } from '@/app/actions/lens-orders-actions';
+import { getActiveReservationsByClient } from '@/app/actions/reservation-actions';
 
 import { usePosCartStore } from '@/features/pos/store/use-pos-cart-store';
 
@@ -29,12 +30,14 @@ export function PosWorkspace() {
   const selectedClient = usePosCartStore((s) => s.selectedClient);
   const setSelectedClient = usePosCartStore((s) => s.setSelectedClient);
   const addLensOrder = usePosCartStore((s) => s.addLensOrder);
+  const addReservedItem = usePosCartStore((s) => (s as any).addReservedItem);
   const addComplexPack = usePosCartStore((s) => s.addComplexPack);
   const items = usePosCartStore((s) => s.items);
 
   const [clients, setClients] = React.useState<Client[]>([]);
   const [isLoadingClients, setIsLoadingClients] = React.useState(true);
   const [pendingOrders, setPendingOrders] = React.useState<any[]>([]);
+  const [activeReservations, setActiveReservations] = React.useState<any[]>([]);
   
   // Success Modal State
   const [successModalOpen, setSuccessModalOpen] = React.useState(false);
@@ -89,20 +92,28 @@ export function PosWorkspace() {
   React.useEffect(() => {
     let cancelled = false;
 
-    async function loadPending() {
+    async function loadClientData() {
       if (!selectedClient?.id) {
         setPendingOrders([]);
+        setActiveReservations([]);
         return;
       }
 
-      const res = await getPendingLensOrders(selectedClient.id);
+      const [resOrders, resReservations] = await Promise.all([
+        getPendingLensOrders(selectedClient.id),
+        getActiveReservationsByClient(selectedClient.id)
+      ]);
+
       if (cancelled) return;
 
-      if (res.success && res.data) setPendingOrders(res.data);
+      if (resOrders.success && resOrders.data) setPendingOrders(resOrders.data);
       else setPendingOrders([]);
+
+      if (resReservations.success && resReservations.data) setActiveReservations(resReservations.data);
+      else setActiveReservations([]);
     }
 
-    loadPending();
+    loadClientData();
     return () => {
       cancelled = true;
     };
@@ -269,6 +280,96 @@ export function PosWorkspace() {
                       disabled={isAdded}
                     >
                       {isAdded ? 'OK' : isReceived ? 'AJOUTER' : 'LIER'}
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {activeReservations.length > 0 && (
+        <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-top-4 duration-700 mt-4">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-12 bg-amber-500 rounded-full flex items-center justify-center text-[10px] text-white font-black">
+                RES
+              </div>
+              <h3 className="font-extrabold text-lg text-slate-800 tracking-tight">
+                Produits Réservés{' '}
+                <span className="text-amber-600">({activeReservations.length})</span>
+              </h3>
+            </div>
+            <Badge
+              variant="outline"
+              className="bg-white text-amber-700 border-amber-200 shadow-sm font-semibold px-2 py-0.5 flex gap-1.5 items-center rounded-full"
+            >
+              <Package className="h-3 w-3 text-amber-500" />
+              Réservations
+            </Badge>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {activeReservations.map((res) => {
+              const isAdded = items.some((i) => (i as any).fromReservation === res.id);
+              const itemsList = res.items.map((it: any) => it.productName).join(', ');
+              const advanceAmount = parseFloat(res.depositAmount || '0');
+
+              return (
+                <Card
+                  key={res.id}
+                  className={cn(
+                    'overflow-hidden border-2 transition-all duration-300 group hover:shadow-lg relative border-amber-50 bg-amber-50/20 hover:border-amber-300',
+                    isAdded && 'opacity-40 border-slate-100 pointer-events-none'
+                  )}
+                >
+                  <CardContent className="p-3 flex items-center justify-between gap-3">
+                    <div className="flex gap-3 items-center flex-1 min-w-0">
+                      <div className="h-10 w-10 rounded-lg flex items-center justify-center shadow-sm shrink-0 bg-amber-100 text-amber-600">
+                        <Receipt className="h-5 w-5" />
+                      </div>
+                      <div className="space-y-0.5 overflow-hidden">
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-bold text-slate-900 text-sm truncate uppercase tracking-tight">
+                            Réservation #{res.id}
+                          </p>
+                          {advanceAmount > 0 && (
+                            <Badge className="text-[8px] h-3.5 px-1 rounded bg-emerald-600 text-white">
+                              Avancé
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-500 truncate italic">
+                          {itemsList}
+                        </p>
+                        <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
+                          <span className="text-slate-800">
+                            Total: {parseFloat(res.totalAmount).toLocaleString('fr-MA')} DH
+                          </span>
+                          {advanceAmount > 0 && (
+                            <>
+                              <span>•</span>
+                              <span className="text-emerald-600">
+                                Avance: {advanceAmount.toLocaleString('fr-MA')} DH
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      variant={isAdded ? 'ghost' : 'default'}
+                      className={cn(
+                        'font-black text-[10px] h-8 px-3 rounded-lg border-2',
+                        !isAdded && 'bg-amber-600 border-amber-600 hover:bg-amber-700 text-white shadow-sm'
+                      )}
+                      onClick={() => addReservedItem(res)}
+                      disabled={isAdded}
+                    >
+                      {isAdded ? 'OK' : 'AJOUTER'}
                     </Button>
                   </CardContent>
                 </Card>

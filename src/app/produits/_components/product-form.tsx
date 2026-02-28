@@ -30,9 +30,9 @@ import type { Brand, Material, Category, Color, Product, Supplier } from '@/lib/
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
-import { createBulkProducts, updateProduct } from '@/app/actions/products-actions';
 import { getBrands, getCategories, getMaterials, getColors, createSetting } from '@/app/actions/settings-actions';
 import { getSuppliersList } from '@/app/actions/supplier-actions';
+import { useCreateProduct, useUpdateProduct, useCreateBulkProducts } from '@/hooks/use-products';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Tooltip,
@@ -109,6 +109,11 @@ export function ProductForm({ product }: ProductFormProps) {
   const [suppliers, setSuppliers] = React.useState<Supplier[]>([]);
   
   const [isCreatingSetting, setIsCreatingSetting] = React.useState(false);
+
+  // TanStack Query Mutations
+  const createMutation = useCreateProduct(); // Note: if bulk we need a bulk mutation or just use the backend action, but let's use the mutation or adapt the backend. Wait, useCreateProduct only handles single products!
+  // I need to add useCreateBulkProducts to the hooks if I want to use it for bulk.
+  const updateMutation = useUpdateProduct();
 
   const form = useForm<BulkProductFormValues>({
     resolver: zodResolver(BulkProductSchema),
@@ -276,6 +281,9 @@ export function ProductForm({ product }: ProductFormProps) {
     }
   };
 
+  const { mutateAsync: updateProductAsync } = useUpdateProduct();
+  const { mutateAsync: createBulkProductsAsync } = useCreateBulkProducts();
+
   const onSubmit = async (data: BulkProductFormValues) => {
     setIsSubmitting(true);
     try {
@@ -293,14 +301,8 @@ export function ProductForm({ product }: ProductFormProps) {
                 hasTva: item.hasTva,
                 priceType: item.priceType 
             };
-            const res = await updateProduct(product.id, payload);
-            if (res.success) {
-                 toast({ title: 'Produit modifié', description: 'Mise à jour réussie' });
-                 router.push(`/produits/${product.id}`); 
-                 router.refresh();
-            } else {
-                 throw new Error(res.error);
-            }
+            await updateProductAsync({ id: product.id.toString(), data: payload });
+            router.push(`/produits/${product.id}`); 
         } else {
              const filteredItems = data.items.filter(it => it.nomProduit.trim() !== '');
              const items = filteredItems.map(item => ({
@@ -315,7 +317,7 @@ export function ProductForm({ product }: ProductFormProps) {
                  hasTva: item.hasTva,
                  priceType: item.priceType
              }));
-             const res = await createBulkProducts({ 
+             await createBulkProductsAsync({ 
                  items, 
                  invoiceData: { 
                      fournisseurId: data.fournisseurId, 
@@ -323,15 +325,11 @@ export function ProductForm({ product }: ProductFormProps) {
                      dateAchat: data.dateAchat ? new Date(data.dateAchat) : undefined 
                  } 
              });
-             if (res.success) {
-                 toast({ title: 'Succès', description: res.message });
-                 router.push('/produits');
-             } else {
-                 throw new Error(res.error);
-             }
+             router.push('/produits');
         }
     } catch (error: any) {
-        toast({ variant: 'destructive', title: 'Erreur', description: error.message });
+        // Erreurs déjà gérées par le tooltip des hooks mais on log au besoin
+        console.error(error);
     } finally {
         setIsSubmitting(false);
     }

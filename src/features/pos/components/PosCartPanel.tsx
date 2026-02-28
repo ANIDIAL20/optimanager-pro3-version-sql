@@ -202,6 +202,9 @@ export function PosCartPanel({ alreadyPaid = 0, reservationIds = [], onSuccess, 
           if (onSuccess) {
             onSuccess(saleId);
           }
+          
+          // FIX 1: Dispatch event to refresh other POS components (catalog cache)
+          window.dispatchEvent(new CustomEvent('sale-success', { detail: { saleId } }));
           return;
         }
 

@@ -1,13 +1,26 @@
 'use server';
 
 import { db } from '@/db';
-import { lensOrders, clients, prescriptionsLegacy as prescriptions, supplierOrders, suppliers, supplierOrderItems, reminders, products } from '@/db/schema';
+import { 
+    lensOrders, 
+    clients, 
+    prescriptionsLegacy, 
+    supplierOrders, 
+    suppliers, 
+    supplierOrderItems, 
+    reminders, 
+    products,
+    notifications
+} from '@/db/schema';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
-import { eq, and, desc, lt, gt, inArray, sql } from 'drizzle-orm';
+import { eq, and, desc, lt, gt, inArray, sql, isNull, gte } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { LensOrderSchema } from '@/lib/validations/optical';
 import { redis } from '@/lib/cache/redis';
+import { subMonths } from 'date-fns';
+import { auditLogs } from '@/db/schema';
+import { createNotification } from '@/features/notifications/services/create-notification';
 
 // ========================================
 // TYPE DEFINITIONS
@@ -108,6 +121,23 @@ export interface LensOrder {
   updatedAt: Date | null;
 }
 
+export type BulkReceiveParams = {
+  orderIds: number[]
+  blNumber: string
+  purchasePrices: Record<number, number>
+}
+
+export type BulkReceiveResult = {
+  success: true
+  supplierOrderId: number
+  productsCreated: number
+  receivedOrders: {
+    id: number
+    clientName: string
+    clientPhone: string
+  }[]
+}
+
 // ========================================
 // LENS ORDER ACTIONS
 // ========================================
@@ -127,34 +157,34 @@ const getFriendlyErrorMessage = (error: any): string => {
  */
 export const getLensOrders = secureAction(async (userId, user) => {
   try {
-    const results = await db.query.lensOrders.findMany({
-      where: eq(lensOrders.userId, userId),
-      orderBy: [desc(lensOrders.createdAt)],
-      with: {
-        client: {
-          columns: {
-            id: true,
-            fullName: true,
-            phone: true,
-            email: true,
-          }
-        },
-        prescriptionLegacy: true
-      }
-    });
+    const results = await db.select({
+      lensOrder: lensOrders,
+      client: {
+        id: clients.id,
+        fullName: clients.fullName,
+        phone: clients.phone,
+        email: clients.email,
+      },
+      prescriptionLegacy: prescriptionsLegacy
+    })
+    .from(lensOrders)
+    .leftJoin(clients, eq(lensOrders.clientId, clients.id))
+    .leftJoin(prescriptionsLegacy, eq(lensOrders.prescriptionId, prescriptionsLegacy.id))
+    .where(eq(lensOrders.userId, userId))
+    .orderBy(desc(lensOrders.createdAt));
     
-    // ... mapping code ...
-    const mapped = results.map((order: typeof results[0]) => ({
-      ...order,
-      id: order.id,
-      totalPrice: order.totalPrice?.toString() || '0',
-      unitPrice: order.unitPrice?.toString() || '0',
-      sellingPrice: order.sellingPrice?.toString() || '0',
-      orderDate: order.orderDate instanceof Date ? order.orderDate.toISOString() : order.orderDate,
-      receivedDate: order.receivedDate instanceof Date ? order.receivedDate.toISOString() : order.receivedDate,
-      deliveredDate: order.deliveredDate instanceof Date ? order.deliveredDate.toISOString() : order.deliveredDate,
-      createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
-      updatedAt: order.updatedAt instanceof Date ? order.updatedAt.toISOString() : order.updatedAt,
+    const mapped = results.map(({ lensOrder, client, prescriptionLegacy }) => ({
+      ...lensOrder,
+      client: client || null,
+      prescriptionLegacy: prescriptionLegacy || null,
+      totalPrice: lensOrder.totalPrice?.toString() || '0',
+      unitPrice: lensOrder.unitPrice?.toString() || '0',
+      sellingPrice: lensOrder.sellingPrice?.toString() || '0',
+      orderDate: lensOrder.orderDate instanceof Date ? lensOrder.orderDate.toISOString() : lensOrder.orderDate,
+      receivedDate: lensOrder.receivedDate instanceof Date ? lensOrder.receivedDate.toISOString() : lensOrder.receivedDate,
+      deliveredDate: lensOrder.deliveredDate instanceof Date ? lensOrder.deliveredDate.toISOString() : lensOrder.deliveredDate,
+      createdAt: lensOrder.createdAt instanceof Date ? lensOrder.createdAt.toISOString() : lensOrder.createdAt,
+      updatedAt: lensOrder.updatedAt instanceof Date ? lensOrder.updatedAt.toISOString() : lensOrder.updatedAt,
     }));
 
     await logSuccess(userId, 'READ', 'lens_orders', 'list', { count: results.length });
@@ -177,30 +207,31 @@ export const getLensOrders = secureAction(async (userId, user) => {
 export const getClientLensOrders = secureAction(async (userId, user, clientId: string) => {
   try {
     const clientIdNum = parseInt(clientId);
-    const results = await db.query.lensOrders.findMany({
-      where: and(
-        eq(lensOrders.userId, userId),
-        eq(lensOrders.clientId, clientIdNum)
-      ),
-      orderBy: [desc(lensOrders.createdAt)],
-      with: {
-        prescriptionLegacy: true
-      }
-    });
+    const results = await db.select({
+      lensOrder: lensOrders,
+      prescriptionLegacy: prescriptionsLegacy
+    })
+    .from(lensOrders)
+    .leftJoin(prescriptionsLegacy, eq(lensOrders.prescriptionId, prescriptionsLegacy.id))
+    .where(and(
+      eq(lensOrders.userId, userId),
+      eq(lensOrders.clientId, clientIdNum)
+    ))
+    .orderBy(desc(lensOrders.createdAt));
     
     // ... mapping code ...
-    const mapped = results.map((order: typeof results[0]) => ({
-      ...order,
-      id: order.id,
-      totalPrice: order.totalPrice?.toString() || '0',
-      unitPrice: order.unitPrice?.toString() || '0',
-      sellingPrice: order.sellingPrice?.toString() || '0',
-      amountPaid: order.amountPaid?.toString() || '0', // ✅ Avance versée
-      orderDate: order.orderDate instanceof Date ? order.orderDate.toISOString() : order.orderDate,
-      receivedDate: order.receivedDate instanceof Date ? order.receivedDate.toISOString() : order.receivedDate,
-      deliveredDate: order.deliveredDate instanceof Date ? order.deliveredDate.toISOString() : order.deliveredDate,
-      createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
-      updatedAt: order.updatedAt instanceof Date ? order.updatedAt.toISOString() : order.updatedAt,
+    const mapped = results.map(({ lensOrder, prescriptionLegacy }) => ({
+      ...lensOrder,
+      prescriptionLegacy: prescriptionLegacy || null,
+      totalPrice: lensOrder.totalPrice?.toString() || '0',
+      unitPrice: lensOrder.unitPrice?.toString() || '0',
+      sellingPrice: lensOrder.sellingPrice?.toString() || '0',
+      amountPaid: lensOrder.amountPaid?.toString() || '0', // ✅ Avance versée
+      orderDate: lensOrder.orderDate instanceof Date ? lensOrder.orderDate.toISOString() : lensOrder.orderDate,
+      receivedDate: lensOrder.receivedDate instanceof Date ? lensOrder.receivedDate.toISOString() : lensOrder.receivedDate,
+      deliveredDate: lensOrder.deliveredDate instanceof Date ? lensOrder.deliveredDate.toISOString() : lensOrder.deliveredDate,
+      createdAt: lensOrder.createdAt instanceof Date ? lensOrder.createdAt.toISOString() : lensOrder.createdAt,
+      updatedAt: lensOrder.updatedAt instanceof Date ? lensOrder.updatedAt.toISOString() : lensOrder.updatedAt,
     }));
 
     console.log('🟢 [getClientLensOrders] Sample amountPaid from DB:', mapped.slice(0, 3).map((o: { id: number; amountPaid: string | null }) => ({ id: o.id, amountPaid: o.amountPaid })));
@@ -234,7 +265,7 @@ export const createLensOrder = secureAction(async (userId, user, rawInput: LensO
     const result = await db.transaction(async (tx: any) => {
         const clientExists = await tx.query.clients.findFirst({
             where: and(eq(clients.id, input.clientId), eq(clients.userId, userId)),
-            columns: { id: true }
+            columns: { id: true, fullName: true }
         });
         
         if (!clientExists) {
@@ -343,13 +374,27 @@ export const createLensOrder = secureAction(async (userId, user, rawInput: LensO
             })
             .returning();
 
-        return created;
+        const clientName = clientExists.fullName || 'Client Inconnu';
+        
+        // 🚀 Atomicité stricte: Notification sauvegardée dans la même transaction
+        // Si l'une des deux opérations échoue, TOUT est annulé.
+        await createNotification(tx, {
+            userId: userId,
+            type: 'LENS_ORDER_PENDING',
+            title: 'Commande de verres en attente',
+            message: `La commande de verres pour le client ${clientName} est en attente de traitement.`,
+            priority: 'MEDIUM',
+            relatedEntityType: 'lens_order',
+            relatedEntityId: created.id
+        });
+
+        return { created, clientFullName: clientExists.fullName };
     });
     
-    await logSuccess(userId, 'CREATE', 'lens_orders', result.id.toString(), {
+    await logSuccess(userId, 'CREATE', 'lens_orders', result.created.id.toString(), {
         clientId: input.clientId,
         orderType: input.orderType,
-        supplier: result.supplierName,
+        supplier: result.created.supplierName,
         price: input.sellingPrice
     });
 
@@ -359,7 +404,7 @@ export const createLensOrder = secureAction(async (userId, user, rawInput: LensO
     return { 
       success: true, 
       message: 'Commande de verres créée avec succès',
-      data: result 
+      data: result.created 
     };
 
   } catch (error: any) {
@@ -443,7 +488,6 @@ export const updateLensOrder = secureAction(
 /**
  * Mark order as received
  */
-import { isNull } from 'drizzle-orm';
 
 /**
  * Get billable lens orders for a client (pending/ordered/received AND not billed)
@@ -456,19 +500,25 @@ export const getPendingLensOrders = secureAction(async (userId, user, clientId: 
     }
 
     // Commandes non encore facturées (saleId NULL)
-    const results = await db.query.lensOrders.findMany({
-      where: and(
-        eq(lensOrders.userId, userId),
-        eq(lensOrders.clientId, clientIdNum),
-        isNull(lensOrders.saleId),
-      ),
-      orderBy: [desc(lensOrders.createdAt)],
-      with: {
-        prescriptionLegacy: true
-      }
-    });
+    const results = await db.select({
+      lensOrder: lensOrders,
+      prescriptionLegacy: prescriptionsLegacy
+    })
+    .from(lensOrders)
+    .leftJoin(prescriptionsLegacy, eq(lensOrders.prescriptionId, prescriptionsLegacy.id))
+    .where(and(
+      eq(lensOrders.userId, userId),
+      eq(lensOrders.clientId, clientIdNum),
+      isNull(lensOrders.saleId),
+    ))
+    .orderBy(desc(lensOrders.createdAt));
 
-    return { success: true, data: results };
+    const mapped = results.map(({ lensOrder, prescriptionLegacy }) => ({
+      ...lensOrder,
+      prescriptionLegacy: prescriptionLegacy || null
+    }));
+
+    return { success: true, data: mapped };
 
   } catch (error: any) {
     console.error('❌ [ERROR] getPendingLensOrders:', error);
@@ -861,20 +911,17 @@ export const getAdvanceForProduct = secureAction(async (userId, user, clientId: 
 export const getSupplierLensOrders = secureAction(async (userId, user, supplierId: string) => {
     try {
         const results = await db.query.lensOrders.findMany({
-            where: eq(lensOrders.supplierId, supplierId),
+            where: and(
+                eq(lensOrders.userId, userId),
+                eq(lensOrders.supplierId, supplierId)
+            ),
             orderBy: [desc(lensOrders.createdAt)],
             with: {
                 client: {
-                    columns: {
-                        id: true,
-                        fullName: true,
-                        phone: true
-                    }
-                },
-                prescriptionLegacy: true
+                    columns: { id: true, fullName: true, phone: true }
+                }
             }
         });
-
         return { success: true, data: results };
     } catch (error: any) {
         console.error("💥 Error fetching supplier lens orders:", error?.message || error);
@@ -883,54 +930,348 @@ export const getSupplierLensOrders = secureAction(async (userId, user, supplierI
 });
 
 /**
+ * Get pending and ordered lens orders for a specific supplier
+ */
+export const getPendingOrdersBySupplier_OLD = secureAction(async (userId, user, supplierId: string) => {
+  try {
+    // Filtre de sécurité : Uniquement les commandes des 6 derniers mois
+    const sixMonthsAgo = subMonths(new Date(), 6);
+
+    const results = await db.query.lensOrders.findMany({
+      where: and(
+        eq(lensOrders.userId, userId),
+        eq(lensOrders.supplierId, supplierId),
+        // Robustesse : Gestion de la casse pour les statuts
+        inArray(sql`lower(${lensOrders.status})`, ['pending', 'ordered']),
+        // Filtre de date sécurisé
+        gte(lensOrders.createdAt, sixMonthsAgo)
+      ),
+      with: {
+        client: {
+          columns: { fullName: true, phone: true }
+        }
+      },
+      orderBy: [desc(lensOrders.createdAt)]
+    });
+    return { success: true, data: results };
+  } catch (error) {
+    console.error("Erreur lors de la récupération des commandes:", error);
+    return { success: false, error: "Échec de la récupération des commandes." };
+  }
+});
+
+
+/**
  * Bulk receive lens orders with a delivery note (BL)
  */
-export const bulkReceiveLensOrders = secureAction(async (userId, user, selectedOrderIds: string[], blNumber: string) => {
+export const bulkReceiveLensOrders_OLD = secureAction(async (userId, user, params: BulkReceiveParams) => {
     try {
-        if (!selectedOrderIds || selectedOrderIds.length === 0) {
-            return { success: false, error: "Aucune commande sélectionnée" };
-        }
+        const { orderIds, blNumber, purchasePrices } = params;
 
-        const orderIdNums = selectedOrderIds.map(id => parseInt(id)).filter(id => !isNaN(id));
-        
-        if (orderIdNums.length === 0) {
-            return { success: false, error: "IDs de commande invalides" };
+        if (!orderIds || orderIds.length === 0) {
+            return { success: false, error: "Aucune commande sélectionnée" };
         }
 
         const now = new Date();
 
-        await db.update(lensOrders)
-            .set({ 
-                status: 'received', 
-                deliveryNoteRef: blNumber, 
-                receivedDate: now,
-                updatedAt: now 
-            })
-            .where(and(
-                eq(lensOrders.userId, userId),
-                inArray(lensOrders.id, orderIdNums)
-            ));
+        const result = await db.transaction(async (tx) => {
+            // 1. Fetch and validate all orders within transaction
+            const ordersToReceive = await tx.query.lensOrders.findMany({
+                where: and(
+                    eq(lensOrders.userId, userId),
+                    inArray(lensOrders.id, orderIds)
+                ),
+                with: {
+                    client: {
+                        columns: { id: true, fullName: true, phone: true }
+                    }
+                }
+            });
 
-        // Revalidate essential paths
+            // Rigorous validation: all must exist and be 'ordered'
+            for (const id of orderIds) {
+                const order = ordersToReceive.find(o => o.id === id);
+                if (!order) {
+                    throw new Error(`Commande #${id} introuvable`);
+                }
+                if (order.status !== 'ordered') {
+                    throw new Error(`La commande #${id} ne peut pas être reçue (Statut actuel: ${order.status})`);
+                }
+            }
+
+            if (ordersToReceive.length === 0) {
+                throw new Error("Aucune commande valide trouvée");
+            }
+
+            const firstOrder = ordersToReceive[0];
+            const supplierId = firstOrder.supplierId;
+            const supplierName = firstOrder.supplierName;
+
+            // 2. Create ONE consolidated supplierOrder
+            let totalAmount = 0;
+            orderIds.forEach(id => {
+                totalAmount += purchasePrices[id] || 0;
+            });
+
+            // Calculate Due Date if supplier exists
+            let dueDate: Date | null = null;
+            if (supplierId) {
+                const supplier = await tx.query.suppliers.findFirst({
+                    where: and(eq(suppliers.id, supplierId), eq(suppliers.userId, userId))
+                });
+                if (supplier?.paymentTerms) {
+                    const days = parseInt(supplier.paymentTerms as string);
+                    if (!isNaN(days)) {
+                        dueDate = new Date();
+                        dueDate.setDate(dueDate.getDate() + days);
+                    }
+                }
+            }
+
+            const [so] = await tx.insert(supplierOrders).values({
+                userId,
+                supplierId,
+                fournisseur: supplierName,
+                orderReference: blNumber,
+                montantTotal: totalAmount.toString(),
+                montantPaye: '0',
+                resteAPayer: totalAmount.toString(),
+                // Unified Accounting Fields
+                amountPaid: '0',
+                remainingAmount: totalAmount.toString(),
+                paymentStatus: 'unpaid',
+                statut: 'received',
+                orderDate: now,
+                dueDate: dueDate,
+                notes: `Réception groupée BL: ${blNumber} (${orderIds.length} verres)`
+            }).returning();
+
+            // 3. Process each order
+            const productsToInsert: (typeof products.$inferInsert)[] = [];
+            const receivedOrdersDetails: any[] = [];
+
+            for (const order of ordersToReceive) {
+                const finalCost = purchasePrices[order.id] || 0;
+                const sellingPrice = parseFloat(order.sellingPrice);
+                const finalMargin = sellingPrice - finalCost;
+
+                // 3a. Update Lens Order (individuel car prix différents)
+                await tx.update(lensOrders)
+                    .set({
+                        status: 'received',
+                        receivedDate: now,
+                        deliveryNoteRef: blNumber,
+                        finalBuyingPrice: finalCost.toString(),
+                        finalMargin: finalMargin.toString(),
+                        updatedAt: now
+                    })
+                    .where(eq(lensOrders.id, order.id));
+
+                // 3b. Prepare Product for Batch Insert
+                const productName = `Verres ${order.lensType} - ${order.client.fullName}`;
+                const description = `
+                    Client: ${order.client.fullName}
+                    Type: ${order.orderType}
+                    OD: ${order.sphereR || ''} ${order.cylindreR ? `(${order.cylindreR})` : ''} ${order.axeR ? `à ${order.axeR}°` : ''} ${order.additionR ? `Add ${order.additionR}` : ''}
+                    OG: ${order.sphereL || ''} ${order.cylindreL ? `(${order.cylindreL})` : ''} ${order.axeL ? `à ${order.axeL}°` : ''} ${order.additionL ? `Add ${order.additionL}` : ''}
+                    EP: OD ${order.ecartPupillaireR || '-'} / OG ${order.ecartPupillaireL || '-'}
+                `.trim();
+
+                productsToInsert.push({
+                    userId,
+                    nom: productName,
+                    type: 'VERRE',
+                    categorie: 'Verres',
+                    reference: `VERRE-${order.id}`,
+                    designation: description.substring(0, 255),
+                    description: description,
+                    prixVente: order.sellingPrice,
+                    prixAchat: finalCost.toString(),
+                    quantiteStock: order.quantity,
+                    availableQuantity: order.quantity,
+                    fournisseur: order.supplierName,
+                    details: JSON.stringify({
+                        lensOrderId: order.id,
+                        clientId: order.client.id,
+                        clientName: order.client.fullName,
+                        prescription: {
+                            od: { sph: order.sphereR, cyl: order.cylindreR, axe: order.axeR, add: order.additionR, ep: order.ecartPupillaireR },
+                            og: { sph: order.sphereL, cyl: order.cylindreL, axe: order.axeL, add: order.additionL, ep: order.ecartPupillaireL }
+                        },
+                        supplierRef: blNumber
+                    })
+                });
+
+                receivedOrdersDetails.push({
+                    id: order.id,
+                    clientName: order.client.fullName,
+                    clientPhone: order.client.phone || ''
+                });
+            }
+
+            // Batch insert products
+            if (productsToInsert.length > 0) {
+                await tx.insert(products).values(productsToInsert);
+            }
+
+            // 4. Trace Audit Log
+            await tx.insert(auditLogs).values({
+                userId,
+                action: 'BULK_RECEIVE',
+                entityType: 'lens_orders',
+                entityId: 'BATCH',
+                metadata: { 
+                    count: orderIds.length, 
+                    blNumber: blNumber,
+                    supplierId: supplierId 
+                },
+            });
+
+            return {
+                supplierOrderId: so.id,
+                productsCreated: productsToInsert.length,
+                receivedOrders: receivedOrdersDetails
+            };
+        });
+
+        // Revalidate Paths
         revalidatePath('/dashboard/lens-orders');
         revalidatePath('/dashboard/suppliers');
-        
+        revalidatePath('/dashboard/stock');
+
         await logSuccess(userId, 'UPDATE', 'lens_orders', 'bulk_receive', { 
-            count: orderIdNums.length, 
-            blNumber 
+            count: orderIds.length, 
+            blNumber,
+            supplierOrderId: result.supplierOrderId
         });
 
         return { 
             success: true, 
-            message: `${orderIdNums.length} commandes marquées comme 'Reçues' (BL: ${blNumber}).` 
+            ...result
         };
     } catch (error: any) {
         console.error("💥 Error in bulkReceiveLensOrders:", error);
         await logFailure(userId, 'UPDATE', 'lens_orders', error.message, 'bulk_receive');
         return { 
             success: false, 
-            error: "Erreur lors de la réception groupée: " + (error?.message || "Erreur inconnue") 
+            error: error.message || "Erreur lors de la réception groupée" 
         };
     }
 });
 
+/**
+ * 1. Fetch Pending Orders for a Specific Supplier (Bulk Receive Modal)
+ */
+export const getPendingOrdersBySupplier = secureAction(async (userId, user, supplierId: string) => {
+  try {
+    if (!supplierId || typeof supplierId !== 'string') {
+      return { success: false, error: 'ID Fournisseur invalide' };
+    }
+
+    // Performance Filter: Only last 6 months
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    const results = await db.query.lensOrders.findMany({
+      where: and(
+        eq(lensOrders.userId, userId),
+        eq(lensOrders.supplierId, supplierId),
+        inArray(lensOrders.status, ['pending', 'ordered']),
+        gt(lensOrders.createdAt, sixMonthsAgo)
+      ),
+      with: {
+        client: { columns: { id: true, fullName: true, phone: true } }
+      },
+      orderBy: [desc(lensOrders.createdAt)]
+    });
+
+    return { success: true, data: results };
+  } catch (error: any) {
+    console.error("❌ Erreur getPendingOrdersBySupplier:", error);
+    return { success: false, error: error.message };
+  }
+});
+
+/**
+ * 2. Process Bulk Reception (Batch Mode)
+ */
+export const bulkReceiveLensOrders = secureAction(async (userId, user, data: { supplierId: string; selectedOrderIds: number[]; blNumber: string }) => {
+  try {
+    const { supplierId, selectedOrderIds, blNumber } = data;
+    
+    if (!selectedOrderIds || selectedOrderIds.length === 0) {
+        return { success: false, error: "Aucune commande sélectionnée" };
+    }
+
+    let receivedOrdersToReturn: any[] = [];
+
+    await db.transaction(async (tx: any) => {
+        // A. Fetch original orders to get pricing and client info
+        const ordersToReceive = await tx.query.lensOrders.findMany({
+            where: and(
+                eq(lensOrders.userId, userId),
+                inArray(lensOrders.id, selectedOrderIds)
+            ),
+            with: { client: { columns: { fullName: true, phone: true } } }
+        });
+
+        receivedOrdersToReturn = ordersToReceive.map((o: any) => ({
+            id: o.id,
+            clientName: o.client?.fullName,
+            clientPhone: o.client?.phone
+        }));
+
+        // B. Update Lens Orders status in BATCH
+        await tx.update(lensOrders)
+            .set({ 
+                status: 'received', 
+                deliveryNoteRef: blNumber,
+                receivedDate: new Date(),
+                updatedAt: new Date()
+            })
+            .where(and(
+                eq(lensOrders.userId, userId),
+                inArray(lensOrders.id, selectedOrderIds)
+            ));
+
+        // C. Insert into Products (Stock) in BATCH
+        const productsToInsert = ordersToReceive.map((order: any) => {
+             const clientName = order.client?.fullName || 'Client Inconnu';
+             const description = `Client: ${clientName} | Type: ${order.orderType} | BL: ${blNumber}`;
+             
+             return {
+                userId,
+                nom: `Verres ${order.lensType || 'Standard'} - ${clientName}`,
+                type: 'VERRE',
+                categorie: 'Verres',
+                reference: `VERRE-${order.id}`,
+                designation: description.substring(0, 255),
+                description: description,
+                prixVente: order.sellingPrice || '0',
+                prixAchat: order.estimatedBuyingPrice || '0',
+                quantiteStock: order.quantity || 1,
+                availableQuantity: order.quantity || 1,
+                fournisseur: order.supplierName,
+                details: JSON.stringify({ lensOrderId: order.id, blNumber })
+            };
+        });
+
+        if (productsToInsert.length > 0) {
+            await tx.insert(products).values(productsToInsert);
+        }
+    });
+
+    revalidatePath('/dashboard/suppliers');
+    revalidatePath('/dashboard/lens-orders');
+    revalidatePath('/dashboard/stock');
+
+    return { 
+        success: true, 
+        message: `${selectedOrderIds.length} verres réceptionnés avec succès !`,
+        receivedOrders: receivedOrdersToReturn
+    };
+  } catch (error: any) {
+    console.error("❌ Erreur bulkReceiveLensOrders:", error);
+    return { success: false, error: error.message };
+  }
+});

@@ -101,6 +101,28 @@ export const createReservationFromCartAction = secureAction(async (userId, user,
   revalidatePath('/dashboard/ventes');
   revalidatePath('/dashboard/clients');
   revalidatePath(`/dashboard/clients/${clientId}`);
-
   return { success: true, data: reservation };
 });
+
+/**
+ * Récupère les réservations ACTIVES (PENDING) d'un client
+ */
+export async function getActiveReservationsByClient(clientId: number | string) {
+  try {
+    const id = typeof clientId === 'string' ? parseInt(clientId) : clientId;
+    if (isNaN(id)) return { success: false, error: "ID Client invalide" };
+
+    const results = await db.query.frameReservations.findMany({
+      where: and(
+        eq(frameReservations.clientId, id),
+        eq(frameReservations.status, 'PENDING')
+      ),
+      orderBy: [desc(frameReservations.createdAt)]
+    });
+
+    return { success: true, data: results };
+  } catch (error: any) {
+    console.error("Error fetching active reservations:", error);
+    return { success: false, error: "Erreur lors de la récupération des réservations" };
+  }
+}

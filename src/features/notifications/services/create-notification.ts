@@ -1,29 +1,33 @@
-import { db } from '@/db';
-import { notifications } from '@/db/schema';
+import { notifications } from '@/db/schema/notifications';
 
-interface CreateNotificationInput {
-  userId?: string; // Optional, if not provided maybe it's for all admins?
-  type: 'RESERVATION_EXPIRING' | 'RESERVATION_EXPIRED' | 'LOW_STOCK' | 'LENS_READY' | 'OTHER';
-  title: string;
-  message: string;
-  priority?: 'LOW' | 'MEDIUM' | 'HIGH';
-  relatedEntityType?: string;
-  relatedEntityId?: number;
-}
+/**
+ * Inférence stricte et automatique via Drizzle.
+ * Maintient le typage lié à la base de données sans redondance.
+ */
+export type NewNotification = typeof notifications.$inferInsert;
 
-export async function createNotification(input: CreateNotificationInput) {
-  const [notification] = await db
-    .insert(notifications)
-    .values({
-      userId: input.userId,
-      type: input.type,
-      title: input.title,
-      message: input.message,
-      priority: input.priority ?? 'MEDIUM',
-      relatedEntityType: input.relatedEntityType,
-      relatedEntityId: input.relatedEntityId,
-    })
-    .returning();
-  
-  return notification;
+/**
+ * Fonction utilitaire "Production-Ready" pour créer des notifications.
+ *
+ * @param tx - L'objet de transaction (issu de db.transaction). L'imposer garantit que la
+ *            notification sera incluse dans la même transaction que l'entité parente
+ *            et annulée si l'opération globale échoue (Atomicité).
+ * @param data - Les données strongly-typed de la notification.
+ */
+export async function createNotification(
+  tx: any, // Typiquement Extract<typeof db, any> ou du Transaction type Drizzle
+  data: NewNotification
+) {
+  // L'insertion se fait sans try/catch local : 
+  // si elle échoue, l'erreur remonte et provoque le rollback de la transaction principale
+  await tx.insert(notifications).values({
+    userId: data.userId,
+    type: data.type,
+    title: data.title,
+    message: data.message,
+    priority: data.priority ?? 'MEDIUM',
+    relatedEntityType: data.relatedEntityType,
+    relatedEntityId: data.relatedEntityId,
+    // (Les timestamps createdAt et champs id/isRead sont gérés par la db)
+  });
 }

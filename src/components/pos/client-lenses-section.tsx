@@ -30,7 +30,7 @@ export function ClientLensesSection({ lenses, onAddToCart, addedLensIds = [] }: 
       <div className="flex items-center justify-between mb-2">
         <h3 className="font-bold text-lg flex items-center gap-2 text-blue-900">
           <Eye className="h-5 w-5 text-blue-600" />
-          Verres du Client
+          Verres du Client Prêts
           <Badge variant="secondary" className="bg-blue-200 text-blue-800 ml-2 hover:bg-blue-300">
             {lenses.length}
           </Badge>
@@ -42,7 +42,9 @@ export function ClientLensesSection({ lenses, onAddToCart, addedLensIds = [] }: 
       
       {/* Liste des verres */}
       <div className="grid gap-3">
-        {lenses.map(({ lensOrder, product }) => {
+        {lenses.map((item) => {
+            const lensOrder = item.lensOrder || item;
+            const product = item.product || null;
             const isAdded = addedLensIds.includes(lensOrder.id.toString());
             
             return (

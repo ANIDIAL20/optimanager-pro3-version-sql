@@ -28,6 +28,12 @@ interface DataTableProps<TData, TValue> {
     data: TData[];
     searchKey?: string;
     searchValue?: string;
+    // App-specific manual pagination hook support
+    pageCount?: number;
+    pagination?: { pageIndex: number; pageSize: number };
+    onPaginationChange?: (updater: any) => void;
+    manualPagination?: boolean;
+    meta?: any;
 }
 
 export function DataTable<TData, TValue>({
@@ -35,6 +41,11 @@ export function DataTable<TData, TValue>({
     data,
     searchKey,
     searchValue,
+    pageCount,
+    pagination,
+    onPaginationChange,
+    manualPagination,
+    meta,
 }: DataTableProps<TData, TValue>) {
     const [sorting, setSorting] = React.useState<SortingState>([]);
     const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
@@ -56,15 +67,18 @@ export function DataTable<TData, TValue>({
         getSortedRowModel: getSortedRowModel(),
         onColumnFiltersChange: setColumnFilters,
         getFilteredRowModel: getFilteredRowModel(),
+        manualPagination,
+        pageCount,
+        onPaginationChange: onPaginationChange,
         state: {
             sorting,
             columnFilters,
+            ...(pagination ? { pagination } : {}),
         },
         initialState: {
-            pagination: {
-                pageSize: 10,
-            },
+            ...(!pagination && { pagination: { pageSize: 15 } }),
         },
+        meta,
     });
 
     return (

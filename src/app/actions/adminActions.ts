@@ -362,7 +362,7 @@ export async function getClientUsageStats(uid: string) {
             if (isColumnError) {
                 console.warn(`ℹ️ [DB NOTICE] User limits or users table not perfectly synced, using defaults. Error: ${e.message}`);
             } else {
-                console.error(`❌ [DB ERROR] User limits fetch failed:`, e.message);
+                console.warn(`❌ [DB WARNING] User limits fetch failed:`, e.message);
             }
 
             // Return default limits to keep the UI functional
@@ -381,10 +381,6 @@ export async function getClientUsageStats(uid: string) {
         suppliers
     };
 
-    // List available query keys to debug
-    const queryKeys = Object.keys(db.query || {});
-    console.log(`📡 [DB] Available query keys: ${queryKeys.join(', ')}`);
-
     // Robust count fetcher using select with explicit casting for multi-tenant isolation
     const fetchCount = async (tableName: string) => {
         let attempts = 0;
@@ -392,34 +388,46 @@ export async function getClientUsageStats(uid: string) {
         const targetTable = tableMap[tableName];
 
         if (!targetTable) {
-            console.error(`❌ [DB ERROR] Table mapping for ${tableName} not found`);
+            console.warn(`❌ [DB WARNING] Table mapping for ${tableName} not found`);
             return 0;
         }
 
         while (attempts < maxAttempts) {
             try {
-                // Use sql template with explicit casting for user_id to handle potential UUID/TEXT mismatch
-                // This is the most compatible way across different Postgres schema versions
+                // TRY 1: Standard Drizzle eq() - most robust if types match
                 const res = await db.select({ value: count() })
                     .from(targetTable)
-                    .where(sql`${targetTable.userId}::text = ${trimmedId}`);
+                    .where(eq(targetTable.userId, trimmedId));
                 
                 const val = Number(res[0]?.value || 0);
                 console.log(`✅ [DB SUCCESS] ${tableName} count: ${val}`);
                 return val;
             } catch (e: any) {
                 attempts++;
-                console.error(`❌ [DB ATTEMPT ${attempts}] ${tableName} count failed: ${e.message}`);
+                console.warn(`❌ [DB ATTEMPT ${attempts}] ${tableName} count failed: ${e.message}`);
                 
-                // Fallback attempt without casting if the casting itself caused an error
+                // Diagnostic logging
+                if (e.code) console.warn(`🔍 [DB ERROR CODE] ${e.code}`);
+                if (e.detail) console.warn(`🔍 [DB ERROR DETAIL] ${e.detail}`);
+                
+                // If it's a "column does not exist" type of error, log available columns
+                if (e.message.includes('column') || e.code === '42703') {
+                    try {
+                        const cols = await db.execute(sql`SELECT column_name FROM information_schema.columns WHERE table_name = ${tableName}`);
+                        const colNames = Array.isArray(cols) ? cols.map((c: any) => c.column_name) : (cols.rows?.map((c: any) => c.column_name) || []);
+                        console.warn(`📡 [DB DIAGNOSTIC] Columns for ${tableName}: ${colNames.join(', ')}`);
+                    } catch (diagE) {}
+                }
+
+                // TRY 2: Explicit casting fallback if it was a type mismatch (e.g. UUID vs TEXT in DB)
                 if (attempts === 1) {
                     try {
                         const resFallback = await db.select({ value: count() })
                             .from(targetTable)
-                            .where(eq(targetTable.userId, trimmedId));
+                            .where(sql`${targetTable.userId}::text = ${trimmedId}`);
                         return Number(resFallback[0]?.value || 0);
-                    } catch (innerE) {
-                        // Ignore fallback error, continue to next attempt cycle
+                    } catch (innerE: any) {
+                        console.warn(`❌ [DB FALLBACK FAILED] ${tableName} casting failed: ${innerE.message}`);
                     }
                 }
 
@@ -452,7 +460,7 @@ export async function getClientUsageStats(uid: string) {
       },
     };
   } catch (error: any) {
-    console.error("❌ Usage Stats Error (Final):", error);
+    console.warn("❌ Usage Stats Error (Final):", error);
     return { 
         products: { count: 0, limit: 500 },
         clients: { count: 0, limit: 200 },

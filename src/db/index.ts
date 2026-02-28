@@ -35,12 +35,11 @@ function createDbConnection() {
   // Use Pool instead of simple neon() for better transaction/session support
   const pool = new Pool({ 
     connectionString: getDatabaseUrl(),
-    webSocketConstructor: (ws as any).default || ws,
   });
 
   return drizzle(pool, {
     schema,
-    logger: process.env.NODE_ENV === 'development' && false,
+    logger: process.env.NODE_ENV === 'development',
   });
 }
 
@@ -58,8 +57,12 @@ export const db = new Proxy(
   {},
   {
     get(_target, prop) {
+      console.log(`📡 [DB Proxy] Accessing property: ${String(prop)}`);
       const instance = getDbInstance();
-      if (!instance) return undefined;
+      if (!instance) {
+        console.error("❌ [DB Proxy] No database instance available!");
+        return undefined;
+      }
       const value = (instance as any)[prop as any];
       return typeof value === 'function' ? value.bind(instance) : value;
     },
