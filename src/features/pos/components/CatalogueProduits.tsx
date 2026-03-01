@@ -1,11 +1,13 @@
 'use client';
 
 import * as React from 'react';
-import { Package, Plus, Search, Loader2 } from 'lucide-react';
+import { Package, Plus, Search, Loader2, XCircle } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import type { Product } from '@/app/actions/products-actions';
 import { getCategories, getProducts } from '@/app/actions/products-actions';
+import { getPendingLensOrders } from '@/app/actions/lens-orders-actions';
+import { ClientLensesSection } from '@/components/pos/client-lenses-section';
 
 import { cn } from '@/lib/utils';
 import { getCategoryIcon } from '@/lib/category-icons';
@@ -20,8 +22,9 @@ import { usePosCartStore } from '@/features/pos/store/use-pos-cart-store';
 import { useInfiniteProducts } from '@/hooks/use-products';
 import { useDebounce } from '@/hooks/use-debounce';
 
-export function CatalogueProduits() {
+export function CatalogueProduits({ clientId, onCustomAdd }: { clientId?: number, onCustomAdd?: (p: any) => void } = {}) {
   const addItem = usePosCartStore((s) => s.addItem);
+  const addLensOrder = usePosCartStore((s) => s.addLensOrder);
   const items = usePosCartStore((s) => s.items);
   const queryClient = useQueryClient();
   const searchInputRef = React.useRef<HTMLInputElement>(null);
@@ -31,6 +34,17 @@ export function CatalogueProduits() {
 
   const [activeCategory, setActiveCategory] = React.useState('all');
   const [categories, setCategories] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [clientLenses, setClientLenses] = React.useState<any[]>([]);
+
+  // Fetch pending lenses if clientId is provided
+  React.useEffect(() => {
+    if (clientId) {
+      // getPendingLensOrders expects a string; clientId is number here
+      getPendingLensOrders(String(clientId)).then(res => {
+        if (res.success && res.data) setClientLenses(res.data);
+      });
+    }
+  }, [clientId]);
 
   // Fetch products seamlessly with infinite scrolling
   const { 
@@ -42,7 +56,10 @@ export function CatalogueProduits() {
   } = useInfiniteProducts({ 
       query: debouncedSearch, 
       category: activeCategory !== 'all' ? activeCategory : undefined,
-      limit: 20 
+      limit: 20,
+      hideOutOfStock: true, // 🛡️ POS: never show zero-stock managed products
+      // 🔖 BUG-3 FIX: clientId is now number directly
+      clientId: clientId,
   });
 
   // FIX 1: Listen for sale success to invalidate cache
@@ -110,12 +127,20 @@ export function CatalogueProduits() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2 mb-2">
-        <Badge variant="outline" className="text-lg px-3 py-1 bg-white">
-          2
-        </Badge>
-        <h3 className="font-semibold text-lg">Catalogue Produits</h3>
-      </div>
+      {clientLenses.length > 0 && (
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-blue-700 font-semibold text-sm">
+              👁️ {clientLenses.length} verre(s) prêt(s) à livrer
+            </span>
+          </div>
+          <ClientLensesSection
+            lenses={clientLenses}
+            onAddToCart={(p, lo) => addLensOrder(lo)}
+            addedLensIds={items.filter(i => i.productId.startsWith('LO-')).map(i => i.productId.replace('LO-', ''))}
+          />
+        </div>
+      )}
 
       <div className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
@@ -150,7 +175,10 @@ export function CatalogueProduits() {
             products={filteredProducts}
             isLoading={isLoading}
             inCartProductIds={new Set(items.map((it) => it.productId))}
-            onAdd={(p) => addItem(p as any)}
+            onAdd={(p) => {
+                if (onCustomAdd) onCustomAdd(p);
+                else addItem(p as any);
+            }}
             hasNextPage={!!hasNextPage}
             fetchNextPage={fetchNextPage}
             isFetchingNextPage={isFetchingNextPage}
@@ -240,8 +268,14 @@ function ProductList({
               )}
             >
             <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
+              <div className="relative flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
                 <Icon className="h-5 w-5 text-slate-600" />
+                {/* 🔴 Badge overlay when stock is 0 (shown only if hideOutOfStock is off) */}
+                {isStockDepleted && (
+                  <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center">
+                    <XCircle className="h-4 w-4 text-red-500 fill-white" />
+                  </span>
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-slate-900 truncate">{product.nomProduit}</p>

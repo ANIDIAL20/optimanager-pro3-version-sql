@@ -110,7 +110,7 @@ export function SupplierPaymentDialog({
                 onOpenChange(false);
                 router.refresh();
             } else {
-                throw new Error(res.error || "Une erreur est survenue");
+                throw new Error((res as any).error || "Une erreur est survenue");
             }
         } catch (error: any) {
             toast({

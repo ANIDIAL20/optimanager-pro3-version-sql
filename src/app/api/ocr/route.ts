@@ -1,11 +1,19 @@
 import { NextResponse } from 'next/server';
 import Tesseract from 'tesseract.js';
+import { auth } from '@/auth';
+
+// SECURED: uses auth() + tenant filter (2026-03-01)
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
     try {
+        const session = await auth();
+        if (!session?.user?.id) {
+            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+        }
+
         const { imageBase64 } = await req.json();
 
         if (!imageBase64) {

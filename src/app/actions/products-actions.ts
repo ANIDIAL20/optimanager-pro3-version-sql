@@ -3,7 +3,7 @@
 
 import { db } from '@/db';
 import { products, stockMovements, invoiceImports } from '@/db/schema';
-import { eq, and, or, ilike, desc, lte, asc, sql } from 'drizzle-orm';
+import { eq, and, or, ilike, desc, lte, asc, sql, gt, not } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure, logAudit } from '@/lib/audit-log';
 import { redirect } from 'next/navigation';
@@ -53,12 +53,14 @@ export interface Product {
  * Get all products with optional search
  * ✅ SECURED - Multi-tenant
  */
-export const getProducts = secureAction(async (userId, user, params?: string | { query?: string; page?: number; limit?: number; category?: string }) => {
+export const getProducts = secureAction(async (userId, user, params?: string | { query?: string; page?: number; limit?: number; category?: string; hideOutOfStock?: boolean; clientId?: number }) => {
     return await measurePerformance(`getProducts-${userId}`, async () => {
         const searchQuery = typeof params === 'string' ? params : params?.query;
         const page = (typeof params === 'object' && params?.page) ? params.page : 1;
         const limit = (typeof params === 'object' && params?.limit) ? params.limit : 50;
         const categoryFilter = typeof params === 'object' ? params?.category : undefined;
+        const hideOutOfStock = typeof params === 'object' ? params?.hideOutOfStock : false;
+        const clientId = typeof params === 'object' ? params?.clientId : undefined;
         const offset = (page - 1) * limit;
 
         console.log(`📦 Fetching products for user: ${userId} (Drizzle) - Page: ${page}, Limit: ${limit}, Category: ${categoryFilter || 'ALL'}`);
@@ -86,6 +88,31 @@ export const getProducts = secureAction(async (userId, user, params?: string | {
                     eq(products.category, categoryFilter),
                     eq(products.categorie, categoryFilter)
                 )!);
+            }
+
+            // 🛡️ POS FILTER — Hide zero-stock managed products (sold unique lenses, etc.)
+            if (hideOutOfStock) {
+                filters.push(
+                    gt(products.quantiteStock, 0)
+                );
+            }
+
+            // 🔒 BUG-3 FIX: VERRE visibility filter
+            // - With clientId   → show normal products + VERRE belonging to this client only
+            // - Without clientId → hide ALL VERRE- products from the POS
+            if (clientId !== undefined) {
+                filters.push(
+                    or(
+                        not(ilike(products.reference, 'VERRE-%')),
+                        and(
+                            ilike(products.reference, 'VERRE-%'),
+                            eq(products.clientId, clientId)
+                        )!
+                    )!
+                );
+            } else {
+                // No client selected: hide all VERRE- products entirely
+                filters.push(not(ilike(products.reference, 'VERRE-%')));
             }
 
             const countResult = await db.select({ count: sql<number>`count(*)` })

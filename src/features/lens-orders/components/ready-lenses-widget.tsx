@@ -20,7 +20,7 @@ export function ReadyLensesDashboardWidget() {
             try {
                 const res = await getGlobalAvailableLenses();
                 if (res.success) {
-                    setLenses(res.data);
+                    setLenses(res.data ?? []);
                 }
             } catch (error) {
                 console.error(error);

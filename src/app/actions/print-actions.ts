@@ -21,8 +21,8 @@ export const getPrintData = secureAction(async (userId, user, documentId: string
             });
             if (result) {
                 documentData = {
-                    id: result.id.toString(),
                     ...result,
+                    id: result.id.toString(),
                     items: result.items,
                     totalHT: Number(result.totalHT),
                     totalTTC: Number(result.totalTTC)
@@ -34,8 +34,8 @@ export const getPrintData = secureAction(async (userId, user, documentId: string
             });
             if (result) {
                 documentData = {
-                    id: result.id.toString(),
                     ...result,
+                    id: result.id.toString(),
                     items: result.items,
                     totalHT: Number(result.totalHT || 0),
                     totalTTC: Number(result.totalTTC || 0),

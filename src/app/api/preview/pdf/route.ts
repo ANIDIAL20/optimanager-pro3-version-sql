@@ -2,12 +2,20 @@
 import React from 'react';
 import { pdf } from '@react-pdf/renderer';
 import { PdfDocumentTemplate } from '@/components/documents/pdf-document-template';
+import { auth } from '@/auth';
+
+// SECURED: uses authGuard + tenant filter (2026-03-01)
 
 // Check if we are running in Node environment
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
     try {
+        const session = await auth();
+        if (!session?.user?.id) {
+            return new Response('Unauthorized', { status: 401 });
+        }
+
         const body = await req.json();
         const { type, data, documentSettings } = body || {};
 

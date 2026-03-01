@@ -69,7 +69,7 @@ export class SaleRepository extends BaseRepository<Sale, typeof sales> {
               .update(products)
               .set({ 
                 quantiteStock: sql`${products.quantiteStock} - ${item.quantity}`,
-                updatedAt: new Date()
+                updatedAt: new Date().toISOString()
               })
               .where(and(
                 eq(products.id, productId), 

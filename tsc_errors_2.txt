@@ -21,6 +21,8 @@ src/components/admin/create-user-form.tsx(30,5): error TS2820: Type '"user"' is 
 src/components/admin/create-user-form.tsx(47,11): error TS2820: Type '"user"' is not assignable to type '"ADMIN" | "USER" | undefined'. Did you mean '"USER"'?
 src/components/admin/create-user-form.tsx(114,44): error TS2322: Type '"user" | "admin"' is not assignable to type '"ADMIN" | "USER" | undefined'.
   Type '"user"' is not assignable to type '"ADMIN" | "USER" | undefined'. Did you mean '"USER"'?
+src/components/dashboard/fournisseurs/columns.tsx(144,21): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
 src/components/dashboard/produits/stock-update-dialog.tsx(102,41): error TS2339: Property 'newStock' does not exist on type '{ success: boolean; newStock: number; } | { success: boolean; error: any; }'.
   Property 'newStock' does not exist on type '{ success: boolean; error: any; }'.
 src/components/dashboard/produits/stock-update-dialog.tsx(125,40): error TS2339: Property 'error' does not exist on type '{ success: boolean; newStock: number; } | { success: boolean; error: any; }'.
@@ -31,8 +33,17 @@ src/components/dashboard/supplier-orders/supplier-payment-dialog.tsx(113,37): er
   Property 'error' does not exist on type '{ success: boolean; message: string; }'.
 src/components/dashboard/supplier-payments/supplier-payment-form.tsx(149,32): error TS2339: Property 'error' does not exist on type '{ success: boolean; message: string; } | { success: boolean; error: any; }'.
   Property 'error' does not exist on type '{ success: boolean; message: string; }'.
+src/components/products/invoice-scanner-dialog.tsx(245,53): error TS2352: Conversion of type '{ id: string; name: string; bank: string | null; userId: string; email: string | null; phone: string | null; address: string | null; city: string | null; notes: string | null; creditLimit: string | null; ... 15 more ...; defaultTaxMode: string | null; }' to type 'Supplier' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Types of property 'currentBalance' are incompatible.
+    Type 'string | null' is not comparable to type 'number | undefined'.
+      Type 'string' is not comparable to type 'number'.
 src/components/suppliers/orders/create-order-button.tsx(197,41): error TS2339: Property 'error' does not exist on type '{ success: boolean; id: any; message: string; } | { success: boolean; error: string; }'.
   Property 'error' does not exist on type '{ success: boolean; id: any; message: string; }'.
+src/components/suppliers/orders/create-order-button.tsx(241,45): error TS2322: Type '{ label: string | undefined; value: string; }[]' is not assignable to type 'SearchableSelectOption[]'.
+  Type '{ label: string | undefined; value: string; }' is not assignable to type 'SearchableSelectOption'.
+    Types of property 'label' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
 src/features/lens-orders/components/ready-lenses-widget.tsx(23,31): error TS2345: Argument of type '{ id: number; updatedAt: Date | null; lensType: string; sellingPrice: string; client: { id: number; fullName: string; phone: string | null; } | null; }[] | undefined' is not assignable to parameter of type 'SetStateAction<any[]>'.
   Type 'undefined' is not assignable to type 'SetStateAction<any[]>'.
 src/features/reservations/jobs/auto-expire-reservations.ts(40,13): error TS2554: Expected 2 arguments, but got 1.

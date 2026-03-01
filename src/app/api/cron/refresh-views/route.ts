@@ -1,3 +1,4 @@
+// SECURED: uses CRON_SECRET (2026-03-01)
 import { NextRequest, NextResponse } from 'next/server';
 import { refreshSupplierBalances } from '@/lib/utils/refresh-views';
 

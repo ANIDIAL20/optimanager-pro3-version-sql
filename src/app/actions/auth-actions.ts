@@ -72,7 +72,7 @@ export interface CreateUserInput {
   name: string;
   email: string;
   password: string;
-  role?: 'admin' | 'user';
+  role?: 'ADMIN' | 'USER';
 }
 
 export interface CreateUserResponse {
@@ -128,7 +128,7 @@ export async function createUserAction(input: CreateUserInput): Promise<CreateUs
       name: input.name,
       email: input.email,
       password: hashedPassword,
-      role: input.role || 'user',
+      role: input.role || 'USER',
       emailVerified: new Date(), // Auto-verify for admin-created users
     }).returning();
 
@@ -181,7 +181,7 @@ export async function deleteUser(userId: string): Promise<CreateUserResponse> {
  */
 export async function updateUserRole(
   userId: string,
-  role: 'admin' | 'user'
+  role: 'ADMIN' | 'USER'
 ): Promise<CreateUserResponse> {
   try {
     const adminUser = await requireAdmin();

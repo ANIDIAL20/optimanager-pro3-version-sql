@@ -242,7 +242,40 @@ export function InvoiceScannerDialog() {
                             try {
                                 const created = await createSupplier({ nomCommercial: invoiceData.supplierName, status: 'Actif' });
                                 if (created) {
-                                    const newSupp = { ...created, id: created.id.toString(), name: created.name } as Supplier;
+                                    const newSupp: Supplier = {
+                                        id: created.id.toString(),
+                                        userId: created.userId,
+                                        name: created.name ?? invoiceData.supplierName ?? '',
+                                        nomCommercial: created.name ?? invoiceData.supplierName ?? '',
+                                        phone: created.phone ?? '',
+                                        telephone: created.phone ?? '',
+                                        email: created.email ?? '',
+                                        address: created.address ?? '',
+                                        adresse: created.address ?? '',
+                                        city: created.city ?? '',
+                                        ville: created.city ?? '',
+                                        category: created.category ?? '',
+                                        typeProduits: created.category ? created.category.split(', ') : [],
+                                        ice: created.ice ?? '',
+                                        if: created.if ?? '',
+                                        rc: created.rc ?? '',
+                                        taxId: created.taxId ?? '',
+                                        paymentTerms: created.paymentTerms ?? '',
+                                        paymentMethod: created.paymentMethod ?? '',
+                                        bank: created.bank ?? '',
+                                        banque: created.bank ?? '',
+                                        rib: created.rib ?? '',
+                                        notes: created.notes ?? '',
+                                        status: created.status ?? 'Actif',
+                                        statut: created.status ?? 'Actif',
+                                        isActive: created.isActive ?? true,
+                                        defaultTaxMode: created.defaultTaxMode ?? 'HT',
+                                        currentBalance: Number(created.currentBalance || 0),
+                                        createdAt: created.createdAt ?? new Date(),
+                                        dateCreation: created.createdAt ?? new Date(),
+                                        updatedAt: created.updatedAt ?? new Date(),
+                                        dateModification: created.updatedAt ?? new Date()
+                                    };
                                     setSuppliers(prev => [...prev, newSupp]);
                                     supplierId = newSupp.id;
                                     toast({ title: "Nouveau Fournisseur", description: `${invoiceData.supplierName} a été ajouté auto.` });

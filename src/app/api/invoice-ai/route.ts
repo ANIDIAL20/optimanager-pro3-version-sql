@@ -1,4 +1,5 @@
 // src/app/api/invoice-ai/route.ts
+// SECURED: uses authGuard + tenant filter (2026-03-01)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';

@@ -37,7 +37,7 @@ export async function autoExpireFrameReservations() {
   for (const res of expiredReservations) {
     try {
       // إنشاء تنبيه قبل الإلغاء
-      await createNotification({
+      await createNotification(db, {
         userId: res.storeId, 
         type: 'RESERVATION_EXPIRED',
         title: 'Réservation expirée',
@@ -89,7 +89,7 @@ export async function autoExpireFrameReservations() {
     try {
       const daysLeft = differenceInDays(new Date(res.expiryDate), now);
       
-      await createNotification({
+      await createNotification(db, {
         userId: res.storeId,
         type: 'RESERVATION_EXPIRING',
         title: 'Réservation expire bientôt',

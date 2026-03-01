@@ -146,7 +146,7 @@ export function SupplierPaymentForm() {
         });
         router.push('/dashboard/supplier-payments');
       } else {
-        throw new Error(result.error);
+        throw new Error((result as any).error);
       }
     } catch (error: any) {
       toast({

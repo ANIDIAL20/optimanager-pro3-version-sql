@@ -1,3 +1,4 @@
+// SECURED: uses authGuard + tenant filter (2026-03-01)
 import { db } from '@/db';
 import { devis, shopProfiles } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
