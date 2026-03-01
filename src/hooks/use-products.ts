@@ -49,12 +49,19 @@ export function useProducts(
  * Hook pour récupérer la liste des produits avec Infinite Scroll (POS)
  */
 export function useInfiniteProducts(
-  params: { query?: string; limit?: number; category?: string } = { limit: 20 }
+  params: { query?: string; limit?: number; category?: string; hideOutOfStock?: boolean; clientId?: number } = { limit: 20 }
 ) {
   return useInfiniteQuery({
     queryKey: productKeys.list({ ...params, type: 'infinite' }),
     queryFn: async ({ pageParam = 1 }) => {
-      const result = await getProducts({ query: params.query, category: params.category, page: pageParam, limit: params.limit });
+      const result = await getProducts({
+        query: params.query,
+        category: params.category,
+        page: pageParam,
+        limit: params.limit,
+        hideOutOfStock: params.hideOutOfStock,
+        clientId: params.clientId,
+      });
       if (!result.success) throw new Error(result.error);
       return {
         data: result.data,
@@ -68,8 +75,8 @@ export function useInfiniteProducts(
       }
       return undefined;
     },
-    staleTime: 30_000, // 30 seconds, safe for POS
-    gcTime: 5 * 60_000, // keep 5min in memory
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
   });
 }
 

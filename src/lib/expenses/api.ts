@@ -184,7 +184,7 @@ export const getExpenseById = secureAction(async (userId, user, id: string) => {
         });
 
         if (!expense) return { success: false, error: 'Non trouvé' };
-        return { success: true, data: expense as Expense };
+        return { success: true, data: expense as unknown as Expense };
     } catch (error: any) {
         return { success: false, error: error.message };
     }
@@ -255,10 +255,10 @@ export const deleteExpense = secureAction(async (userId, user, id: string) => {
             ));
 
         // 3. Delete attachments from UploadThing if any
-        if (expense.attachments && expense.attachments.length > 0) {
+        const expenseAny = expense as any;
+        if (expenseAny.attachments && expenseAny.attachments.length > 0) {
             try {
-                // Extract keys from UploadThing URLs if possible
-                const fileKeys = expense.attachments.map((url: string) => {
+                const fileKeys = (expenseAny.attachments as string[]).map((url: string) => {
                     const parts = url.split('/');
                     return parts[parts.length - 1];
                 });

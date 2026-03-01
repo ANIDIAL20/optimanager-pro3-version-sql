@@ -84,10 +84,21 @@ export function adminAction<TArgs extends any[], TReturn>(
 ) {
   return async (...args: TArgs): Promise<TReturn> => {
     try {
-      // 🔒 Layer 3: Server-side guard with audit logging & brute-force protection
-      const { user } = await requireAdmin();
-      
-      // Call the handler with user object
+      const { user: dbUser } = await requireAdmin();
+
+      // Map DB user (id: number) to AuthUser interface
+      const user: AuthUser = {
+        uid:          dbUser.id.toString(),
+        id:           dbUser.id.toString(),
+        email:        dbUser.email ?? null,
+        emailVerified: false,
+        displayName:  dbUser.name ?? null,
+        name:         dbUser.name ?? null,
+        image:        null,
+        role:         (dbUser.role as 'ADMIN' | 'USER') ?? 'ADMIN',
+      };
+
+      // Call the handler with mapped user object
       return await handler(user, ...args);
     } catch (error: any) {
       if (error.message === 'NEXT_REDIRECT' || error.digest?.startsWith('NEXT_REDIRECT')) {

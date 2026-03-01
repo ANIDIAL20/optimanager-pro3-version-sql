@@ -1,4 +1,5 @@
 // @ts-nocheck
+// SECURED: uses CRON_SECRET (2026-03-01)
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { reminders } from '@/db/schema';

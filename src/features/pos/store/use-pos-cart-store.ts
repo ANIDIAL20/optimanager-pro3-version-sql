@@ -18,7 +18,7 @@ type PosProductInput = {
   reference?: string;
   productType?: string;
   isStockManaged?: boolean;
-  quantiteStock?: number;
+  quantiteStock?: number; // stock disponible côté catalogue
 };
 
 /** Champ injecté sur les lignes issues d'une lensOrder */
@@ -75,14 +75,27 @@ export const usePosCartStore = create<PosCartState>((set) => ({
 
   addItem: (product) => {
     set((state) => {
+      // 🛡️ GUARD — Block add if product is stock-managed and has no stock
+      const stockQty = product.quantiteStock ?? 0;
+      if (product.isStockManaged && stockQty <= 0) {
+        return state; // No-op: refuse silently
+      }
+
       const existingIndex = state.items.findIndex(item => item.productId === product.id);
-      
       let newItems = [...state.items];
+
       if (existingIndex >= 0) {
         const existingItem = state.items[existingIndex];
+        const newQty = existingItem.quantity + 1;
+
+        // 🛡️ GUARD — Cap quantity at available stock
+        if (product.isStockManaged && newQty > stockQty) {
+          return state; // Already at stock ceiling
+        }
+
         newItems[existingIndex] = recalculateLineTotal({
           ...existingItem,
-          quantity: existingItem.quantity + 1
+          quantity: newQty
         });
       } else {
         const newItem = createLineItem(
@@ -91,15 +104,15 @@ export const usePosCartStore = create<PosCartState>((set) => ({
           product.prixVente,
           1,
           (product as any).productType === 'lens' ? 'VERRE' : 'AUTRE',
-          { productType: (product as any).productType },
+          { productType: (product as any).productType, stockQty },
           product.reference
         );
         newItems.push(newItem);
       }
-      
-      return { 
-        items: newItems, 
-        totalAmount: newItems.reduce((sum, it) => sum + it.lineTotal, 0) 
+
+      return {
+        items: newItems,
+        totalAmount: newItems.reduce((sum, it) => sum + it.lineTotal, 0)
       };
     });
   },
@@ -244,13 +257,18 @@ export const usePosCartStore = create<PosCartState>((set) => ({
         if (item.lineId === lineId) {
           const newQuantity = item.quantity + delta;
           if (newQuantity < 1) return item;
+
+          // 🛡️ GUARD — Cap increment at available stock ceiling
+          const stockQty: number = (item.metadata as any)?.stockQty ?? Infinity;
+          if (delta > 0 && newQuantity > stockQty) return item;
+
           return recalculateLineTotal({ ...item, quantity: newQuantity });
         }
         return item;
       });
-      return { 
-        items: newItems, 
-        totalAmount: newItems.reduce((sum, it) => sum + it.lineTotal, 0) 
+      return {
+        items: newItems,
+        totalAmount: newItems.reduce((sum, it) => sum + it.lineTotal, 0)
       };
     });
   },

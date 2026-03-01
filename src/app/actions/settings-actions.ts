@@ -140,7 +140,7 @@ export const createSetting = secureAction(async (userId, user, type: SettingType
         category: validated.category || null,
         createdAt: new Date(),
         updatedAt: new Date()
-    }).returning();
+    } as any).returning();
 
     console.log(`[createSetting] Created ${type} (Drizzle):`, created);
     return created;

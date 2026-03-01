@@ -7,8 +7,8 @@ import { cancelFrameReservation } from '@/features/reservations/services/cancel-
 import { getClientReservations } from '@/features/reservations/queries/get-client-reservations';
 import { recordAdvancePayment } from '@/app/actions/payment-actions';
 import { db } from '@/db';
-// no cashSessions import
-import { eq, and } from 'drizzle-orm';
+import { frameReservations } from '@/db/schema';
+import { eq, and, desc } from 'drizzle-orm';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 

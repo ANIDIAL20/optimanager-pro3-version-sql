@@ -2,88 +2,124 @@
 
 import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Printer, ArrowLeft } from 'lucide-react';
 import { getPrintData } from '@/app/actions/print-actions';
+import { getDocumentConfig } from '@/app/actions/shop-actions';
 import { PrintDocumentTemplate } from '@/components/printing/print-document-template';
 import { toast } from 'sonner';
 import { BrandLoader } from '@/components/ui/loader-brand';
-
-
+import type { StandardDocumentData } from '@/types/document';
+import type { DocumentTemplateConfig } from '@/types/document-template';
 
 interface DevisPrintPageProps {
-    params: Promise<{ id: string }>;
+  params: Promise<{ id: string }>;
 }
 
 export default function DevisPrintPage({ params }: DevisPrintPageProps) {
-    const { id } = React.use(params);
-    const router = useRouter();
-    // Auto print logic
-    const searchParams = useSearchParams();
-    const shouldAutoPrint = searchParams.get('auto') === 'true';
+  const { id } = React.use(params);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const shouldAutoPrint = searchParams.get('auto') === 'true';
+  const isPreview = !!searchParams.get('preview');
 
-    const [data, setData] = React.useState<any>(null);
-    const [isLoading, setIsLoading] = React.useState(true);
+  const [data, setData] = React.useState<StandardDocumentData | null>(null);
+  const [docConfig, setDocConfig] = React.useState<DocumentTemplateConfig | undefined>(undefined);
+  const [isLoading, setIsLoading] = React.useState(true);
 
-    React.useEffect(() => {
-        const fetchData = async () => {
-            if (!id) return;
+  React.useEffect(() => {
+    if (!id) return;
+    Promise.all([
+      getPrintData(id, 'devis'),
+      getDocumentConfig(),
+    ]).then(([result, cfg]) => {
+      setDocConfig(cfg);
+      if (result.success && result.data) {
+        const { document: doc, client, settings } = result.data as any;
 
-            // ✅ FIX: secureAction injects userId automatically
-            const result = await getPrintData(id, 'devis');
+        const totalHT  = Number(doc.totalHT  ?? 0);
+        const totalTTC = Number(doc.totalTTC ?? 0);
 
-            if (result.success) {
-                setData(result.data);
-            } else {
-                toast.error(result.error || 'Erreur chargement');
-                // router.push('/dashboard/devis'); // Optional: redirect on error
-            }
-            setIsLoading(false);
+        const mapped: StandardDocumentData = {
+          type: 'DEVIS',
+          documentNumber: doc.devisNumber ?? doc.id?.toString() ?? `D-${doc.id}`,
+          date: (doc.createdAt ?? new Date()).toString(),
+          validityDays: 15,
+          status: doc.status,
+          client: {
+            nom: client?.fullName ?? doc.clientName ?? 'Client',
+            telephone: client?.phone ?? doc.clientPhone ?? undefined,
+            adresse: client?.address ?? undefined,
+          },
+          shop: {
+            nom: settings?.storeName ?? settings?.shopName ?? 'OptiManager',
+            adresse: settings?.address ?? 'Adresse non renseignée',
+            telephone: settings?.phone ?? '',
+            logoUrl: settings?.logoUrl ?? undefined,
+            ice: settings?.ice,
+            if_: settings?.if,
+            rc: settings?.rc,
+            tp: settings?.tp,
+            inpe: settings?.inpe,
+            rib: settings?.rib,
+            paymentTerms: settings?.paymentTerms,
+            paymentMethods: settings?.paymentMethods,
+          },
+          items: (doc.items ?? []).map((item: any, i: number) => ({
+            id: item.id?.toString() ?? String(i),
+            description: item.productName ?? item.nomProduit ?? item.designation ?? item.label ?? '',
+            reference: item.reference ?? item.productRef,
+            marque: item.marque ?? item.brand,
+            modele: item.modele ?? item.model,
+            couleur: item.couleur ?? item.color,
+            quantite: item.quantity ?? item.quantite ?? item.qty ?? 1,
+            prixUnitaire: Number(item.unitPrice ?? item.prixVente ?? item.unitPriceTTC ?? 0),
+            total:
+              Number(item.lineTotal ?? item.total ?? item.lineTotalTTC ?? 0) ||
+              (item.quantity ?? 1) * Number(item.unitPrice ?? item.prixVente ?? item.unitPriceTTC ?? 0),
+            tvaRate: item.tvaRate !== undefined ? Number(item.tvaRate) : 20,
+            lensDetails: item.lensDetails,
+            contactLensDetails: item.contactLensDetails,
+          })),
+          totals: {
+            sousTotal: totalHT,
+            tva: totalTTC - totalHT,
+            totalTTC,
+          },
         };
+        setData(mapped);
+      } else {
+        toast.error((result as any).error || 'Erreur chargement');
+      }
+      setIsLoading(false);
+    });
+  }, [id, router]);
 
-        fetchData();
-    }, [id, router]);
-
-    // Auto-print effect
-    React.useEffect(() => {
-        if (!isLoading && data && shouldAutoPrint) {
-            const timer = setTimeout(() => {
-                window.print();
-            }, 800); // Slightly longer delay to ensure template renders images
-            return () => clearTimeout(timer);
-        }
-    }, [isLoading, data, shouldAutoPrint]);
-
-    const handlePrint = () => {
-        window.print();
-    };
-
-    if (isLoading) {
-        return (
-            <div className="fixed inset-0 z-[100] bg-white flex items-center justify-center">
-                <BrandLoader size="md" className="text-gray-400" />
-            </div>
-        );
+  // Auto-print
+  React.useEffect(() => {
+    if (!isLoading && data && shouldAutoPrint) {
+      const t = setTimeout(() => window.print(), 800);
+      return () => clearTimeout(t);
     }
+  }, [isLoading, data, shouldAutoPrint]);
 
-    if (!data) return null;
-
+  if (isLoading) {
     return (
-        <div className="fixed inset-0 z-[100] bg-white overflow-auto flex flex-col items-center py-8 text-black">
-            {/* Toolbar (Hidden on Print) */}
-            <div className="w-full max-w-[210mm] mb-6 flex justify-between px-4 print:hidden">
-                <Button variant="outline" onClick={() => router.back()}>
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Retour
-                </Button>
-                <Button onClick={handlePrint}>
-                    <Printer className="mr-2 h-4 w-4" />
-                    Imprimer Devis
-                </Button>
-            </div>
-
-            {/* Shared Template */}
-            <PrintDocumentTemplate type="devis" data={data} />
-        </div>
+      <div className="fixed inset-0 z-[100] bg-white flex items-center justify-center">
+        <BrandLoader size="md" className="text-gray-400" />
+      </div>
     );
+  }
+  if (!data) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-gray-50 overflow-auto print:relative print:inset-auto print:bg-white">
+      <div className="py-8 print:py-0">
+        <PrintDocumentTemplate
+          data={data}
+          config={docConfig}
+          showToolbar={!isPreview}
+          onBack={() => router.back()}
+        />
+      </div>
+    </div>
+  );
 }

@@ -1,3 +1,4 @@
+// SECURED: uses CRON_SECRET (2026-03-01)
 /**
  * Cron API - Scheduled Database Maintenance & Health Checks
  * Endpoint: /api/cron/maintenance

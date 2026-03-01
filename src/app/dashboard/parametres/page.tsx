@@ -20,14 +20,17 @@ import { ShopProfileForm } from '@/components/settings/shop-profile-form';
 import { ManageSettings } from '@/components/settings/manage-settings';
 import { DataBackup } from '@/components/settings/data-backup';
 import { DocumentSettingsForm } from '@/components/settings/document-settings-form';
-import { getShopProfile } from '@/app/actions/shop-actions';
+import { getShopProfile, getDocumentConfig } from '@/app/actions/shop-actions';
 
 // Helper icon component definition moved outside or kept if simple
 // Since this is a server component, simple functional components are fine.
 
 export default async function ParametresPage() {
   // 1. Fetch data on the server
-  const shopProfile = await getShopProfile();
+  const [shopProfile, initialConfig] = await Promise.all([
+    getShopProfile(),
+    getDocumentConfig(),
+  ]);
 
   // We should allow rendering the page even if profile is missing, 
   // to allow the user to access the "Shop Profile" tab to Create it.
@@ -115,7 +118,11 @@ export default async function ParametresPage() {
         {/* 1b. Document Settings - Only Renders if Profile Exists */}
         <TabsContent value="documents" className="focus-visible:outline-none">
           {shopProfile && shopProfile.id ? (
-            <DocumentSettingsForm shopId={shopProfile.id} initialShopProfile={shopProfile} />
+            <DocumentSettingsForm
+              shopId={shopProfile.id}
+              initialShopProfile={shopProfile}
+              initialConfig={initialConfig}
+            />
           ) : (
             <div className="flex flex-col items-center justify-center p-12 text-center space-y-3 bg-white rounded-xl border border-dashed border-slate-300">
                <div className="bg-slate-100 p-3 rounded-full">

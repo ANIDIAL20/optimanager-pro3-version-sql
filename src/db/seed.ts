@@ -32,7 +32,7 @@ async function seedAdminUser() {
       const [updatedUser] = await db
         .update(users)
         .set({
-          role: 'admin',
+          role: 'ADMIN',
           emailVerified: new Date(),
         })
         .where(eq(users.email, ADMIN_EMAIL))
@@ -52,7 +52,7 @@ async function seedAdminUser() {
         .values({
           name: 'Oussama Admin',
           email: ADMIN_EMAIL,
-          role: 'admin',
+          role: 'ADMIN',
           emailVerified: new Date(),
           image: null,
         })

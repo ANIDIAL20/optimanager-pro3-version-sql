@@ -609,20 +609,19 @@ export const receiveLensOrder = secureAction(async (userId, user, orderId: strin
 
         // 1.5 Auto-Create Product for Global Stock (Robust Inventory)
         if (updated) {
-           const productName = `Verres ${updated.lensType} - ${existingOrder.client.fullName}`;
-           const description = `
-             Client: ${existingOrder.client.fullName}
-             Type: ${updated.orderType}
-             OD: ${updated.sphereR || ''} ${updated.cylindreR ? `(${updated.cylindreR})` : ''} ${updated.axeR ? `à ${updated.axeR}°` : ''} ${updated.additionR ? `Add ${updated.additionR}` : ''}
-             OG: ${updated.sphereL || ''} ${updated.cylindreL ? `(${updated.cylindreL})` : ''} ${updated.axeL ? `à ${updated.axeL}°` : ''} ${updated.additionL ? `Add ${updated.additionL}` : ''}
-             EP: OD ${updated.ecartPupillaireR || '-'} / OG ${updated.ecartPupillaireL || '-'}
-           `.trim();
+           // 💡 BUG-5 FIX: Generate clean, human-readable lens designation
+           const clientName = existingOrder.client.fullName || 'Client Inconnu';
+           const formatSph = (v: string | null) =>
+             v ? (parseFloat(v) >= 0 ? `+${parseFloat(v).toFixed(2)}` : parseFloat(v).toFixed(2)) : '—';
+           const odStr = `OD: ${formatSph(updated.sphereR)}${updated.cylindreR ? ` (${updated.cylindreR})` : ''}${updated.axeR ? ` @${updated.axeR}°` : ''}`;
+           const ogStr = `OG: ${formatSph(updated.sphereL)}${updated.cylindreL ? ` (${updated.cylindreL})` : ''}${updated.axeL ? ` @${updated.axeL}°` : ''}`;
+           const productName = `${updated.lensType} | ${odStr} ${ogStr} — ${clientName}`;
+           const description = `Client: ${clientName} | Type: ${updated.orderType} | ${odStr} | ${ogStr} | EP: OD ${updated.ecartPupillaireR || '-'} / OG ${updated.ecartPupillaireL || '-'}`;
 
-           // Check if product already exists (unlikely given unique ID usage, but good practice)
-           // Actually, using Order ID makes it unique by definition.
-           
+           // 🔒 BUG-2 FIX: onConflictDoNothing prevents duplicate if called twice (retry/double-click)
            await tx.insert(products).values({
              userId,
+             clientId: updated.clientId,  // 🔖 BUG-3 FIX: link to client
              nom: productName,
              type: 'VERRE',
              categorie: 'Verres',
@@ -634,7 +633,6 @@ export const receiveLensOrder = secureAction(async (userId, user, orderId: strin
              quantiteStock: updated.quantity,
              availableQuantity: updated.quantity,
              fournisseur: updated.supplierName,
-             // Store Robust Details for Search/Matching
              details: JSON.stringify({
                 lensOrderId: updated.id,
                 clientId: updated.clientId,
@@ -645,7 +643,7 @@ export const receiveLensOrder = secureAction(async (userId, user, orderId: strin
                 },
                 supplierRef: data?.blRef
              })
-           });
+           }).onConflictDoNothing(); // Handles retry/double-click idempotently
         }
 
         return updated;
@@ -1068,9 +1066,9 @@ export const bulkReceiveLensOrders_OLD = secureAction(async (userId, user, param
                     .where(eq(lensOrders.id, order.id));
 
                 // 3b. Prepare Product for Batch Insert
-                const productName = `Verres ${order.lensType} - ${order.client.fullName}`;
+                const productName = `Verres ${order.lensType} - ${order.client!.fullName}`;
                 const description = `
-                    Client: ${order.client.fullName}
+                    Client: ${order.client!.fullName}
                     Type: ${order.orderType}
                     OD: ${order.sphereR || ''} ${order.cylindreR ? `(${order.cylindreR})` : ''} ${order.axeR ? `à ${order.axeR}°` : ''} ${order.additionR ? `Add ${order.additionR}` : ''}
                     OG: ${order.sphereL || ''} ${order.cylindreL ? `(${order.cylindreL})` : ''} ${order.axeL ? `à ${order.axeL}°` : ''} ${order.additionL ? `Add ${order.additionL}` : ''}
@@ -1092,8 +1090,8 @@ export const bulkReceiveLensOrders_OLD = secureAction(async (userId, user, param
                     fournisseur: order.supplierName,
                     details: JSON.stringify({
                         lensOrderId: order.id,
-                        clientId: order.client.id,
-                        clientName: order.client.fullName,
+                        clientId: order.client!.id,
+                        clientName: order.client!.fullName,
                         prescription: {
                             od: { sph: order.sphereR, cyl: order.cylindreR, axe: order.axeR, add: order.additionR, ep: order.ecartPupillaireR },
                             og: { sph: order.sphereL, cyl: order.cylindreL, axe: order.axeL, add: order.additionL, ep: order.ecartPupillaireL }
@@ -1104,14 +1102,14 @@ export const bulkReceiveLensOrders_OLD = secureAction(async (userId, user, param
 
                 receivedOrdersDetails.push({
                     id: order.id,
-                    clientName: order.client.fullName,
-                    clientPhone: order.client.phone || ''
+                    clientName: order.client!.fullName,
+                    clientPhone: order.client!.phone || ''
                 });
             }
 
-            // Batch insert products
+            // 🔒 BUG-2 FIX: Batch insert with onConflictDoNothing (prevents duplicate on retry)
             if (productsToInsert.length > 0) {
-                await tx.insert(products).values(productsToInsert);
+                await tx.insert(products).values(productsToInsert).onConflictDoNothing();
             }
 
             // 4. Trace Audit Log
@@ -1236,12 +1234,19 @@ export const bulkReceiveLensOrders = secureAction(async (userId, user, data: { s
 
         // C. Insert into Products (Stock) in BATCH
         const productsToInsert = ordersToReceive.map((order: any) => {
-             const clientName = order.client?.fullName || 'Client Inconnu';
-             const description = `Client: ${clientName} | Type: ${order.orderType} | BL: ${blNumber}`;
+             const clientName = order.client!?.fullName || 'Client Inconnu';
+             const formatSph = (v: string | null | undefined) =>
+               v ? (parseFloat(v) >= 0 ? `+${parseFloat(v).toFixed(2)}` : parseFloat(v).toFixed(2)) : '—';
+             const odStr = `OD: ${formatSph(order.sphereR)}`;
+             const ogStr = `OG: ${formatSph(order.sphereL)}`;
+             // 💡 BUG-5 FIX: Clean, human-readable designation
+             const productName = `${order.lensType || 'Verre'} | ${odStr} ${ogStr} — ${clientName}`;
+             const description = `Client: ${clientName} | Type: ${order.orderType} | ${odStr} | ${ogStr} | BL: ${blNumber}`;
              
              return {
                 userId,
-                nom: `Verres ${order.lensType || 'Standard'} - ${clientName}`,
+                clientId: order.clientId ?? order.client_id ?? null, // 🔖 BUG-3 FIX
+                nom: productName,
                 type: 'VERRE',
                 categorie: 'Verres',
                 reference: `VERRE-${order.id}`,
@@ -1252,12 +1257,13 @@ export const bulkReceiveLensOrders = secureAction(async (userId, user, data: { s
                 quantiteStock: order.quantity || 1,
                 availableQuantity: order.quantity || 1,
                 fournisseur: order.supplierName,
-                details: JSON.stringify({ lensOrderId: order.id, blNumber })
+                details: JSON.stringify({ lensOrderId: order.id, clientId: order.clientId, blNumber })
             };
         });
 
+        // 🔒 BUG-2 FIX: onConflictDoNothing prevents duplicate if called twice
         if (productsToInsert.length > 0) {
-            await tx.insert(products).values(productsToInsert);
+            await tx.insert(products).values(productsToInsert).onConflictDoNothing();
         }
     });
 

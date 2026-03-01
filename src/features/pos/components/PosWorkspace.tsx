@@ -6,6 +6,7 @@ import { ArrowLeft, CheckCircle2, Eye, Package, Receipt, Sparkles, UserPlus } fr
 
 import type { Client } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { formatMAD } from '@/lib/format-currency';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -261,7 +262,7 @@ export function PosWorkspace() {
                           <span className="text-indigo-600">{order.orderType}</span>
                           <span>•</span>
                           <span className="text-slate-800">
-                            {parseFloat(order.sellingPrice).toLocaleString('fr-MA')} DH
+                            {formatMAD(parseFloat(order.sellingPrice))}
                           </span>
                         </div>
                       </div>
@@ -345,13 +346,13 @@ export function PosWorkspace() {
                         </p>
                         <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
                           <span className="text-slate-800">
-                            Total: {parseFloat(res.totalAmount).toLocaleString('fr-MA')} DH
+                            Total: {formatMAD(parseFloat(res.totalAmount))}
                           </span>
                           {advanceAmount > 0 && (
                             <>
                               <span>•</span>
                               <span className="text-emerald-600">
-                                Avance: {advanceAmount.toLocaleString('fr-MA')} DH
+                                Avance: {formatMAD(advanceAmount)}
                               </span>
                             </>
                           )}
@@ -404,7 +405,8 @@ export function PosWorkspace() {
             </TabsContent>
 
             <TabsContent value="catalog" className="mt-0 focus-visible:outline-none">
-              <CatalogueProduits />
+              {/* 🔖 BUG-3 FIX: pass selectedClient?.id so VERRE are scoped to this client */}
+              <CatalogueProduits clientId={selectedClient?.id as number | undefined} />
             </TabsContent>
           </Tabs>
         </div>

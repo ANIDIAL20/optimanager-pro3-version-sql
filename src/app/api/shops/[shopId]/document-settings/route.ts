@@ -1,3 +1,4 @@
+// SECURED: uses authGuard + tenant filter (2026-03-01)
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { shopProfiles } from '@/db/schema';

@@ -27,7 +27,7 @@ export function CreateUserForm() {
     email: '',
     password: '',
     name: '',
-    role: 'user',
+    role: 'USER',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -44,7 +44,7 @@ export function CreateUserForm() {
           email: '',
           password: '',
           name: '',
-          role: 'user',
+          role: 'USER',
         });
       } else {
         toast.error(result.error || 'Erreur lors de la création');
@@ -110,7 +110,7 @@ export function CreateUserForm() {
             <Label htmlFor="role">Rôle</Label>
             <Select
               value={formData.role}
-              onValueChange={(value: 'admin' | 'user') => 
+              onValueChange={(value: 'ADMIN' | 'USER') => 
                 setFormData({ ...formData, role: value })
               }
               disabled={isLoading}
@@ -119,8 +119,8 @@ export function CreateUserForm() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="user">Utilisateur</SelectItem>
-                <SelectItem value="admin">Administrateur</SelectItem>
+                <SelectItem value="USER">Utilisateur</SelectItem>
+                <SelectItem value="ADMIN">Administrateur</SelectItem>
               </SelectContent>
             </Select>
           </div>

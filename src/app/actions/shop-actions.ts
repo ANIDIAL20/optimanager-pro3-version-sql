@@ -132,3 +132,43 @@ type ShopProfileInput = z.infer<typeof shopProfileSchema>;
     return created;
   }
 }
+
+/**
+ * Save document template config for current user
+ */
+export async function saveDocumentConfig(config: import('@/types/document-template').DocumentTemplateConfig) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error('Non authentifié');
+
+  const { revalidatePath } = await import('next/cache');
+
+  await db
+    .update(shopProfiles)
+    .set({ documentConfig: config as any })
+    .where(eq(shopProfiles.userId, session.user.id));
+
+  revalidatePath('/dashboard/parametres');
+}
+
+/**
+ * Get document template config for current user
+ */
+export async function getDocumentConfig(): Promise<import('@/types/document-template').DocumentTemplateConfig> {
+  const { DEFAULT_TEMPLATE_CONFIG } = await import('@/types/document-template');
+  const session = await auth();
+  if (!session?.user?.id) return DEFAULT_TEMPLATE_CONFIG;
+
+  try {
+    const [profile] = await db
+      .select({ documentConfig: shopProfiles.documentConfig })
+      .from(shopProfiles)
+      .where(eq(shopProfiles.userId, session.user.id))
+      .limit(1);
+
+    return (profile?.documentConfig as any) ?? DEFAULT_TEMPLATE_CONFIG;
+  } catch {
+    const { DEFAULT_TEMPLATE_CONFIG: def } = await import('@/types/document-template');
+    return def;
+  }
+}
+

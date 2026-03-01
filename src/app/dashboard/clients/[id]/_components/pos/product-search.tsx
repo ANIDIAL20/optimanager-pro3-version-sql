@@ -1,3 +1,4 @@
+// DEPRECATED: replaced by CatalogueProduits. Safe to delete after v1.x
 'use client';
 
 import * as React from 'react';
@@ -87,7 +88,7 @@ export function ProductSearch({ onProductSelect, clientLenses = [], onLensSelect
                      query: debouncedSearchTerm,
                      type: undefined,
                      category: activeTab === 'Tout' ? undefined : (activeTab !== 'Verres' ? activeTab : undefined),
-                     limit: 50 
+                     limit: 200 
                  });
 
                  if (res.success && res.data) {
@@ -179,8 +180,10 @@ export function ProductSearch({ onProductSelect, clientLenses = [], onLensSelect
                                         product.quantiteStock <= 0 && "opacity-60 bg-slate-100"
                                     )}
                                     onClick={() => {
+                                        const isVerreProduct = (ref: string) => ref?.startsWith('VERRE-');
                                         const available = product.type === 'MONTURE' ? (product.availableQuantity ?? product.quantiteStock) : product.quantiteStock;
-                                        if (available > 0) {
+                                        const canAdd = isVerreProduct(product.reference ?? '') || available > 0;
+                                        if (canAdd) {
                                             onProductSelect(product);
                                         }
                                     }}
@@ -217,7 +220,7 @@ export function ProductSearch({ onProductSelect, clientLenses = [], onLensSelect
                                         </div>
                                         <div className="text-right">
                                             <div className="font-bold text-primary text-lg">{product.prixVente.toFixed(2)} <span className="text-xs font-normal text-slate-400">DH</span></div>
-                                            {product.quantiteStock <= 0 && <Badge variant="destructive" className="text-[10px] h-5 px-1">Rupture</Badge>}
+                                            {(!product.reference?.startsWith('VERRE-')) && product.quantiteStock <= 0 && <Badge variant="destructive" className="text-[10px] h-5 px-1">Épuisé</Badge>}
                                         </div>
                                     </CardContent>
                                 </Card>

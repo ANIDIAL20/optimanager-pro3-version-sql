@@ -141,7 +141,7 @@ export const columns: ColumnDef<Supplier>[] = [
             return (
                 <SupplierActions 
                     supplierId={supplier.id} 
-                    supplierName={supplier.nomCommercial} 
+                    supplierName={supplier.nomCommercial || supplier.name || "Inconnu"} 
                 />
             );
         },

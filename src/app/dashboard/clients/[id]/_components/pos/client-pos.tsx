@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { usePosCartStore } from '@/features/pos/store/use-pos-cart-store';
 import { useToast } from '@/hooks/use-toast';
+import { useQueryClient } from '@tanstack/react-query';
 import { 
     getPendingLensOrders as getClientAvailableLenses, 
     getAdvanceForProduct 
@@ -16,7 +17,7 @@ import { Product, Client } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ProductSearch } from './product-search';
+import { CatalogueProduits } from '@/features/pos/components/CatalogueProduits';
 import { SalesHistory } from './sales-history';
 import { PosCartPanel } from '@/features/pos/components/PosCartPanel';
 
@@ -31,6 +32,7 @@ export function ClientPOS({ client, clientId, initialReservationId, initialOrder
     const router = useRouter();
     const { items: cartItems, setItems, updateLinePricing, totalAmount, setSelectedClient } = usePosCartStore();
     const { toast } = useToast();
+    const queryClient = useQueryClient();
     
     const [transactions, setTransactions] = React.useState<any[]>([]);
     const [historyRefreshKey, setHistoryRefreshKey] = React.useState(0);
@@ -240,11 +242,9 @@ export function ClientPOS({ client, clientId, initialReservationId, initialOrder
                         </Badge>
                         <h3 className="font-semibold text-lg text-slate-800">Catalogue Produits</h3>
                     </div>
-                    <ProductSearch
-                        onProductSelect={addToCart}
-                        clientLenses={pendingOrders}
-                        onLensSelect={(product, lensOrder) => addLensOrderToCart({ product, lensOrder })}
-                        addedLensIds={cartItems.filter(i => i.productId.startsWith('LO-')).map(i => i.productId.replace('LO-', ''))}
+                    <CatalogueProduits 
+                        clientId={parseInt(clientId)} 
+                        onCustomAdd={addToCart} 
                     />
                 </div>
 
@@ -258,7 +258,12 @@ export function ClientPOS({ client, clientId, initialReservationId, initialOrder
                     <PosCartPanel 
                         alreadyPaid={detectedAdvances}
                         className="w-full shadow-2xl shadow-indigo-100/50 hover:shadow-indigo-200/50 transition-shadow duration-500 rounded-3xl lg:sticky lg:top-4"
-                        onSuccess={() => setHistoryRefreshKey(prev => prev + 1)}
+                        onSuccess={() => {
+                            setHistoryRefreshKey(prev => prev + 1);
+                            queryClient.invalidateQueries({ queryKey: ['products', 'list'] });
+                            queryClient.invalidateQueries({ queryKey: ['lens-orders'] });
+                            queryClient.invalidateQueries({ queryKey: ['notifications'] });
+                        }}
                     />
                 </div>
             </div>

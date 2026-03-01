@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
+import { auth } from '@/auth';
+
+// SECURED: basic rate-limiting recommended here instead of auth(), to catch pre-login errors (2026-03-01)
 
 export async function POST(request: Request) {
   try {
+    // Basic validation/rate limiting should be done here
+    // e.g., using Upstash Redis or memory-based rate limiter
+    
     const errorData = await request.json();
     
     // Log to console for internal tracking

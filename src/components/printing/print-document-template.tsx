@@ -4,386 +4,481 @@ import * as React from 'react';
 import Image from 'next/image';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { Printer, ArrowLeft } from 'lucide-react';
+import { formatMAD } from '@/lib/format-currency';
 import { formatCurrencyToWords } from '@/lib/format-number-to-words';
+import type { StandardDocumentData } from '@/types/document';
+import type { DocumentTemplateConfig } from '@/types/document-template';
+import { DEFAULT_TEMPLATE_CONFIG } from '@/types/document-template';
 
 interface PrintDocumentTemplateProps {
-    type: 'devis' | 'facture';
-    data: {
-        document: any;
-        client: any;
-        settings: any;
-    };
+  data: StandardDocumentData;
+  /** Optional template config — falls back to DEFAULT_TEMPLATE_CONFIG */
+  config?: DocumentTemplateConfig;
+  /** Show the toolbar (Back + Print buttons). Default: true */
+  showToolbar?: boolean;
+  onBack?: () => void;
 }
 
-export function PrintDocumentTemplate({ type, data }: PrintDocumentTemplateProps) {
-    const { document, client, settings } = data;
+export function PrintDocumentTemplate({
+  data,
+  config: configProp,
+  showToolbar = true,
+  onBack,
+}: PrintDocumentTemplateProps) {
+  const config = { ...DEFAULT_TEMPLATE_CONFIG, ...configProp };
 
-    // Normalization
-    const isDevis = type === 'devis';
-    const title = isDevis ? 'DEVIS' : 'FACTURE';
-    const dateLabel = isDevis ? 'Date' : 'Date';
-    const dateValue = document.date || document.createdAt;
+  // ── Derived style helpers ──────────────────────────────────────────────────
+  const primary = config.primaryColor;
+  const secondary = config.secondaryColor;
+  const fontSizeMap = { small: 'text-xs', medium: 'text-sm', large: 'text-base' } as const;
+  const bodyFontSize = fontSizeMap[config.fontSize];
+  const isModern  = config.templateId === 'modern';
+  const isMinimal = config.templateId === 'minimal';
+  const isBold    = config.templateId === 'bold';
+  const isElegant = config.templateId === 'elegant';
+  const isDevis = data.type === 'DEVIS';
 
-    // Normalize items
-    const items = document.items || [];
+  // ── Date formatting ────────────────────────────────────────────────────────
+  const formatDate = (iso: string) => {
+    try {
+      return format(new Date(iso), 'dd MMMM yyyy', { locale: fr });
+    } catch {
+      return iso;
+    }
+  };
 
-    // Get TVA rate from settings (default to 20%)
-    const tvaRate = settings?.tvaRate ? parseFloat(settings.tvaRate) : 20;
-    const tvaMultiplier = 1 + (tvaRate / 100);
+  // ── TVA breakdown (grouped by rate) ────────────────────────────────────────
+  const tvaBreakdown = React.useMemo(() => {
+    const map: Record<number, { base: number; tax: number; ttc: number }> = {};
+    for (const item of data.items) {
+      const rate = item.tvaRate ?? 20;
+      const ttc = item.total;
+      const base = ttc / (1 + rate / 100);
+      const tax = ttc - base;
+      if (!map[rate]) map[rate] = { base: 0, tax: 0, ttc: 0 };
+      map[rate].base += base;
+      map[rate].tax  += tax;
+      map[rate].ttc  += ttc;
+    }
+    return Object.entries(map);
+  }, [data.items]);
 
-    // Calculations
-    const totalHT = document.totalHT || (document.totalNet / tvaMultiplier) || 0;
-    const totalTTC = document.totalTTC || document.totalNet || 0;
-    const totalTVA = totalTTC - totalHT;
-    const resteAPayer = document.resteAPayer || 0;
+  // ── Payment methods ─────────────────────────────────────────────────────────
+  const paymentMethods = data.shop.paymentMethods?.length
+    ? data.shop.paymentMethods
+    : ['Espèces', 'Chèque', 'Virement bancaire'];
 
-    // Payment methods from settings
-    const paymentMethods = settings?.paymentMethods || ['Espèces', 'Chèque', 'Virement bancaire'];
+  return (
+    <>
+      {/* ── Toolbar (screen only) ─────────────────────────────────────────── */}
+      {showToolbar && (
+        <div className="w-full max-w-[210mm] mx-auto mb-6 flex justify-between px-4 print:hidden">
+          <button
+            onClick={onBack ?? (() => window.history.back())}
+            className="flex items-center gap-2 border border-gray-300 text-gray-700
+                       px-4 py-2 rounded-md hover:bg-gray-50 transition text-sm"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Retour
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-2 bg-blue-600 text-white
+                       px-4 py-2 rounded-md hover:bg-blue-700 transition text-sm"
+          >
+            <Printer className="w-4 h-4" />
+            Imprimer le document
+          </button>
+        </div>
+      )}
 
-    // Formatting helpers
-    const formatDate = (date: any) => {
-        if (!date) return '-';
-        const d = date.seconds ? new Date(date.seconds * 1000) : new Date(date);
-        return format(d, "dd/MM/yyyy", { locale: fr });
-    };
-
-    return (
-        <>
-            <div className="w-[210mm] min-h-[297mm] mx-auto bg-white p-8 md:p-10 shadow-lg print:shadow-none print:m-0 print:w-full print:h-[297mm] print:py-8 print:px-8 text-black relative">
-
-                {/* Header: Shop Info & Document Meta */}
-                <div className="flex justify-between items-start border-b-2 border-slate-300 pb-5 mb-6">
-                    {/* School/Shop Info */}
-                    <div className="flex gap-4 items-start">
-                        {/* Logo */}
-                        {settings?.logoUrl && (
-                            <div className="relative h-24 w-36 flex-shrink-0">
-                                <Image
-                                    src={settings.logoUrl}
-                                    alt="Logo"
-                                    fill
-                                    className="object-contain"
-                                    unoptimized
-                                />
-                            </div>
-                        )}
-
-                        <div className="space-y-0.5">
-                            <h1 className="text-lg font-bold uppercase tracking-wide text-slate-900 leading-none">
-                                {settings?.storeName || settings?.shopName || 'OptiManager'}
-                            </h1>
-                            <div className="text-[10px] text-slate-600 leading-snug space-y-0.5">
-                                <p>{settings?.address || 'Adresse non renseignée'}</p>
-                                <p>{settings?.phone ? `Tél: ${settings.phone}` : ''}</p>
-                                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[9px] text-slate-500">
-                                    {settings?.ice && <span>ICE: {settings.ice}</span>}
-                                    {settings?.if && <span>IF: {settings.if}</span>}
-                                    {settings?.rc && <span>RC: {settings.rc}</span>}
-                                    {settings?.tp && <span>TP: {settings.tp}</span>}
-                                    {settings?.inpe && <span>INPE: {settings.inpe}</span>}
-                                    {/* Fallback for legacy Patente if TP not set */}
-                                    {!settings?.tp && settings?.patente && <span>Patente: {settings.patente}</span>}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Document Meta */}
-                    <div className="text-right">
-                        <div className="inline-block bg-slate-900 text-white px-4 py-1.5 rounded mb-2">
-                            <span className="text-base font-bold tracking-widest">{title}</span>
-                        </div>
-                        <div className="text-[10px] space-y-0.5">
-                            <p className="font-semibold text-slate-900">N° {String(document.id || '').slice(0, 8).toUpperCase()}</p>
-                            <p className="text-slate-600">{dateLabel}: {formatDate(dateValue)}</p>
-                            {isDevis && (
-                                <p className="text-slate-500">Validité: 15 jours</p>
-                            )}
-                            {!isDevis && document.status && (
-                                <p className="text-slate-500 uppercase font-bold text-[9px] bg-slate-100 px-1.5 py-0.5 rounded inline-block mt-1 border border-slate-200">{document.status}</p>
-                            )}
-                        </div>
-                    </div>
+      {/* ── A4 Sheet ──────────────────────────────────────────────────────── */}
+      <div
+        className={`w-[210mm] mx-auto bg-white shadow-lg
+                   print:shadow-none print:m-0 print:w-full
+                   text-black ${bodyFontSize}
+                   ${ isElegant ? 'font-serif bg-amber-50/20' : '' }
+                   ${ isMinimal ? 'p-12' : 'p-8 md:p-10 print:p-8' }
+                   `}
+      >
+        {/* ── HEADER ──────────────────────────────────────────────────────── */}
+        <div
+          className={`mb-6 ${
+            isModern
+              ? 'rounded-t-sm -mx-0 -mt-0 px-8 pt-6 pb-5 text-white'
+              : isMinimal
+              ? 'flex justify-between items-center pb-4'
+              : isBold
+              ? 'pb-3'
+              : 'flex justify-between items-start border-b-2 pb-5'
+          }`}
+          style={{
+            ...(isModern ? { backgroundColor: primary } : {}),
+            ...(!isModern && !isMinimal ? { borderColor: primary } : {}),
+          }}
+        >
+          {/* Shop / Logo  —  controlled by headerLayout */}
+          <div
+            className={`flex ${
+              config.headerLayout === 'logo-center' ? 'flex-col items-center gap-y-2 w-full' :
+              config.headerLayout === 'logo-right'  ? 'flex-row-reverse justify-between w-full' :
+              'flex-row justify-between w-full'
+            } gap-4 items-start`}
+          >
+            {/* LEFT side: logo + shop info */}
+            <div className="flex gap-4 items-start">
+              {config.showLogo && data.shop.logoUrl && (
+                <div className="relative h-24 w-36 flex-shrink-0">
+                  <Image
+                    src={data.shop.logoUrl}
+                    alt="Logo"
+                    fill
+                    className="object-contain"
+                    unoptimized
+                  />
                 </div>
-
-                {/* Client Information */}
-                <div className="mb-6 flex justify-end">
-                    <div className="w-[55%] p-4 rounded-lg border border-slate-200 bg-slate-50/80 print:bg-slate-50 print:border-slate-300">
-                        <h3 className="text-[9px] font-bold uppercase text-slate-500 mb-1.5 tracking-wider">Client</h3>
-                        <div className="text-xs text-slate-900">
-                            {client ? (
-                                <>
-                                    <p className="font-bold text-sm mb-1">{client.prenom} {client.nom}</p>
-                                    <div className="text-slate-600 text-[10px] space-y-0.5">
-                                        <p>{client.telephone1 || client.phone}</p>
-                                        <p>{client.adresse || client.address}</p>
-                                    </div>
-                                    {(client.assuranceId || client.mutuelle) && (
-                                        <div className="mt-1.5 text-[10px] text-blue-700 font-medium pt-1 border-t border-slate-200">
-                                            Mutuelle: {client.assuranceId || client.mutuelle}
-                                        </div>
-                                    )}
-                                </>
-                            ) : (
-                                <>
-                                    <p className="font-bold text-sm">{document.clientName || 'Client Passage'}</p>
-                                    <p className="text-slate-600 text-[10px]">{document.clientPhone}</p>
-                                </>
-                            )}
-                        </div>
+              )}
+              <div className="space-y-0.5">
+                <h1
+                  className={`${isBold ? 'text-2xl font-black' : 'text-lg font-bold'} uppercase tracking-wide leading-none`}
+                  style={{ color: isModern ? 'white' : primary }}
+                >
+                  {data.shop.nom}
+                </h1>
+                <div className="leading-snug space-y-0.5" style={{ color: isModern ? 'rgba(255,255,255,0.75)' : secondary }}>
+                  {config.showAddress && data.shop.adresse && <p>{data.shop.adresse}</p>}
+                  {config.showPhone && data.shop.telephone && <p>Tél: {data.shop.telephone}</p>}
+                  {config.showICE && (
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[9px]" style={{ color: isModern ? 'rgba(255,255,255,0.55)' : secondary }}>
+                      {data.shop.ice  && <span>ICE: {data.shop.ice}</span>}
+                      {data.shop.if_  && <span>IF: {data.shop.if_}</span>}
+                      {data.shop.rc   && <span>RC: {data.shop.rc}</span>}
+                      {data.shop.tp   && <span>TP: {data.shop.tp}</span>}
+                      {data.shop.inpe && <span>INPE: {data.shop.inpe}</span>}
                     </div>
+                  )}
                 </div>
-
-                {/* Items Table */}
-                <div className="mb-6">
-                    <table className="w-full border-collapse">
-                        <thead>
-                            <tr className="bg-slate-900 text-white print:bg-slate-900 print:text-white">
-                                <th className="py-2 pl-2 text-left text-[9px] font-bold uppercase tracking-wider w-[30%] rounded-tl-sm">Désignation</th>
-                                <th className="py-2 text-left text-[9px] font-bold uppercase tracking-wider w-[15%]">Marque</th>
-                                <th className="py-2 text-left text-[9px] font-bold uppercase tracking-wider w-[15%]">Modèle</th>
-                                <th className="py-2 text-center text-[9px] font-bold uppercase tracking-wider w-[8%]">Qté</th>
-                                <th className="py-2 text-right text-[9px] font-bold uppercase tracking-wider w-[12%]">P.U. HT</th>
-                                <th className="py-2 pr-2 text-right text-[9px] font-bold uppercase tracking-wider w-[13%] rounded-tr-sm">Total HT</th>
-                            </tr>
-                        </thead>
-                        <tbody className="text-[10px]">
-                            {items.map((item: any, index: number) => {
-                                const name = item.productName || item.nomProduit || item.designation;
-                                const ref = item.reference || item.productRef;
-                                const marque = item.marque || item.brand || '-';
-                                const modele = item.modele || item.model || '-';
-                                const couleur = item.couleur || item.color;
-                                const qty = item.quantity || item.quantite || 0;
-                                const returned = item.returnedQuantity || 0;
-                                const effectiveQty = Math.max(0, qty - returned);
-                                const price = item.unitPrice || item.prixVente || item.prixUnitaire || 0;
-                                const lineTotal = effectiveQty * price;
-
-                                return (
-                                    <tr key={index} className="border-b border-slate-100 last:border-0">
-                                        <td className="py-2.5 pl-2 pr-2">
-                                            <p className="font-semibold text-slate-900 leading-tight">{name}</p>
-                                            {ref && <p className="text-[9px] text-slate-500 font-mono mt-0.5">Réf: {ref}</p>}
-                                            {couleur && <p className="text-[9px] text-slate-600 mt-0.5">Couleur: {couleur}</p>}
-                                            {returned > 0 && <p className="text-[9px] text-red-500 font-bold mt-0.5">Retourné: {returned}</p>}
-
-                                            {/* Lens Details */}
-                                            {item.lensDetails && item.lensDetails.length > 0 && (
-                                                <div className="mt-1.5 flex flex-wrap gap-1">
-                                                    {item.lensDetails.map((d: any, i: number) => (
-                                                        <div key={i} className="text-[8px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 font-mono flex items-center gap-1">
-                                                            <span className="font-bold">{d.eye}:</span>
-                                                            <span className="flex gap-1">
-                                                                {d.sphere && <span>S:{d.sphere}</span>}
-                                                                {d.cylinder && <span>C:{d.cylinder}</span>}
-                                                                {d.axis && <span>A:{d.axis}°</span>}
-                                                                {d.addition && <span>Add:{d.addition}</span>}
-                                                                {d.treatment && <span className="text-slate-500 ml-0.5 italic">{d.treatment}</span>}
-                                                            </span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-
-                                            {/* Contact Lens Details */}
-                                            {item.contactLensDetails && item.contactLensDetails.length > 0 && (
-                                                <div className="mt-1.5 flex flex-wrap gap-1">
-                                                    {item.contactLensDetails.map((d: any, i: number) => (
-                                                        <div key={i} className="text-[8px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-100 font-mono flex items-center gap-1">
-                                                            <span className="font-bold">{d.eye}:</span>
-                                                            <span className="flex gap-1">
-                                                                {d.power && <span>P:{d.power}</span>}
-                                                                {d.baseCurve && <span>BC:{d.baseCurve}</span>}
-                                                                {d.diameter && <span>D:{d.diameter}</span>}
-                                                            </span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="py-2.5 text-slate-700">{marque}</td>
-                                        <td className="py-2.5 text-slate-700">{modele}</td>
-                                        <td className="py-2.5 text-center text-slate-600 font-medium">{effectiveQty}</td>
-                                        <td className="py-2.5 text-right text-slate-600 font-medium">{price.toFixed(2)}</td>
-                                        <td className="py-2.5 pr-2 text-right font-bold text-slate-900">{lineTotal.toFixed(2)}</td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* Totals & VAT Breakdown Section */}
-                <div className="flex justify-between items-start mb-8 gap-8">
-                    
-                    {/* VAT Breakdown (Left) */}
-                    <div className="flex-1">
-                        <table className="w-full text-[9px] border-collapse border border-slate-200">
-                            <thead>
-                                <tr className="bg-slate-100 text-slate-700">
-                                    <th className="border border-slate-200 p-1.5 text-left font-semibold">Taux TVA</th>
-                                    <th className="border border-slate-200 p-1.5 text-right font-semibold">Base HT</th>
-                                    <th className="border border-slate-200 p-1.5 text-right font-semibold">Montant TVA</th>
-                                    <th className="border border-slate-200 p-1.5 text-right font-semibold">Total TTC</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {(() => {
-                                    // Calculate VAT Breakdown dynamically
-                                    const breakdown: Record<number, { base: number, tax: number, ttc: number }> = {};
-                                    
-                                    items.forEach((item: any) => {
-                                        const qty = item.quantity || item.quantite || 0;
-                                        const returned = item.returnedQuantity || 0;
-                                        const effectiveQty = Math.max(0, qty - returned);
-                                        
-                                        // Prefer pre-calculated totals if available but adjusted for quantity
-                                        // If totals are pre-calced on full qty, we must scale them down?
-                                        // Usually lineTotal is unit * qty.
-                                        const unitPrice = item.unitPrice || item.prixVente || item.prixUnitaire || 0;
-                                        
-                                        // Re-calculate line totals based on effective quantity to be safe
-                                        let lineTTC = effectiveQty * unitPrice;
-                                        let lineHT = lineTTC; 
-                                        let lineTax = 0;
-                                        
-                                        const rate = item.tvaRate !== undefined ? parseFloat(item.tvaRate) : tvaRate;
-                                        
-                                        // If we have unit tax details, use them
-                                        if (item.priceHT && item.amountTVA) {
-                                            // item.amountTVA is usually UNIT TVA
-                                            lineHT = effectiveQty * item.priceHT;
-                                            lineTax = effectiveQty * item.amountTVA;
-                                            lineTTC = lineHT + lineTax; // Or effectiveQty * unitPrice (diff due to rounding)
-                                        } else {
-                                            // Standard back-calc
-                                            lineHT = lineTTC / (1 + rate / 100);
-                                            lineTax = lineTTC - lineHT;
-                                        }
-
-                                        if (!breakdown[rate]) breakdown[rate] = { base: 0, tax: 0, ttc: 0 };
-                                        
-                                        breakdown[rate].base += Number(lineHT);
-                                        breakdown[rate].tax += Number(lineTax);
-                                        breakdown[rate].ttc += Number(lineTTC);
-                                    });
-
-                                    return Object.entries(breakdown).map(([rate, vals]) => (
-                                        <tr key={rate}>
-                                            <td className="border border-slate-200 p-1.5 text-slate-600">{rate}%</td>
-                                            <td className="border border-slate-200 p-1.5 text-right text-slate-600">{vals.base.toFixed(2)} DH</td>
-                                            <td className="border border-slate-200 p-1.5 text-right text-slate-600">{vals.tax.toFixed(2)} DH</td>
-                                            <td className="border border-slate-200 p-1.5 text-right text-slate-600">{vals.ttc.toFixed(2)} DH</td>
-                                        </tr>
-                                    ));
-                                })()}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Totals (Right) */}
-                    <div className="w-64">
-                        <div className="space-y-1.5 mb-2 px-3">
-                            <div className="flex justify-between text-[10px] text-slate-600">
-                                <span className="font-medium">Total HT</span>
-                                <span>{totalHT.toFixed(2)} DH</span>
-                            </div>
-                            <div className="flex justify-between text-[10px] text-slate-600">
-                                <span className="font-medium">Total TVA</span>
-                                <span>{totalTVA.toFixed(2)} DH</span>
-                            </div>
-                        </div>
-
-                        {/* Total Block */}
-                        <div className="bg-slate-900 text-white p-2.5 rounded shadow-sm print:bg-slate-900 print:text-white">
-                            <div className="flex justify-between items-center">
-                                <span className="text-[9px] font-medium uppercase tracking-wider opacity-80">Total TTC</span>
-                                <span className="text-lg font-bold">{totalTTC.toFixed(2)} <span className="text-xs font-normal opacity-70">DH</span></span>
-                            </div>
-                        </div>
-
-                        {!isDevis && resteAPayer > 0 && (
-                            <div className="flex justify-between text-[10px] text-red-600 font-bold px-3 pt-2">
-                                <span>Reste à Payer</span>
-                                <span>{resteAPayer.toFixed(2)} DH</span>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Amount in Words */}
-                <div className="mb-6 p-3 bg-slate-50 border border-slate-200 rounded print:bg-slate-50 print:border-slate-200">
-                    <p className="text-[9px] text-slate-600 mb-1">
-                        {isDevis ? 'Arrêté le présent devis' : 'Arrêté la présente facture'} à la somme de :
-                    </p>
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-900">
-                        {totalTTC.toFixed(2)} DH ({formatCurrencyToWords(totalTTC)})
-                    </p>
-                </div>
-
-                {/* Payment Methods */}
-                {paymentMethods && paymentMethods.length > 0 && (
-                    <div className="mb-6 p-3 border border-slate-200 rounded bg-white">
-                        <p className="text-[9px] font-bold uppercase text-slate-700 mb-1.5">Modes de paiement acceptés</p>
-                        <p className="text-[10px] text-slate-600">{paymentMethods.join(' • ')}</p>
-                    </div>
-                )}
-
-                {/* Signature and Stamp Area */}
-                <div className="mb-8 flex justify-end">
-                    <div className="border border-dashed border-slate-300 rounded p-3 h-24 w-64">
-                        <p className="text-[9px] font-bold uppercase text-slate-500 mb-1">Cachet et Signature</p>
-                        <p className="text-[8px] text-slate-400 italic">{settings?.storeName || settings?.shopName || 'OptiManager'}</p>
-                    </div>
-                </div>
-
-                {/* Footer */}
-                <div className="absolute bottom-6 left-8 right-8 pt-4 border-t border-slate-200 text-[9px] text-slate-500 print:bottom-6">
-                    <div className="grid grid-cols-2 gap-6">
-                        <div>
-                            <p className="font-bold uppercase text-slate-700 mb-1 text-[8px]">Conditions</p>
-                            {isDevis ? (
-                                <>
-                                    <p>Ce devis est valable 15 jours.</p>
-                                </>
-                            ) : (
-                                <>
-                                    <p>{settings?.paymentTerms || 'Paiement comptant à réception.'}</p>
-                                    <p>Marchandise livrée, non reprise, non échangée.</p>
-                                </>
-                            )}
-                        </div>
-
-                        {settings?.rib && (
-                            <div className="text-right">
-                                <p className="font-bold uppercase text-slate-700 mb-1 text-[8px]">Coordonnées Bancaires</p>
-                                <p className="font-mono text-slate-600 text-[9px]">{settings.rib}</p>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="text-center mt-4">
-                        <p className="font-bold text-slate-900 italic text-[10px]">"Merci de votre confiance"</p>
-                        <p className="mt-0.5 text-[8px] text-slate-400">Généré par OptiManager Pro</p>
-                    </div>
-                </div>
+              </div>
             </div>
 
-            {/* Global Print Styles */}
-            <style jsx global>{`
-                @media print {
-                    @page {
-                        size: A4;
-                        margin: 0;
-                    }
-                    body {
-                        background-color: white;
-                        -webkit-print-color-adjust: exact !important;
-                        print-color-adjust: exact !important;
-                    }
-                }
-            `}</style>
-        </>
-    );
+            {/* RIGHT side: document meta */}
+            <div className="text-right shrink-0">
+              <div
+                className="inline-block px-4 py-1.5 rounded mb-2 text-white"
+                style={{ backgroundColor: isModern ? 'rgba(255,255,255,0.2)' : primary }}
+              >
+                <span
+                  className={`${isBold ? 'text-xl font-black' : 'text-base font-bold'} tracking-widest`}
+                  style={{ color: isModern ? 'white' : undefined }}
+                >
+                  {data.type}
+                </span>
+              </div>
+              <div className="text-[10px] space-y-0.5">
+                <p className="font-semibold" style={{ color: isModern ? 'white' : primary }}>N° {data.documentNumber}</p>
+                <p style={{ color: isModern ? 'rgba(255,255,255,0.65)' : secondary }}>Date : {formatDate(data.date)}</p>
+                {isDevis && (
+                  <p style={{ color: isModern ? 'rgba(255,255,255,0.55)' : secondary }}>Validité : {data.validityDays ?? 15} jours</p>
+                )}
+                {data.status && (
+                  <p className="uppercase font-bold text-[9px] px-1.5 py-0.5 rounded inline-block mt-1 border"
+                     style={{ backgroundColor: primary + '15', color: primary, borderColor: primary + '40' }}>
+                    {data.status}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── CLIENT INFO ─────────────────────────────────────────────────── */}
+        <div className="mb-6 flex justify-end">
+          <div className="w-[55%] p-4 rounded-lg border border-slate-200 bg-slate-50/80 print:bg-slate-50 print:border-slate-300">
+            <h3 className="text-[9px] font-bold uppercase text-slate-500 mb-1.5 tracking-wider">
+              {isDevis ? 'Devis établi pour :' : 'Facturé à :'}
+            </h3>
+            <div className="text-xs text-slate-900">
+              <p className="font-bold text-sm mb-1">{data.client.nom}</p>
+              {data.client.telephone && (
+                <p className="text-slate-600 text-[10px]">{data.client.telephone}</p>
+              )}
+              {data.client.adresse && (
+                <p className="text-slate-600 text-[10px]">{data.client.adresse}</p>
+              )}
+              {data.client.mutuelle && (
+                <div className="mt-1.5 text-[10px] text-blue-700 font-medium pt-1 border-t border-slate-200">
+                  Mutuelle : {data.client.mutuelle}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── TABLE HEADER ─────────────────────────────────────────────────── */}
+        <div className="mb-6">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="text-white print:text-white" style={{ backgroundColor: primary }}>
+                <th className="py-2 pl-2 text-left text-[9px] font-bold uppercase tracking-wider w-[38%] rounded-tl-sm">
+                  Désignation
+                </th>
+                <th className="py-2 text-left text-[9px] font-bold uppercase tracking-wider w-[14%]">
+                  Marque
+                </th>
+                <th className="py-2 text-left text-[9px] font-bold uppercase tracking-wider w-[14%]">
+                  Modèle
+                </th>
+                <th className="py-2 text-center text-[9px] font-bold uppercase tracking-wider w-[8%]">
+                  Qté
+                </th>
+                <th className="py-2 text-right text-[9px] font-bold uppercase tracking-wider w-[12%]">
+                  P.U. HT
+                </th>
+                <th className="py-2 pr-2 text-right text-[9px] font-bold uppercase tracking-wider w-[13%] rounded-tr-sm">
+                  Total HT
+                </th>
+              </tr>
+            </thead>
+            <tbody className="text-[10px]">
+              {data.items.map((item, i) => {
+                // HT from TTC
+                const rate = item.tvaRate ?? 20;
+                const unitHT = item.prixUnitaire / (1 + rate / 100);
+                const totalHT = item.total / (1 + rate / 100);
+
+                return (
+                  <tr
+                    key={item.id ?? i}
+                    className="border-b border-slate-100 last:border-0 break-inside-avoid"
+                  >
+                    <td className="py-2.5 pl-2 pr-2">
+                      <p className="font-semibold text-slate-900 leading-tight">
+                        {item.description}
+                      </p>
+                      {item.reference && (
+                        <p className="text-[9px] text-slate-500 font-mono mt-0.5">
+                          Réf: {item.reference}
+                        </p>
+                      )}
+                      {item.couleur && (
+                        <p className="text-[9px] text-slate-600 mt-0.5">
+                          Couleur: {item.couleur}
+                        </p>
+                      )}
+
+                      {/* Lens prescription tags */}
+                      {item.lensDetails && item.lensDetails.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {item.lensDetails.map((d, li) => (
+                            <div
+                              key={li}
+                              className="text-[8px] bg-slate-100 text-slate-700 px-1.5 py-0.5
+                                         rounded border border-slate-200 font-mono flex items-center gap-1"
+                            >
+                              <span className="font-bold">{d.eye}:</span>
+                              <span className="flex gap-1">
+                                {d.sphere   && <span>S:{d.sphere}</span>}
+                                {d.cylinder && <span>C:{d.cylinder}</span>}
+                                {d.axis     && <span>A:{d.axis}°</span>}
+                                {d.addition && <span>Add:{d.addition}</span>}
+                                {d.treatment && (
+                                  <span className="text-slate-500 ml-0.5 italic">{d.treatment}</span>
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Contact lens tags */}
+                      {item.contactLensDetails && item.contactLensDetails.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {item.contactLensDetails.map((d, ci) => (
+                            <div
+                              key={ci}
+                              className="text-[8px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5
+                                         rounded border border-indigo-100 font-mono flex items-center gap-1"
+                            >
+                              <span className="font-bold">{d.eye}:</span>
+                              <span className="flex gap-1">
+                                {d.power     && <span>P:{d.power}</span>}
+                                {d.baseCurve && <span>BC:{d.baseCurve}</span>}
+                                {d.diameter  && <span>D:{d.diameter}</span>}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-2.5 text-slate-700">{item.marque  ?? '-'}</td>
+                    <td className="py-2.5 text-slate-700">{item.modele  ?? '-'}</td>
+                    <td className="py-2.5 text-center text-slate-600 font-medium">
+                      {item.quantite}
+                    </td>
+                    <td className="py-2.5 text-right text-slate-600 font-medium">
+                      {unitHT.toFixed(2)}
+                    </td>
+                    <td className="py-2.5 pr-2 text-right font-bold text-slate-900">
+                      {totalHT.toFixed(2)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ── TOTALS + TVA BREAKDOWN ───────────────────────────────────────── */}
+        <div className="flex justify-between items-start mb-8 gap-8 break-inside-avoid">
+
+          {/* TVA Breakdown table (left) */}
+          <div className="flex-1">
+            <table className="w-full text-[9px] border-collapse border border-slate-200">
+              <thead>
+                <tr className="bg-slate-100 text-slate-700">
+                  <th className="border border-slate-200 p-1.5 text-left font-semibold">Taux TVA</th>
+                  <th className="border border-slate-200 p-1.5 text-right font-semibold">Base HT</th>
+                  <th className="border border-slate-200 p-1.5 text-right font-semibold">Montant TVA</th>
+                  <th className="border border-slate-200 p-1.5 text-right font-semibold">Total TTC</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tvaBreakdown.map(([rate, vals]) => (
+                  <tr key={rate}>
+                    <td className="border border-slate-200 p-1.5 text-slate-600">{rate}%</td>
+                    <td className="border border-slate-200 p-1.5 text-right text-slate-600">
+                      {vals.base.toFixed(2)} DH
+                    </td>
+                    <td className="border border-slate-200 p-1.5 text-right text-slate-600">
+                      {vals.tax.toFixed(2)} DH
+                    </td>
+                    <td className="border border-slate-200 p-1.5 text-right text-slate-600">
+                      {vals.ttc.toFixed(2)} DH
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Summary totals (right) */}
+          <div className="w-64">
+            <div className="space-y-1.5 mb-2 px-3">
+              <div className="flex justify-between text-[10px] text-slate-600">
+                <span className="font-medium">Total HT</span>
+                <span>{data.totals.sousTotal.toFixed(2)} DH</span>
+              </div>
+              <div className="flex justify-between text-[10px] text-slate-600">
+                <span className="font-medium">Total TVA</span>
+                <span>{data.totals.tva.toFixed(2)} DH</span>
+              </div>
+            </div>
+
+            {/* Total TTC block */}
+            <div className="p-2.5 rounded shadow-sm print:text-white" style={{ backgroundColor: primary }}>
+              <div className="flex justify-between items-center">
+                <span className="text-[9px] font-medium uppercase tracking-wider opacity-80 text-white">
+                  Total TTC
+                </span>
+                <span className="text-lg font-bold text-white">
+                  {formatMAD(data.totals.totalTTC)}
+                </span>
+              </div>
+            </div>
+
+            {/* Acompte — green, only if > 0 */}
+            {data.totals.acompte != null && data.totals.acompte > 0 && (
+              <div className="flex justify-between text-[10px] text-green-600 font-bold px-3 pt-2">
+                <span>Acompte versé</span>
+                <span>- {formatMAD(data.totals.acompte)}</span>
+              </div>
+            )}
+
+            {/* Reste à payer — red, only if defined */}
+            {data.totals.resteAPayer != null && (
+              <div className="flex justify-between text-[10px] text-red-600 font-bold px-3 pt-2 border-t border-red-100 mt-1">
+                <span>Reste à payer</span>
+                <span>{formatMAD(data.totals.resteAPayer)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── AMOUNT IN WORDS ────────────────────────────────────────────── */}
+        <div className="mb-6 p-3 bg-slate-50 border border-slate-200 rounded print:bg-slate-50 print:border-slate-200">
+          <p className="text-[9px] text-slate-600 mb-1">
+            {isDevis ? 'Arrêté le présent devis' : 'Arrêtée la présente facture'} à la somme de :
+          </p>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-900">
+            {data.totals.totalTTC.toFixed(2)} DH ({formatCurrencyToWords(data.totals.totalTTC)})
+          </p>
+        </div>
+
+        {/* ── PAYMENT METHODS ─────────────────────────────────────────────── */}
+        <div className="mb-6 p-3 border border-slate-200 rounded bg-white">
+          <p className="text-[9px] font-bold uppercase text-slate-700 mb-1.5">
+            Modes de paiement acceptés
+          </p>
+          <p className="text-[10px] text-slate-600">{paymentMethods.join(' • ')}</p>
+        </div>
+
+        {/* ── SIGNATURE AREA ──────────────────────────────────────────────── */}
+        {config.showSignatureBox && (
+          <div className="mb-10 flex justify-end">
+            <div className="border border-dashed border-slate-300 rounded p-3 h-24 w-64">
+              <p className="text-[9px] font-bold uppercase text-slate-500 mb-1">Cachet et Signature</p>
+              <p className="text-[8px] text-slate-400 italic">{data.shop.nom}</p>
+            </div>
+          </div>
+        )}
+
+        {/* ── FOOTER — normal document flow (NOT absolute / NOT fixed) ────── */}
+        <footer className="pt-4 border-t border-slate-200 text-[9px] text-slate-500">
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <p className="font-bold uppercase mb-1 text-[8px]" style={{ color: primary }}>Conditions</p>
+              {isDevis ? (
+                <p>Ce devis est valable {data.validityDays ?? 15} jours.</p>
+              ) : (
+                <>
+                  <p>{data.shop.paymentTerms ?? 'Paiement comptant à réception.'}</p>
+                  <p>Marchandise livrée, non reprise, non échangée.</p>
+                </>
+              )}
+            </div>
+            {config.showRIB && data.shop.rib && (
+              <div className="text-right">
+                <p className="font-bold uppercase mb-1 text-[8px]" style={{ color: primary }}>Coordonnées Bancaires</p>
+                <p className="font-mono text-slate-600 text-[9px]">{data.shop.rib}</p>
+              </div>
+            )}
+          </div>
+          <div className="text-center mt-4">
+            {config.footerText ? (
+              <p className="text-[8px] mb-1 whitespace-pre-wrap">{config.footerText}</p>
+            ) : data.shop.mentionsLegales ? (
+              <p className="text-[8px] mb-1">{data.shop.mentionsLegales}</p>
+            ) : null}
+            <p className="font-bold text-slate-900 italic text-[10px]">
+              &quot;Merci de votre confiance&quot;
+            </p>
+            <p className="mt-0.5 text-[8px] text-slate-400">Généré par OptiManager Pro</p>
+          </div>
+        </footer>
+      </div>
+
+      {/* ── Global Print CSS ──────────────────────────────────────────────── */}
+      <style>{`
+        @media print {
+          @page { size: A4; margin: 10mm; }
+          body {
+            background-color: white;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
+      `}</style>
+    </>
+  );
 }

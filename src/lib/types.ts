@@ -282,33 +282,46 @@ export interface Color {
 
 export interface Supplier {
   id: string;
+  userId?: string;
   name: string;
-  nomCommercial: string;
-  raisonSociale?: string;
-  typeProduits?: string[];
-  telephone: string;
+  nomCommercial?: string; // TODO: Remove by 2026-06-01 (Legacy Migration)
+  raisonSociale?: string; // TODO: Remove by 2026-06-01 (Legacy Migration)
+  category?: string;
+  typeProduits?: string[]; // TODO: Remove by 2026-06-01 (Legacy Migration)
+  phone?: string;
+  telephone?: string; // TODO: Remove by 2026-06-01 (Legacy Migration)
   email?: string;
-  adresse?: string;
-  ville?: string;
-  pays?: string;
+  address?: string;
+  adresse?: string; // TODO: Remove by 2026-06-01 (Legacy Migration)
+  city?: string;
+  ville?: string; // TODO: Remove by 2026-06-01 (Legacy Migration)
+  pays?: string; // TODO: Remove by 2026-06-01 (Legacy Migration)
   if?: string;
   ice?: string;
   rc?: string;
   rib?: string;
-  banque?: string;
-  delaiPaiement?: "Comptant" | "30 jours" | "60 jours" | "90 jours";
-  modePaiement?: "Espèces" | "Chèque" | "Virement" | "Carte";
-  remise?: number;
+  taxId?: string;
+  paymentTerms?: string;
+  paymentMethod?: string;
+  bank?: string;
+  banque?: string; // TODO: Remove by 2026-06-01 (Legacy Migration)
+  delaiPaiement?: string; // TODO: Remove by 2026-06-01 (Legacy Migration)
+  modePaiement?: string; // TODO: Remove by 2026-06-01 (Legacy Migration)
+  remise?: number; // TODO: Remove by 2026-06-01 (Legacy Migration)
   contactNom?: string;
   contactTelephone?: string;
   contactEmail?: string;
   notes?: string;
-  statut: "Actif" | "Inactif";
-  totalAchats?: number;
-  defaultTaxMode?: "HT" | "TTC";
+  status?: string;
+  statut?: string; // TODO: Remove by 2026-06-01 (Legacy Migration)
+  isActive?: boolean;
+  totalAchats?: number; // TODO: Remove by 2026-06-01 (Legacy Migration)
+  defaultTaxMode?: string;
   currentBalance?: number;
-  dateCreation: any;
-  dateModification: any;
+  createdAt?: any;
+  updatedAt?: any;
+  dateCreation?: any; // TODO: Remove by 2026-06-01 (Legacy Migration)
+  dateModification?: any; // TODO: Remove by 2026-06-01 (Legacy Migration)
 }
 
 

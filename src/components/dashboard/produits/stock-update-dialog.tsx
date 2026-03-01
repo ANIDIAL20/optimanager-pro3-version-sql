@@ -98,8 +98,9 @@ export function StockUpdateDialog({
                 reason: reason.trim(),
             });
 
-            if (result.success) {
-                const newStock = result.newStock ?? (movementType === 'in' ? currentStock + qty : currentStock - qty);
+            const resultAny = result as any;
+            if (resultAny.success) {
+                const newStock = resultAny.newStock ?? (movementType === 'in' ? currentStock + qty : currentStock - qty);
 
                 toast({
                     title: '✅ Stock mis à jour',
@@ -122,7 +123,7 @@ export function StockUpdateDialog({
                 // Close dialog
                 onOpenChange(false);
             } else {
-                throw new Error(result.error);
+                throw new Error((result as any).error);
             }
 
         } catch (error: any) {

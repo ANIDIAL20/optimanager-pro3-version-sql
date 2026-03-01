@@ -194,7 +194,7 @@ export function CreateOrderButton() {
             } else {
                 toast({
                     title: "Erreur",
-                    description: result.error || "Une erreur est survenue",
+                    description: (result as any).error || "Une erreur est survenue",
                     variant: "destructive",
                 });
             }
@@ -239,7 +239,7 @@ export function CreateOrderButton() {
                                         <FormLabel>Fournisseur</FormLabel>
                                         <SearchableSelect
                                             options={suppliers.map((s) => ({
-                                                label: s.nomCommercial,
+                                                label: s.nomCommercial || s.name || 'Sans Nom',
                                                 value: s.id,
                                             }))}
                                             value={field.value}

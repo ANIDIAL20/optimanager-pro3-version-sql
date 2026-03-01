@@ -10,11 +10,11 @@ import { useToast } from '@/hooks/use-toast';
 import type { StandardDocumentData } from '@/types/document';
 import type { DocumentTemplateConfig } from '@/types/document-template';
 
-interface FacturePrintPageProps {
+interface BonCommandePrintPageProps {
   params: Promise<{ id: string }>;
 }
 
-export default function FacturePrintPage({ params }: FacturePrintPageProps) {
+export default function BonCommandePrintPage({ params }: BonCommandePrintPageProps) {
   const { id } = React.use(params);
   const router = useRouter();
   const { toast } = useToast();
@@ -30,7 +30,7 @@ export default function FacturePrintPage({ params }: FacturePrintPageProps) {
   React.useEffect(() => {
     if (!id) return;
     Promise.all([
-      getPrintData(id, 'facture'),
+      getPrintData(id, 'facture'), // Adjust to bon-commande if backend separates them
       getDocumentConfig(),
     ]).then(([result, cfg]) => {
       setDocConfig(cfg);
@@ -39,8 +39,8 @@ export default function FacturePrintPage({ params }: FacturePrintPageProps) {
 
         // ── Map raw getPrintData result → StandardDocumentData ──────────
         const mapped: StandardDocumentData = {
-          type: 'FACTURE',
-          documentNumber: doc.transactionNumber ?? doc.saleNumber ?? `F-${doc.id}`,
+          type: 'BON DE COMMANDE',
+          documentNumber: doc.transactionNumber ?? doc.saleNumber ?? `BC-${doc.id}`,
           date: (doc.date ?? doc.createdAt ?? new Date()).toString(),
           status: doc.status,
           client: {
