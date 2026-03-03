@@ -415,9 +415,10 @@ export const getSupplierStats = secureAction(async (userId, user, supplierId: st
         const stats = result[0] || { total_ordered: 0, total_paid: 0, total_debt: 0, orders_count: 0 };
         
         // Convert strings to numbers
-        Object.keys(stats).forEach(key => {
+        const mutableStats = stats as Record<string, unknown>;
+        Object.keys(mutableStats).forEach(key => {
             if (key !== 'orders_count') {
-                stats[key as keyof typeof stats] = Number(stats[key as keyof typeof stats] || 0) as any;
+                mutableStats[key] = Number(mutableStats[key] || 0);
             }
         });
 
@@ -454,3 +455,42 @@ export const getGlobalSupplierBalances = secureAction(async (userId) => {
         return { success: false, error: error.message };
     }
 });
+
+/**
+ * Fetch all data needed to print a Bon de Commande.
+ * Returns the order, its linked supplier, and shop settings.
+ */
+export const getSupplierOrderPrintData = secureAction(async (userId, user, orderId: string) => {
+    try {
+        const id = parseInt(orderId);
+
+        // 1. Fetch the supplier order
+        const order = await db.query.supplierOrders.findFirst({
+            where: and(eq(supplierOrders.id, id), eq(supplierOrders.userId, userId)),
+            with: { supplier: true },
+        });
+
+        if (!order) {
+            return { success: false, error: 'Bon de commande introuvable' };
+        }
+
+        // 2. Fetch shop settings
+        const { shopProfiles } = await import('@/db/schema');
+        const settingsResult = await db.query.shopProfiles.findFirst({
+            where: eq(shopProfiles.userId, userId),
+        });
+
+        return {
+            success: true,
+            data: {
+                order,
+                supplier: (order as any).supplier ?? null,
+                settings: settingsResult ?? null,
+            },
+        };
+    } catch (error: any) {
+        console.error('Error fetching bon de commande print data:', error);
+        return { success: false, error: 'Erreur lors de la récupération des données' };
+    }
+});
+

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useTransition, useEffect } from 'react';
+import React, { useState, useTransition, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -18,7 +18,7 @@ import {
 import { PrintDocumentTemplate } from '@/components/printing/print-document-template';
 import type { DocumentTemplateConfig, TemplateId, HeaderLayout, FontSize } from '@/types/document-template';
 import { DEFAULT_TEMPLATE_CONFIG } from '@/types/document-template';
-import { saveDocumentConfig } from '@/app/actions/shop-actions';
+import { saveDocumentConfig, getDocumentConfig } from '@/app/actions/shop-actions';
 import type { StandardDocumentData } from '@/types/document.js';
 
 // ── Demo data for live preview ──────────────────────────────────────────────
@@ -41,13 +41,119 @@ const DEMO_ITEMS_FACTURE = [
   { id: '3', description: 'Essentiel Étui +Chiffon', quantite: 1, prixUnitaire: 80, total: 80, tvaRate: 20 },
 ];
 
-function buildDemo(type: 'FACTURE' | 'DEVIS' | 'BON DE COMMANDE', shop: typeof DEMO_SHOP): StandardDocumentData {
+function buildDemo(type: 'FACTURE' | 'DEVIS' | 'BON DE COMMANDE' | 'REÇU', shop: typeof DEMO_SHOP): StandardDocumentData {
+  if (type === 'REÇU') {
+    return {
+      type: 'REÇU',
+      documentNumber: 'REC-DEMO-2026-0042',
+      date: new Date().toISOString(),
+      modePaiement: 'Carte Bancaire',
+      shop,
+      client: { nom: 'Karim El Hassani', telephone: '0661-234567', adresse: 'Quartier Palmier, Casablanca' },
+      ordonnance: {
+        prescripteur: 'Dr. Mohamed Alaoui',
+        dateOrdonnance: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      items: [
+        { 
+          id: '1', 
+          description: 'Monture Ray-Ban RB3025', 
+          marque: 'Ray-Ban', 
+          modele: 'Aviator', 
+          quantite: 1, 
+          prixUnitaire: 650, 
+          total: 650, 
+          tvaRate: 20 
+        },
+        { 
+          id: '2', 
+          description: 'Verre Essilor Progressif OD', 
+          marque: 'Essilor', 
+          modele: 'Progressif', 
+          quantite: 1, 
+          prixUnitaire: 450, 
+          total: 450, 
+          tvaRate: 20,
+          lensDetails: [{
+            eye: 'OD', sphere: '+1.50', cylinder: '-0.75', axis: '90', addition: '+2.00', treatment: 'Anti-Reflet'
+          }]
+        },
+        { 
+          id: '3', 
+          description: 'Verre Essilor Progressif OG', 
+          marque: 'Essilor', 
+          modele: 'Progressif', 
+          quantite: 1, 
+          prixUnitaire: 450, 
+          total: 450, 
+          tvaRate: 20,
+          lensDetails: [{
+            eye: 'OG', sphere: '+1.25', cylinder: '-0.50', axis: '85', addition: '+2.00', treatment: 'Anti-Reflet'
+          }]
+        },
+      ],
+      paiements: [
+        { date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), mode: 'Espèces', montant: 500 },
+        { date: new Date().toISOString(), mode: 'Carte Bancaire', montant: 1050 },
+      ],
+      montantEnLettres: 'Mille cinq cent cinquante Dirhams',
+      totals: { sousTotal: 1291.67, tva: 258.33, totalTTC: 1550, acompte: 1550, resteAPayer: 0 },
+    };
+  }
+  if (type === 'BON DE COMMANDE') {
+    return {
+      type: 'BON DE COMMANDE',
+      documentNumber: 'BC-DEMO-001',
+      date: new Date().toISOString(),
+      shop,
+      fournisseur: {
+        nom: 'ESSILOR MAROC',
+        adresse: 'Zone Industrielle, Casablanca',
+        telephone: '0522-111222',
+        contact: 'M. Dupont',
+        conditionsPaiement: '30 jours fin de mois',
+        delaiLivraison: '7-10 jours ouvrables',
+      },
+      commandeDetails: {
+        lieuLivraison: `${shop.nom} — ${shop.adresse}`,
+        dateLivraisonSouhaitee: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
+        observations: 'Patient: Karim El Hassani — Dr. Mohamed Alaoui — Ord. du 16/02/2026\nLivraison en une seule fois svp. Traitement AR obligatoire.',
+      },
+      items: [
+        {
+          id: '1',
+          description: 'Verre Essilor Progressif Varilux — OD',
+          marque: 'Essilor',
+          modele: 'Varilux X Series 1.6',
+          quantite: 1,
+          prixUnitaire: 375,
+          total: 375,
+          lensDetails: [
+            { eye: 'OD', sphere: '+1.50', cylinder: '-0.75', axis: '90', addition: '+2.00', treatment: 'Anti-Reflet Blue Block' },
+          ],
+        },
+        {
+          id: '2',
+          description: 'Verre Essilor Progressif Varilux — OG',
+          marque: 'Essilor',
+          modele: 'Varilux X Series 1.6',
+          quantite: 1,
+          prixUnitaire: 375,
+          total: 375,
+          lensDetails: [
+            { eye: 'OG', sphere: '+1.25', cylinder: '-0.50', axis: '85', addition: '+2.00', treatment: 'Anti-Reflet Blue Block' },
+          ],
+        },
+      ],
+      totals: { sousTotal: 750, totalTTC: 750 },
+    };
+  }
   return {
     type,
-    documentNumber: type === 'FACTURE' ? 'FAC-DEMO-001' : type === 'DEVIS' ? 'DEV-DEMO-001' : 'BC-DEMO-001',
+    documentNumber: type === 'FACTURE' ? 'FAC-DEMO-001' : 'DEV-DEMO-001',
     date: new Date().toISOString(),
-    client: { nom: 'Mohamed Alami', telephone: '0661-234567', adresse: 'Av. Hassan II, Rabat' },
     shop,
+    client: { nom: 'Mohamed Alami', telephone: '0661-234567', adresse: 'Av. Hassan II, Rabat' },
     items: DEMO_ITEMS_FACTURE,
     totals: { sousTotal: 1817, tva: 363, totalTTC: 2180, acompte: 500, resteAPayer: 1680 },
   };
@@ -71,8 +177,45 @@ export function DocumentSettingsForm({ shopId, initialShopProfile, initialConfig
   const [config, setConfig] = useState<DocumentTemplateConfig>(
     initialConfig ?? DEFAULT_TEMPLATE_CONFIG
   );
-  const [previewType, setPreviewType] = useState<'FACTURE' | 'DEVIS' | 'BON DE COMMANDE'>('FACTURE');
+  const [previewType, setPreviewType] = useState<'FACTURE' | 'DEVIS' | 'BON DE COMMANDE' | 'REÇU'>('FACTURE');
   const [isPending, startTransition] = useTransition();
+
+  // ── Dynamic A4 scale ───────────────────────────────────────────────────────
+  // 794px ≈ 210mm at 96 dpi (A4 width). We keep a small padding factor so the
+  // sheet doesn't touch the container edges.
+  const A4_PX = 794;
+  const PADDING = 24; // px of visual breathing room on each side
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const [previewScale, setPreviewScale] = useState(0.62);
+
+  const recalcScale = useCallback(() => {
+    if (!previewContainerRef.current) return;
+    const availableWidth = previewContainerRef.current.clientWidth - PADDING * 2;
+    const newScale = Math.min(availableWidth / A4_PX, 1); // never scale > 100%
+    setPreviewScale(parseFloat(newScale.toFixed(4)));
+  }, []);
+
+  // ── Sync from DB on mount ─────────────────────────────────────────────────
+  // Re-fetch the saved config from the DB on client mount. This ensures the
+  // form always reflects what is actually stored, even if the SSR-prop was
+  // stale (e.g., document_settings was empty {} because an old save went to
+  // the now-removed document_config column).
+  useEffect(() => {
+    getDocumentConfig().then((saved) => {
+      // Only override if the DB has a real value (not just the bare default)
+      if (saved && saved.templateId) {
+        setConfig(saved);
+      }
+    }).catch(() => { /* keep current initialConfig on failure */ });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount
+
+  useEffect(() => {
+    recalcScale();
+    const ro = new ResizeObserver(recalcScale);
+    if (previewContainerRef.current) ro.observe(previewContainerRef.current);
+    return () => ro.disconnect();
+  }, [recalcScale]);
 
   // Build shop from initialShopProfile if available
   const demoShop: typeof DEMO_SHOP = {
@@ -348,7 +491,7 @@ export function DocumentSettingsForm({ shopId, initialShopProfile, initialConfig
           </div>
           {/* Doc type toggle */}
           <div className="flex bg-slate-700 rounded-lg p-0.5">
-            {(['FACTURE', 'DEVIS', 'BON DE COMMANDE'] as const).map(t => (
+            {(['FACTURE', 'DEVIS', 'BON DE COMMANDE', 'REÇU'] as const).map(t => (
               <button
                 key={t}
                 onClick={() => setPreviewType(t)}
@@ -356,18 +499,21 @@ export function DocumentSettingsForm({ shopId, initialShopProfile, initialConfig
                   previewType === t ? 'bg-indigo-500 text-white shadow' : 'text-slate-300 hover:text-white'
                 }`}
               >
-                {t === 'BON DE COMMANDE' ? 'Bon Cmd' : t === 'FACTURE' ? 'Facture' : 'Devis'}
+                {t === 'BON DE COMMANDE' ? 'Bon Cmd' : t === 'FACTURE' ? 'Facture' : t === 'DEVIS' ? 'Devis' : 'Reçu'}
               </button>
             ))}
           </div>
         </div>
 
         {/* Scaled Preview */}
-        <div className="flex-1 overflow-auto bg-slate-700/30 flex justify-center pt-4 pb-6 px-2">
+        <div
+          ref={previewContainerRef}
+          className="flex-1 overflow-auto bg-slate-700/30 flex justify-center pt-4 pb-6 px-2"
+        >
           <div
             style={{
               transformOrigin: 'top center',
-              transform: 'scale(0.62)',
+              transform: `scale(${previewScale})`,
               width: '210mm',
               minWidth: '210mm',
             }}

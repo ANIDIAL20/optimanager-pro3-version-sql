@@ -143,15 +143,13 @@ export const shopProfiles = pgTable('shop_profiles', {
   rib: text('rib'),
   logoUrl: text('logo_url'),
   
-  // 🆕 Document Settings
-  documentSettings: jsonb('document_settings').notNull().default({}),
+  // 🎨 Document template config (Canva-like system) — single source of truth
+  documentSettings: jsonb('document_settings')
+    .$type<DocumentTemplateConfig>()
+    .notNull()
+    .default(DEFAULT_TEMPLATE_CONFIG as any),
   documentSettingsVersion: integer('document_settings_version').notNull().default(1),
   documentSettingsUpdatedAt: timestamp('document_settings_updated_at', { withTimezone: true }),
-
-  // 🎨 Template config (new Canva-like system)
-  documentConfig: jsonb('document_config')
-    .$type<DocumentTemplateConfig>()
-    .default(DEFAULT_TEMPLATE_CONFIG),
 
 
   // Missing columns restored to prevent data loss

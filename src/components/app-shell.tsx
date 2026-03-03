@@ -87,7 +87,7 @@ export default function AppShell({ children, banner }: { children: React.ReactNo
                                 </div>
                             )}
 
-                            <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200/60 px-6 bg-white/80 backdrop-blur-xl sticky top-0 z-40">
+                            <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200/60 px-6 bg-white/80 backdrop-blur-xl sticky top-0 z-40 print:hidden">
                                 <SidebarTrigger className="-ml-1" />
                                 <div className="h-4 w-px bg-slate-200 mx-2" />
                                 <BreadcrumbCustom 
@@ -171,7 +171,7 @@ export default function AppShell({ children, banner }: { children: React.ReactNo
                                     })()}
                                 />
                                 <div className="ml-auto flex items-center gap-2">
-                                    <Link href="/dashboard/notifications" className="relative p-2">
+                                    <Link href="/dashboard/notifications" className="relative p-2 print:hidden">
                                         <Bell size={20} />
                                         {notificationsCount > 0 && (
                                             <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">

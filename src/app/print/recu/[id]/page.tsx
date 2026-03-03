@@ -3,26 +3,21 @@
 import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { BrandLoader } from '@/components/ui/loader-brand';
+import { getPrintData } from '@/app/actions/print-actions';
 import { getDocumentConfig } from '@/app/actions/shop-actions';
 import { PrintDocumentTemplate } from '@/components/printing/print-document-template';
 import { AutoPrint } from '@/components/printing/auto-print';
 import { useToast } from '@/hooks/use-toast';
-import { bonCommandeAdapter } from '@/lib/documents/adapters';
+import { recuAdapter } from '@/lib/documents/adapters';
 import type { StandardDocumentData } from '@/types/document';
 import type { DocumentTemplateConfig } from '@/types/document-template';
 import { DEFAULT_TEMPLATE_CONFIG } from '@/types/document-template';
 
-// Dynamic import keeps the server action out of the client bundle
-async function getBonCommandeData(id: string) {
-  const { getSupplierOrderPrintData } = await import('@/app/actions/supplier-orders-actions');
-  return getSupplierOrderPrintData(id);
-}
-
-interface BonCommandePrintPageProps {
+interface RecuPrintPageProps {
   params: Promise<{ id: string }>;
 }
 
-export default function BonCommandePrintPage({ params }: BonCommandePrintPageProps) {
+export default function RecuPrintPage({ params }: RecuPrintPageProps) {
   const { id } = React.use(params);
   const router = useRouter();
   const { toast } = useToast();
@@ -38,15 +33,15 @@ export default function BonCommandePrintPage({ params }: BonCommandePrintPagePro
   React.useEffect(() => {
     if (!id) return;
     Promise.all([
-      getBonCommandeData(id),
+      getPrintData(id, 'recu'),
       getDocumentConfig(),
     ]).then(([result, cfg]) => {
       setDocConfig(cfg);
       if (result.success && result.data) {
-        setData(bonCommandeAdapter.toStandardDocument(result.data));
+        setData(recuAdapter.toStandardDocument(result.data));
       } else {
-        toast({ variant: 'destructive', title: 'Erreur', description: (result as any).error ?? 'Commande introuvable' });
-        router.push('/dashboard/achats');
+        toast({ variant: 'destructive', title: 'Erreur', description: (result as any).error });
+        router.push('/dashboard/ventes');
       }
       setIsLoading(false);
     });

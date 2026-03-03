@@ -313,7 +313,7 @@ function OrderActions({ order }: { order: Order }) {
                             Voir les détails
                         </DropdownMenuItem>
 
-                        <DropdownMenuItem onClick={() => window.open(`/print/facture/${order.id}`, "_blank")}>
+                        <DropdownMenuItem onClick={() => window.open(`/print/recu/${order.id}`, "_blank")}>
                             <span className="mr-2">🖨️</span>
                             Imprimer le Reçu
                         </DropdownMenuItem>

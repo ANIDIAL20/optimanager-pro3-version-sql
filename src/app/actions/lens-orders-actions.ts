@@ -10,7 +10,8 @@ import {
     supplierOrderItems, 
     reminders, 
     products,
-    notifications
+    notifications,
+    shopProfiles,
 } from '@/db/schema';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
@@ -1280,4 +1281,56 @@ export const bulkReceiveLensOrders = secureAction(async (userId, user, data: { s
     console.error("❌ Erreur bulkReceiveLensOrders:", error);
     return { success: false, error: error.message };
   }
+});
+
+/**
+ * Get a single lens order by ID (for print page)
+ */
+export const getLensOrderById = secureAction(async (userId, user, id: string) => {
+    try {
+
+        const order = await db.query.lensOrders.findFirst({
+            where: and(
+                eq(lensOrders.id, parseInt(id)),
+                eq(lensOrders.userId, userId)
+            ),
+            with: {
+                client: {
+                    columns: {
+                        id: true,
+                        fullName: true,
+                        phone: true,
+                        email: true,
+                    },
+                },
+            },
+        });
+
+        if (!order) {
+            return { success: false, error: 'Commande introuvable' };
+        }
+
+        const shop = await db.query.shopProfiles.findFirst({
+            where: eq(shopProfiles.userId, userId),
+        });
+
+        return {
+            success: true,
+            data: {
+                order: {
+                    ...order,
+                    // Normalise dates for serialization
+                    orderDate: order.orderDate instanceof Date ? order.orderDate.toISOString() : order.orderDate,
+                    receivedDate: order.receivedDate instanceof Date ? order.receivedDate.toISOString() : order.receivedDate,
+                    deliveredDate: order.deliveredDate instanceof Date ? order.deliveredDate.toISOString() : order.deliveredDate,
+                    createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
+                    updatedAt: order.updatedAt instanceof Date ? order.updatedAt.toISOString() : order.updatedAt,
+                },
+                shop: shop ?? null,
+            },
+        };
+    } catch (error: any) {
+        console.error('💥 Error in getLensOrderById:', error);
+        return { success: false, error: error.message };
+    }
 });

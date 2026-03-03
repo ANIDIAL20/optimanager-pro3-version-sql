@@ -39,21 +39,19 @@ export function QuoteActions({ devis, shopSettings, client }: QuoteActionsProps)
     const [showPrintPreview, setShowPrintPreview] = React.useState(false);
     const { toast } = useToast();
 
-    // ✅ UPDATED
+    // ✅ Aperçu design actuel — opens /print/devis/[id]
     const handlePreviewLatestDesign = () => {
-        window.open(`/api/devis/${devis.id}/pdf?latest=true`, '_blank');
+        window.open(`/print/devis/${devis.id}`, '_blank');
     };
 
-    // Unified Print Handling (The "Master" Source)
+    // Unified Print — opens /print/devis/[id] in a new tab
     const handlePrint = () => {
-        setShowPrintPreview(true);
+        window.open(`/print/devis/${devis.id}`, '_blank');
     };
 
-    // Unified Download/Share (Use Print Page -> Save as PDF)
+    // PDF download — open with autoprint so browser can save
     const handleDownload = () => {
-        // Open print page in new tab with auto-print
-        const url = `/print/devis/${devis.id}?auto=true`;
-        window.open(url, '_blank');
+        window.open(`/print/devis/${devis.id}?autoprint=true`, '_blank');
     };
 
     const handleShare = async () => {
@@ -104,9 +102,7 @@ export function QuoteActions({ devis, shopSettings, client }: QuoteActionsProps)
                         <span>Aperçu (design actuel)</span>
                     </DropdownMenuItem>
 
-                    <DropdownMenuItem onClick={() => {
-                        window.open(`/api/devis/${devis.id}/pdf`, '_blank');
-                    }}>
+                    <DropdownMenuItem onClick={handleDownload}>
                         <Download className="mr-2 h-4 w-4" />
                         <span>Télécharger (PDF)</span>
                     </DropdownMenuItem>
@@ -118,12 +114,7 @@ export function QuoteActions({ devis, shopSettings, client }: QuoteActionsProps)
                 </DropdownMenuContent>
             </DropdownMenu>
 
-            <PrintPreviewDialog
-                open={showPrintPreview}
-                onOpenChange={setShowPrintPreview}
-                url={`/print/devis/${devis.id}?preview=true`}
-                title={`Devis #${devis.id?.slice(0, 8).toUpperCase()}`}
-            />
+            {/* PrintPreviewDialog kept for backward compatibility but no longer opened */}
         </>
     );
 }

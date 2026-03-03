@@ -18,6 +18,8 @@ interface PrintDocumentTemplateProps {
   /** Show the toolbar (Back + Print buttons). Default: true */
   showToolbar?: boolean;
   onBack?: () => void;
+  /** Custom content slot that bypasses the classic items table and totals */
+  customContent?: React.ReactNode;
 }
 
 export function PrintDocumentTemplate({
@@ -25,6 +27,7 @@ export function PrintDocumentTemplate({
   config: configProp,
   showToolbar = true,
   onBack,
+  customContent,
 }: PrintDocumentTemplateProps) {
   const config = { ...DEFAULT_TEMPLATE_CONFIG, ...configProp };
 
@@ -37,7 +40,9 @@ export function PrintDocumentTemplate({
   const isMinimal = config.templateId === 'minimal';
   const isBold    = config.templateId === 'bold';
   const isElegant = config.templateId === 'elegant';
-  const isDevis = data.type === 'DEVIS';
+  const isDevis   = data.type === 'DEVIS';
+  const isRecu    = data.type === 'REÇU';
+  const isBonCmd  = data.type === 'BON DE COMMANDE';
 
   // ── Date formatting ────────────────────────────────────────────────────────
   const formatDate = (iso: string) => {
@@ -100,7 +105,9 @@ export function PrintDocumentTemplate({
                    text-black ${bodyFontSize}
                    ${ isElegant ? 'font-serif bg-amber-50/20' : '' }
                    ${ isMinimal ? 'p-12' : 'p-8 md:p-10 print:p-8' }
+                   ${ isRecu ? 'print:max-h-[297mm] print:overflow-hidden' : '' }
                    `}
+        style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' } as React.CSSProperties}
       >
         {/* ── HEADER ──────────────────────────────────────────────────────── */}
         <div
@@ -192,51 +199,146 @@ export function PrintDocumentTemplate({
           </div>
         </div>
 
-        {/* ── CLIENT INFO ─────────────────────────────────────────────────── */}
-        <div className="mb-6 flex justify-end">
-          <div className="w-[55%] p-4 rounded-lg border border-slate-200 bg-slate-50/80 print:bg-slate-50 print:border-slate-300">
-            <h3 className="text-[9px] font-bold uppercase text-slate-500 mb-1.5 tracking-wider">
-              {isDevis ? 'Devis établi pour :' : 'Facturé à :'}
-            </h3>
-            <div className="text-xs text-slate-900">
-              <p className="font-bold text-sm mb-1">{data.client.nom}</p>
-              {data.client.telephone && (
-                <p className="text-slate-600 text-[10px]">{data.client.telephone}</p>
-              )}
-              {data.client.adresse && (
-                <p className="text-slate-600 text-[10px]">{data.client.adresse}</p>
-              )}
-              {data.client.mutuelle && (
-                <div className="mt-1.5 text-[10px] text-blue-700 font-medium pt-1 border-t border-slate-200">
-                  Mutuelle : {data.client.mutuelle}
-                </div>
-              )}
+        {/* ── RECIPIENT BLOCK ─────────────────────────────────────────────── */}
+
+        {/* FACTURE / DEVIS / REÇU → show client */}
+        {data.client && !isBonCmd && (
+          <div className="mb-6 flex justify-end">
+            <div className="w-[55%] p-4 rounded-lg border border-slate-200 bg-slate-50/80 print:bg-slate-50 print:border-slate-300">
+              <h3 className="text-[9px] font-bold uppercase text-slate-500 mb-1.5 tracking-wider">
+                {isDevis ? 'Devis établi pour :' : isRecu ? 'Reçu de :' : 'Facturé à :'}
+              </h3>
+              <div className="text-xs text-slate-900">
+                <p className="font-bold text-sm mb-1">{data.client.nom}</p>
+                {data.client.telephone && (
+                  <p className="text-slate-600 text-[10px]">{data.client.telephone}</p>
+                )}
+                {data.client.adresse && (
+                  <p className="text-slate-600 text-[10px]">{data.client.adresse}</p>
+                )}
+                {data.client.mutuelle && (
+                  <div className="mt-1.5 text-[10px] text-blue-700 font-medium pt-1 border-t border-slate-200">
+                    Mutuelle : {data.client.mutuelle}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* ── TABLE HEADER ─────────────────────────────────────────────────── */}
-        <div className="mb-6">
+        {/* BON DE COMMANDE → show fournisseur */}
+        {data.fournisseur && isBonCmd && (
+          <div className="mb-6 flex justify-between items-start gap-6">
+            <div className="flex-1 p-4 rounded-lg border border-amber-200 bg-amber-50/60 print:bg-transparent print:border">
+              <h3 className="text-[9px] font-bold uppercase text-amber-700 mb-1.5 tracking-wider">
+                Adressé au Fournisseur :
+              </h3>
+              <div className="text-xs text-slate-900">
+                <p className="font-bold text-sm mb-1">{data.fournisseur.nom}</p>
+                {data.fournisseur.adresse && (
+                  <p className="text-slate-600 text-[10px]">{data.fournisseur.adresse}</p>
+                )}
+                {data.fournisseur.telephone && (
+                  <p className="text-slate-600 text-[10px]">Tél : {data.fournisseur.telephone}</p>
+                )}
+                {data.fournisseur.email && (
+                  <p className="text-slate-600 text-[10px]">Email : {data.fournisseur.email}</p>
+                )}
+                {data.fournisseur.contact && (
+                  <p className="text-slate-600 text-[10px]">Contact : {data.fournisseur.contact}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* BON DE COMMANDE → commande details grid */}
+        {isBonCmd && data.commandeDetails && (
+          <div className="mb-6 grid grid-cols-2 gap-4 text-[10px] border border-slate-200 rounded p-3 bg-slate-50/60 print:bg-transparent">
+            {data.commandeDetails.lieuLivraison && (
+              <div>
+                <span className="font-bold text-slate-600 uppercase text-[9px] tracking-wide">Lieu de livraison :</span>
+                <p className="text-slate-800 mt-0.5">{data.commandeDetails.lieuLivraison}</p>
+              </div>
+            )}
+            {data.commandeDetails.dateLivraisonSouhaitee && (
+              <div>
+                <span className="font-bold text-slate-600 uppercase text-[9px] tracking-wide">Livraison souhaitée :</span>
+                <p className="text-slate-800 mt-0.5">
+                  {(() => { try { return format(new Date(data.commandeDetails!.dateLivraisonSouhaitee!), 'dd MMMM yyyy', { locale: fr }); } catch { return data.commandeDetails!.dateLivraisonSouhaitee!; } })()}
+                </p>
+              </div>
+            )}
+            {data.fournisseur?.conditionsPaiement && (
+              <div>
+                <span className="font-bold text-slate-600 uppercase text-[9px] tracking-wide">Conditions de paiement :</span>
+                <p className="text-slate-800 mt-0.5">{data.fournisseur.conditionsPaiement}</p>
+              </div>
+            )}
+            {data.fournisseur?.delaiLivraison && (
+              <div>
+                <span className="font-bold text-slate-600 uppercase text-[9px] tracking-wide">Délai de livraison :</span>
+                <p className="text-slate-800 mt-0.5">{data.fournisseur.delaiLivraison}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── CUSTOM CONTENT SLOT (Bypasses all standard blocks) ──────────── */}
+        {customContent ? (
+          <div className="mt-6 break-inside-avoid">
+            {customContent}
+          </div>
+        ) : (
+          <>
+            {/* ── REÇU: payment method + ordonnance row (client already shown above) ── */}
+            {isRecu && (
+              <div className="mb-4 flex justify-between items-start border-b border-slate-200 pb-3">
+                {/* Mode de paiement */}
+                <div className="space-y-0.5">
+                  <p className="text-[9px] text-slate-500 uppercase font-bold tracking-wider">Mode de paiement</p>
+                  <p className="text-sm font-bold text-slate-900">
+                    {data.modePaiement ?? 'Espèces'}
+                  </p>
+                </div>
+                {/* Ordonnance (only if present) */}
+                {data.ordonnance && (
+                  <div className="text-right space-y-1 border-l border-slate-200 pl-6">
+                    <p className="text-[9px] text-slate-500 uppercase font-bold tracking-wider">Ordonnance</p>
+                    <p className="text-[10px] text-slate-800"><span className="text-slate-500">Dr :</span> {data.ordonnance.prescripteur}</p>
+                    <p className="text-[10px] text-slate-800"><span className="text-slate-500">Du :</span> {(() => { try { return format(new Date(data.ordonnance.dateOrdonnance), 'dd/MM/yyyy', { locale: fr }); } catch { return data.ordonnance.dateOrdonnance; } })()}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+        {/* ── TABLE HEADER ────────────────────────────────────────────────── */}
+        {(true) && (
+          <div className="mb-6">
           <table className="w-full border-collapse">
             <thead>
               <tr className="text-white print:text-white" style={{ backgroundColor: primary }}>
                 <th className="py-2 pl-2 text-left text-[9px] font-bold uppercase tracking-wider w-[38%] rounded-tl-sm">
-                  Désignation
+                  {isBonCmd ? 'Référence / Désignation' : 'Désignation'}
                 </th>
-                <th className="py-2 text-left text-[9px] font-bold uppercase tracking-wider w-[14%]">
-                  Marque
-                </th>
-                <th className="py-2 text-left text-[9px] font-bold uppercase tracking-wider w-[14%]">
-                  Modèle
-                </th>
+                {!isBonCmd && (
+                  <th className="py-2 text-left text-[9px] font-bold uppercase tracking-wider w-[14%]">
+                    Marque
+                  </th>
+                )}
+                {!isBonCmd && (
+                  <th className="py-2 text-left text-[9px] font-bold uppercase tracking-wider w-[14%]">
+                    Modèle
+                  </th>
+                )}
                 <th className="py-2 text-center text-[9px] font-bold uppercase tracking-wider w-[8%]">
-                  Qté
+                  {isBonCmd ? 'Qté cmdée' : 'Qté'}
                 </th>
                 <th className="py-2 text-right text-[9px] font-bold uppercase tracking-wider w-[12%]">
-                  P.U. HT
+                  {isBonCmd ? 'Prix unit. HT' : 'P.U. HT'}
                 </th>
                 <th className="py-2 pr-2 text-right text-[9px] font-bold uppercase tracking-wider w-[13%] rounded-tr-sm">
-                  Total HT
+                  {isBonCmd ? 'Montant HT' : 'Total HT'}
                 </th>
               </tr>
             </thead>
@@ -248,11 +350,11 @@ export function PrintDocumentTemplate({
                 const totalHT = item.total / (1 + rate / 100);
 
                 return (
+                  <React.Fragment key={item.id ?? i}>
                   <tr
-                    key={item.id ?? i}
                     className="border-b border-slate-100 last:border-0 break-inside-avoid"
                   >
-                    <td className="py-2.5 pl-2 pr-2">
+                    <td className={`${isRecu ? 'py-1' : 'py-2'} pl-2 pr-2`}>
                       <p className="font-semibold text-slate-900 leading-tight">
                         {item.description}
                       </p>
@@ -265,30 +367,6 @@ export function PrintDocumentTemplate({
                         <p className="text-[9px] text-slate-600 mt-0.5">
                           Couleur: {item.couleur}
                         </p>
-                      )}
-
-                      {/* Lens prescription tags */}
-                      {item.lensDetails && item.lensDetails.length > 0 && (
-                        <div className="mt-1.5 flex flex-wrap gap-1">
-                          {item.lensDetails.map((d, li) => (
-                            <div
-                              key={li}
-                              className="text-[8px] bg-slate-100 text-slate-700 px-1.5 py-0.5
-                                         rounded border border-slate-200 font-mono flex items-center gap-1"
-                            >
-                              <span className="font-bold">{d.eye}:</span>
-                              <span className="flex gap-1">
-                                {d.sphere   && <span>S:{d.sphere}</span>}
-                                {d.cylinder && <span>C:{d.cylinder}</span>}
-                                {d.axis     && <span>A:{d.axis}°</span>}
-                                {d.addition && <span>Add:{d.addition}</span>}
-                                {d.treatment && (
-                                  <span className="text-slate-500 ml-0.5 italic">{d.treatment}</span>
-                                )}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
                       )}
 
                       {/* Contact lens tags */}
@@ -311,28 +389,58 @@ export function PrintDocumentTemplate({
                         </div>
                       )}
                     </td>
-                    <td className="py-2.5 text-slate-700">{item.marque  ?? '-'}</td>
-                    <td className="py-2.5 text-slate-700">{item.modele  ?? '-'}</td>
-                    <td className="py-2.5 text-center text-slate-600 font-medium">
+                    <td className={`${isRecu ? 'py-1' : 'py-2'} text-slate-700`}>{item.marque  ?? '-'}</td>
+                    <td className={`${isRecu ? 'py-1' : 'py-2'} text-slate-700`}>{item.modele  ?? '-'}</td>
+                    <td className={`${isRecu ? 'py-1' : 'py-2'} text-center text-slate-600 font-medium`}>
                       {item.quantite}
                     </td>
-                    <td className="py-2.5 text-right text-slate-600 font-medium">
+                    <td className={`${isRecu ? 'py-1' : 'py-2'} text-right text-slate-600 font-medium`}>
                       {unitHT.toFixed(2)}
                     </td>
-                    <td className="py-2.5 pr-2 text-right font-bold text-slate-900">
+                    <td className={`${isRecu ? 'py-1' : 'py-2'} pr-2 text-right font-bold text-slate-900`}>
                       {totalHT.toFixed(2)}
                     </td>
                   </tr>
+                  {item.lensDetails && (
+                    <tr className="border-b border-slate-100 last:border-0 break-inside-avoid bg-slate-50/50">
+                      <td colSpan={isBonCmd ? 4 : 6} className="pb-2.5 pl-2 pr-2 pt-1 border-t-0">
+                        <div className="flex flex-wrap gap-2 text-print-black">
+                          {item.lensDetails.map((d: any, li: number) => (
+                            <div
+                              key={li}
+                              className="text-[9px] bg-white text-slate-700 px-2 py-1
+                                         rounded shadow-sm border border-slate-200 font-mono flex items-center gap-1.5"
+                            >
+                              <span className="font-bold border-r border-slate-300 pr-1.5" style={{ color: primary }}>{d.eye}</span>
+                              <span className="flex gap-2">
+                                {d.sphere   && <span>S: {d.sphere}</span>}
+                                {d.cylinder && <span>C: {d.cylinder}</span>}
+                                {d.axis     && <span>A: {d.axis}°</span>}
+                                {d.addition && <span>Add: {d.addition}</span>}
+                                {d.treatment && (
+                                  <span className="text-slate-500 italic pl-1 border-l border-slate-300">{d.treatment}</span>
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 );
               })}
             </tbody>
           </table>
-        </div>
+          </div>
+        )}
 
         {/* ── TOTALS + TVA BREAKDOWN ───────────────────────────────────────── */}
-        <div className="flex justify-between items-start mb-8 gap-8 break-inside-avoid">
+        {(true) && (
+          <div className="flex justify-between items-start mb-4 gap-6 break-inside-avoid">
 
-          {/* TVA Breakdown table (left) */}
+          {/* TVA Breakdown table (left) — hidden for REÇU */}
+          {!isRecu && (
           <div className="flex-1">
             <table className="w-full text-[9px] border-collapse border border-slate-200">
               <thead>
@@ -346,14 +454,14 @@ export function PrintDocumentTemplate({
               <tbody>
                 {tvaBreakdown.map(([rate, vals]) => (
                   <tr key={rate}>
-                    <td className="border border-slate-200 p-1.5 text-slate-600">{rate}%</td>
-                    <td className="border border-slate-200 p-1.5 text-right text-slate-600">
+                    <td className="border border-slate-200 py-1.5 px-1.5 text-slate-600">{rate}%</td>
+                    <td className="border border-slate-200 py-1.5 px-1.5 text-right text-slate-600">
                       {vals.base.toFixed(2)} DH
                     </td>
-                    <td className="border border-slate-200 p-1.5 text-right text-slate-600">
+                    <td className="border border-slate-200 py-1.5 px-1.5 text-right text-slate-600">
                       {vals.tax.toFixed(2)} DH
                     </td>
-                    <td className="border border-slate-200 p-1.5 text-right text-slate-600">
+                    <td className="border border-slate-200 py-1.5 px-1.5 text-right text-slate-600">
                       {vals.ttc.toFixed(2)} DH
                     </td>
                   </tr>
@@ -361,6 +469,7 @@ export function PrintDocumentTemplate({
               </tbody>
             </table>
           </div>
+          )}
 
           {/* Summary totals (right) */}
           <div className="w-64">
@@ -369,17 +478,19 @@ export function PrintDocumentTemplate({
                 <span className="font-medium">Total HT</span>
                 <span>{data.totals.sousTotal.toFixed(2)} DH</span>
               </div>
-              <div className="flex justify-between text-[10px] text-slate-600">
-                <span className="font-medium">Total TVA</span>
-                <span>{data.totals.tva.toFixed(2)} DH</span>
-              </div>
+              {!isBonCmd && !isRecu && data.totals.tva != null && (
+                <div className="flex justify-between text-[10px] text-slate-600">
+                  <span className="font-medium">Total TVA</span>
+                  <span>{data.totals.tva.toFixed(2)} DH</span>
+                </div>
+              )}
             </div>
 
-            {/* Total TTC block */}
+            {/* Total block — label changes per doc type */}
             <div className="p-2.5 rounded shadow-sm print:text-white" style={{ backgroundColor: primary }}>
               <div className="flex justify-between items-center">
                 <span className="text-[9px] font-medium uppercase tracking-wider opacity-80 text-white">
-                  Total TTC
+                  {isBonCmd ? 'Total HT estimé' : 'Total TTC'}
                 </span>
                 <span className="text-lg font-bold text-white">
                   {formatMAD(data.totals.totalTTC)}
@@ -404,42 +515,108 @@ export function PrintDocumentTemplate({
             )}
           </div>
         </div>
+        )}
 
-        {/* ── AMOUNT IN WORDS ────────────────────────────────────────────── */}
-        <div className="mb-6 p-3 bg-slate-50 border border-slate-200 rounded print:bg-slate-50 print:border-slate-200">
-          <p className="text-[9px] text-slate-600 mb-1">
-            {isDevis ? 'Arrêté le présent devis' : 'Arrêtée la présente facture'} à la somme de :
-          </p>
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-900">
-            {data.totals.totalTTC.toFixed(2)} DH ({formatCurrencyToWords(data.totals.totalTTC)})
-          </p>
-        </div>
-
-        {/* ── PAYMENT METHODS ─────────────────────────────────────────────── */}
-        <div className="mb-6 p-3 border border-slate-200 rounded bg-white">
-          <p className="text-[9px] font-bold uppercase text-slate-700 mb-1.5">
-            Modes de paiement acceptés
-          </p>
-          <p className="text-[10px] text-slate-600">{paymentMethods.join(' • ')}</p>
-        </div>
-
-        {/* ── SIGNATURE AREA ──────────────────────────────────────────────── */}
-        {config.showSignatureBox && (
-          <div className="mb-10 flex justify-end">
-            <div className="border border-dashed border-slate-300 rounded p-3 h-24 w-64">
-              <p className="text-[9px] font-bold uppercase text-slate-500 mb-1">Cachet et Signature</p>
-              <p className="text-[8px] text-slate-400 italic">{data.shop.nom}</p>
-            </div>
+        {/* ── AMOUNT IN WORDS — FACTURE / DEVIS ───────────────────────────── */}
+        {!isRecu && !isBonCmd && (
+          <div className="my-3 p-2 bg-slate-50 border border-slate-200 rounded print:bg-slate-50 print:border-slate-200 break-inside-avoid">
+            <p className="text-[9px] text-slate-600 mb-1">
+              {isDevis ? 'Arrêté le présent devis' : 'Arrêtée la présente facture'} à la somme de :
+            </p>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-900">
+              {data.totals.totalTTC.toFixed(2)} DH ({formatCurrencyToWords(data.totals.totalTTC)})
+            </p>
           </div>
         )}
 
+        {/* ── REÇU: «Reçu la somme de» legal box (required in Morocco) ─────── */}
+        {isRecu && (
+          <div className="my-2 px-3 py-2 rounded border-2 break-inside-avoid print:border-slate-800"
+               style={{ borderColor: primary, backgroundColor: primary + '08' }}>
+            <p className="text-[9px] font-bold uppercase tracking-wider mb-0.5" style={{ color: primary }}>
+              Reçu la somme de
+            </p>
+            <p className="text-base font-black text-slate-900">
+              {formatMAD(data.totals.acompte ?? data.totals.totalTTC)}
+            </p>
+            {data.montantEnLettres && (
+              <p className="text-[10px] italic text-slate-700 mt-0.5 uppercase">
+                {data.montantEnLettres}
+              </p>
+            )}
+            <p className="text-[9px] text-slate-500 mt-1">
+              Mode de règlement : <span className="font-semibold text-slate-800">{data.modePaiement ?? 'Espèces'}</span>
+            </p>
+          </div>
+        )}
+
+        {/* ── PAYMENT METHODS — FACTURE only ───────────────────────────────── */}
+        {!isRecu && !isBonCmd && (
+          <div className="mt-3 p-2 border border-slate-200 rounded bg-white break-inside-avoid">
+            <p className="text-[9px] font-bold uppercase text-slate-700 mb-1.5">
+              Modes de paiement acceptés
+            </p>
+            <p className="text-[10px] text-slate-600">{paymentMethods.join(' • ')}</p>
+          </div>
+        )}
+
+        {/* ── SIGNATURE AREA ───────────────────────────────────────────────── */}
+        {(isRecu || isBonCmd || config.showSignatureBox) && (
+          <div className="break-inside-avoid mt-4">
+          {isBonCmd ? (
+            <div className="mt-6 space-y-4">
+              {/* Observations */}
+              {data.commandeDetails?.observations && (
+                <div className="p-3 border border-slate-200 rounded text-[10px] bg-slate-50/60 print:bg-transparent">
+                  <p className="font-bold text-slate-600 uppercase text-[9px] tracking-wide mb-1">Observations :</p>
+                  <p className="text-slate-800">{data.commandeDetails.observations}</p>
+                </div>
+              )}
+              {/* Legal mention */}
+              <div className="text-[9px] text-slate-500 border-t border-slate-200 pt-3">
+                <p>Ce bon de commande est ferme et définitif sous réserve de confirmation écrite du fournisseur.</p>
+                {data.commandeDetails?.validiteOffre && <p>{data.commandeDetails.validiteOffre}</p>}
+              </div>
+              {/* Dual signatures */}
+              <div className="flex justify-between mt-8">
+                <div className="text-center">
+                  <p className="text-[9px] text-slate-500 mb-8">Signature &amp; Cachet Fournisseur</p>
+                  <div className="w-40 border-b border-gray-400 mx-auto" />
+                  <p className="text-[8px] text-slate-400 mt-1">Bon pour accord</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[9px] text-slate-500 mb-8">Signature &amp; Cachet Magasin</p>
+                  <div className="w-40 border-b border-gray-400 mx-auto" />
+                  <p className="text-[8px] text-slate-400 mt-1">Le responsable</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className={isRecu ? 'mb-2 flex justify-end' : 'mb-6 flex justify-end'}>
+              <div className={`border border-dashed border-slate-300 rounded p-2 ${
+                isRecu ? 'h-8' : 'h-12'
+              } w-48 flex flex-col justify-center`}>
+                <p className="text-[9px] font-bold uppercase text-slate-500">Cachet et Signature</p>
+                <p className="text-[8px] text-slate-400 italic">{data.shop.nom}</p>
+              </div>
+            </div>
+          )}
+          </div>
+        )}
+        </>
+        )}
+
         {/* ── FOOTER — normal document flow (NOT absolute / NOT fixed) ────── */}
-        <footer className="pt-4 border-t border-slate-200 text-[9px] text-slate-500">
+        <footer className={`border-t border-slate-200 text-[9px] text-slate-500 break-before-avoid recu-footer ${isRecu ? 'pt-2 mt-1' : 'pt-3 mt-4'}`}>
           <div className="grid grid-cols-2 gap-6">
             <div>
               <p className="font-bold uppercase mb-1 text-[8px]" style={{ color: primary }}>Conditions</p>
-              {isDevis ? (
+              {isBonCmd ? (
+                <p>Ce bon de commande est établi conformément à nos conditions générales d’achat.</p>
+              ) : isDevis ? (
                 <p>Ce devis est valable {data.validityDays ?? 15} jours.</p>
+              ) : isRecu ? (
+                <p>Paiement reçu le {formatDate(data.date)}.</p>
               ) : (
                 <>
                   <p>{data.shop.paymentTerms ?? 'Paiement comptant à réception.'}</p>
@@ -447,14 +624,14 @@ export function PrintDocumentTemplate({
                 </>
               )}
             </div>
-            {config.showRIB && data.shop.rib && (
+            {config.showRIB && data.shop.rib && !isRecu && (
               <div className="text-right">
                 <p className="font-bold uppercase mb-1 text-[8px]" style={{ color: primary }}>Coordonnées Bancaires</p>
                 <p className="font-mono text-slate-600 text-[9px]">{data.shop.rib}</p>
               </div>
             )}
           </div>
-          <div className="text-center mt-4">
+          <div className={isRecu ? 'text-center mt-1' : 'text-center mt-4'}>
             {config.footerText ? (
               <p className="text-[8px] mb-1 whitespace-pre-wrap">{config.footerText}</p>
             ) : data.shop.mentionsLegales ? (
@@ -463,7 +640,9 @@ export function PrintDocumentTemplate({
             <p className="font-bold text-slate-900 italic text-[10px]">
               &quot;Merci de votre confiance&quot;
             </p>
-            <p className="mt-0.5 text-[8px] text-slate-400">Généré par OptiManager Pro</p>
+            {!isRecu && (
+              <p className="mt-0.5 text-[8px] text-slate-400">Généré par OptiManager Pro</p>
+            )}
           </div>
         </footer>
       </div>
@@ -471,11 +650,18 @@ export function PrintDocumentTemplate({
       {/* ── Global Print CSS ──────────────────────────────────────────────── */}
       <style>{`
         @media print {
-          @page { size: A4; margin: 10mm; }
+          @page {
+            size: A4;
+            margin: 8mm 10mm;
+          }
           body {
             background-color: white;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+          }
+          .recu-footer {
+            page-break-before: avoid !important;
+            break-before: avoid !important;
           }
         }
       `}</style>
