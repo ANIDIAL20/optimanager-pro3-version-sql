@@ -149,7 +149,6 @@ export const cancelSupplierOrder = createAction(
       .set({
         status: 'cancelled',
         notes: sql`CONCAT(notes, '\n[ANNULATION]: ', ${input.reason})`,
-        updatedBy: userId,
         updatedAt: new Date(),
       })
       .where(eq(supplierOrders.id, input.id))

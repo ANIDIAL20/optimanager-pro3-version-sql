@@ -674,9 +674,14 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                             eq(lensOrders.userId, userId)
                         ));
 
-                    // 🔥 CLEANUP: Delete the auto-generated VERRE- products
+                    // 🔥 CLEANUP: Mark the auto-generated VERRE- products as inactive and zero stock
                     const verreRefs = data.lensOrderIds.map(id => `VERRE-${id}`);
-                    await tx.delete(products)
+                    await tx.update(products)
+                        .set({ 
+                            isActive: false, 
+                            quantiteStock: 0,
+                            updatedAt: new Date()
+                        })
                         .where(and(
                             inArray(products.reference, verreRefs),
                             eq(products.userId, userId)
@@ -714,7 +719,12 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
                     }
 
                     if (scannedRefs.length > 0) {
-                        await tx.delete(products)
+                        await tx.update(products)
+                            .set({ 
+                                isActive: false, 
+                                quantiteStock: 0,
+                                updatedAt: new Date() 
+                            })
                             .where(and(
                                 inArray(products.reference, scannedRefs),
                                 eq(products.userId, userId)

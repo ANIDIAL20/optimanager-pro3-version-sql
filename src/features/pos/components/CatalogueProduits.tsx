@@ -125,17 +125,28 @@ export function CatalogueProduits({ clientId, onCustomAdd }: { clientId?: number
 
   const filteredProducts = productsData as Product[]; // Filtering is already done server-side via hook
 
+  // BUG-2 FIX: Deduplicate clientLenses
+  const dedupedClientLenses = React.useMemo(() => {
+    const seenIds = new Set<string>();
+    return clientLenses.filter(p => {
+      const key = p.reference ?? p.id.toString();
+      if (seenIds.has(key)) return false;
+      seenIds.add(key);
+      return true;
+    });
+  }, [clientLenses]);
+
   return (
     <div className="space-y-4">
-      {clientLenses.length > 0 && (
+      {dedupedClientLenses.length > 0 && (
         <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-blue-700 font-semibold text-sm">
-              👁️ {clientLenses.length} verre(s) prêt(s) à livrer
+              👁️ {dedupedClientLenses.length} verre(s) prêt(s) à livrer
             </span>
           </div>
           <ClientLensesSection
-            lenses={clientLenses}
+            lenses={dedupedClientLenses}
             onAddToCart={(p, lo) => addLensOrder(lo)}
             addedLensIds={items.filter(i => i.productId.startsWith('LO-')).map(i => i.productId.replace('LO-', ''))}
           />
@@ -254,10 +265,8 @@ function ProductList({
           const inCart = inCartProductIds.has(product.id);
           
           // FIX 2: Disable button when stock = 0 (excluding VERRE- products)
-          const isStockDepleted = 
-            !product.reference?.toUpperCase().startsWith('VERRE-') && 
-            product.isStockManaged && 
-            product.quantiteStock <= 0;
+          const isVerre = product.reference?.toUpperCase().startsWith('VERRE-');
+          const isStockDepleted = !isVerre && product.isStockManaged && product.quantiteStock <= 0;
 
           return (
             <div
@@ -284,7 +293,7 @@ function ProductList({
             </div>
 
             <div className="flex items-center gap-4 mx-4">
-              {product.isStockManaged && (
+              {product.isStockManaged && !isVerre && (
                 <Badge
                   variant={
                     product.quantiteStock > 10

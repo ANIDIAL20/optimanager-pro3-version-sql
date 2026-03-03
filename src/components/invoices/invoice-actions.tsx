@@ -45,21 +45,19 @@ export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsPro
     const [showPrintPreview, setShowPrintPreview] = React.useState(false);
     const { toast } = useToast();
 
-    // Unified Print Handling (The "Master" Source)
+    // Unified Print — opens /print/facture/[id] in a new tab
     const handlePrint = () => {
-        setShowPrintPreview(true);
+        window.open(`/print/facture/${sale.id}`, '_blank');
     };
 
-    // Unified Download/Share (Use Print Page -> Save as PDF)
+    // PDF download — open print page with autoprint=true so browser saves it
     const handleDownload = () => {
-        // Open print page in new tab with auto-print
-        const url = `/print/facture/${sale.id}?auto=true`;
-        window.open(url, '_blank');
+        window.open(`/print/facture/${sale.id}?autoprint=true`, '_blank');
     };
 
-    // ✅ UPDATED
+    // Aperçu design actuel — same URL, no autoprint
     const handlePreviewLatestDesign = () => {
-        window.open(`/api/factures/${sale.id}/pdf?latest=true`, '_blank');
+        window.open(`/print/facture/${sale.id}`, '_blank');
     };
 
     const handleShare = async () => {
@@ -110,9 +108,7 @@ export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsPro
                         <span>Aperçu (design actuel)</span>
                     </DropdownMenuItem>
 
-                    <DropdownMenuItem onClick={() => {
-                        window.open(`/api/factures/${sale.id}/pdf`, '_blank');
-                    }}>
+                    <DropdownMenuItem onClick={handleDownload}>
                         <Download className="mr-2 h-4 w-4" />
                         <span>Télécharger (PDF)</span>
                     </DropdownMenuItem>
@@ -124,12 +120,7 @@ export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsPro
                 </DropdownMenuContent>
             </DropdownMenu>
 
-            <PrintPreviewDialog
-                open={showPrintPreview}
-                onOpenChange={setShowPrintPreview}
-                url={`/print/facture/${sale.id}?preview=true`}
-                title={`Facture #${sale.saleNumber || sale.id?.substring(0, 8)}`}
-            />
+            {/* PrintPreviewDialog kept for backward compatibility but no longer opened */}
         </>
     );
 }

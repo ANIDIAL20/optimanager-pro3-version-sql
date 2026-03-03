@@ -5,7 +5,8 @@ import { devis, sales, clients, shopProfiles } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 
-export type PrintDocumentType = 'devis' | 'facture';
+/** 'recu' is a receipt built from a sale — internally treated the same as 'facture' */
+export type PrintDocumentType = 'devis' | 'facture' | 'recu';
 
 export const getPrintData = secureAction(async (userId, user, documentId: string, type: PrintDocumentType) => {
     try {
@@ -33,10 +34,58 @@ export const getPrintData = secureAction(async (userId, user, documentId: string
                 where: and(eq(sales.id, id), eq(sales.userId, userId))
             });
             if (result) {
+                const { lensOrders } = await import('@/db/schema');
+                const { desc } = await import('drizzle-orm');
+                const itemsWithLensDetails = await Promise.all((result.items as any[] || []).map(async (item) => {
+                    let lensDetails = item.lensDetails;
+                    
+                    const isVerre =
+                        item.reference?.startsWith('VERRE-') ||
+                        item.reference?.startsWith('LG-') ||
+                        item.productType === 'VERRE' ||
+                        item.category === 'Verres';
+
+                    if (isVerre && !lensDetails) {
+                        const lensOrder = await db.query.lensOrders.findFirst({
+                            where: and(
+                                eq(lensOrders.saleId, result.id),
+                                eq(lensOrders.userId, userId)
+                            ),
+                            orderBy: desc(lensOrders.createdAt),
+                        });
+
+                        if (lensOrder) {
+                            lensDetails = [];
+                            if (lensOrder.sphereR || lensOrder.cylindreR) {
+                                lensDetails.push({
+                                    eye: 'OD',
+                                    sphere: lensOrder.sphereR,
+                                    cylinder: lensOrder.cylindreR,
+                                    axis: lensOrder.axeR,
+                                    addition: lensOrder.additionR,
+                                    treatment: lensOrder.treatment,
+                                });
+                            }
+                            if (lensOrder.sphereL || lensOrder.cylindreL) {
+                                lensDetails.push({
+                                    eye: 'OG',
+                                    sphere: lensOrder.sphereL,
+                                    cylinder: lensOrder.cylindreL,
+                                    axis: lensOrder.axeL,
+                                    addition: lensOrder.additionL,
+                                    treatment: lensOrder.treatment,
+                                });
+                            }
+                        }
+                    }
+
+                    return { ...item, lensDetails };
+                }));
+
                 documentData = {
                     ...result,
                     id: result.id.toString(),
-                    items: result.items,
+                    items: itemsWithLensDetails,
                     totalHT: Number(result.totalHT || 0),
                     totalTTC: Number(result.totalTTC || 0),
                     totalNet: Number(result.totalNet || 0),

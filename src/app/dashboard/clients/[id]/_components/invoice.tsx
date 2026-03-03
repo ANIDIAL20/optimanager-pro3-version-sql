@@ -1,9 +1,6 @@
 'use client';
 
-import React, { useRef } from 'react';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
-import QRCode from 'qrcode.react';
+import React from 'react';
 import type { Client, OrderDetail, Sale } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -24,59 +21,29 @@ interface InvoiceProps {
 }
 
 export function Invoice({ sale, client }: InvoiceProps) {
-  const invoiceRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  const handleDownloadPdf = async () => {
-    const element = invoiceRef.current;
-    if (!element) return;
-
-    const canvas = await html2canvas(element, { scale: 2 });
-    const data = canvas.toDataURL('image/png');
-
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const imgProps = pdf.getImageProperties(data);
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-
-    pdf.addImage(data, 'PNG', 0, 0, pdfWidth, pdfHeight);
-    pdf.save(`facture-${sale.id.slice(0, 6)}.pdf`);
+  // All print/PDF actions now route through the unified print page
+  const handlePrint = () => {
+    window.open(`/print/facture/${sale.id}`, '_blank');
   };
 
-  const handlePrint = () => {
-    const printContents = invoiceRef.current?.innerHTML;
-    const originalContents = document.body.innerHTML;
-    if (!printContents) return;
-
-    // Temporarily replace the body with the invoice content
-    document.body.innerHTML = printContents;
-    window.print();
-    // Restore the original content
-    document.body.innerHTML = originalContents;
-    window.location.reload(); // Reload to re-apply scripts and styles
-  }
+  const handleDownloadPdf = () => {
+    window.open(`/print/facture/${sale.id}?autoprint=true`, '_blank');
+  };
 
   const handleShare = () => {
-    // Use origin to construct a clean shareable URL
     const shareUrl = `${window.location.origin}/print/facture/${sale.id}`;
     navigator.clipboard.writeText(shareUrl);
     toast({
-      title: "Lien copié !",
-      description: "Le lien vers la facture a été copié dans le presse-papiers.",
-    })
-  }
-
-  const getShareableQRCodeValue = () => {
-    if (typeof window !== 'undefined') {
-      return `${window.location.origin}/print/facture/${sale.id}`;
-    }
-    return '';
-  }
-
+      title: 'Lien copié !',
+      description: 'Le lien vers la facture a été copié dans le presse-papiers.',
+    });
+  };
 
   return (
     <div className="bg-background rounded-lg">
-      <div ref={invoiceRef} className="p-8 text-black bg-white">
+      <div className="p-8 text-black bg-white">
         <header className="flex justify-between items-start pb-6 border-b">
           <div>
             <Logo />
@@ -91,17 +58,12 @@ export function Invoice({ sale, client }: InvoiceProps) {
           </div>
         </header>
 
-        <section className="grid grid-cols-2 gap-4 my-6">
-          <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Facturé à</h2>
-            <p className="font-bold">{client.prenom} {client.nom}</p>
-            <p>{client.adresse}</p>
-            <p>{client.ville}</p>
-            <p>{client.telephone1}</p>
-          </div>
-          <div className="text-right">
-            <QRCode value={getShareableQRCodeValue()} size={80} />
-          </div>
+        <section className="my-6">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Facturé à</h2>
+          <p className="font-bold">{client.prenom} {client.nom}</p>
+          <p>{client.adresse}</p>
+          <p>{client.ville}</p>
+          <p>{client.telephone1}</p>
         </section>
 
         <section>

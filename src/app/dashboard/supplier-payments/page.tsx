@@ -37,7 +37,7 @@ export default async function SupplierPaymentsPage() {
             <div className="bg-white rounded-lg border shadow-sm">
                 <DataTable 
                     columns={columns} 
-                    data={payments} 
+                    data={payments as any} 
                     searchKey="supplierName"
                 />
             </div>

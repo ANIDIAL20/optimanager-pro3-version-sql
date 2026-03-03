@@ -102,7 +102,17 @@ export function TransactionActions({ transaction }: TransactionActionsProps) {
           
           <DropdownMenuSeparator />
           
-          <DropdownMenuItem className="text-blue-600">
+          <DropdownMenuItem
+            className="text-blue-600"
+            onClick={() => {
+              if (transaction.type === 'ACHAT') {
+                window.open(`/print/bon-commande/${id}`, '_blank');
+              } else {
+                // Payments don't have their own print page yet
+                window.open(`/print/bon-commande/${id}`, '_blank');
+              }
+            }}
+          >
             <Printer className="mr-2 h-4 w-4" /> Imprimer PDF
           </DropdownMenuItem>
 

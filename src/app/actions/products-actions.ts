@@ -196,6 +196,7 @@ export const searchProducts = secureAction(async (userId, user, params: {
     category?: string; 
     limit?: number;
     offset?: number; 
+    clientId?: number;
 }) => {
     try {
         const limit = params.limit || 50;
@@ -205,6 +206,23 @@ export const searchProducts = secureAction(async (userId, user, params: {
             eq(products.userId, userId),
             sql`${products.deletedAt} IS NULL`
         ];
+
+        // 🔒 BUG-1 FIX: VERRE visibility filter
+        // - With clientId   → show normal products + VERRE belonging to this client only
+        // - Without clientId → hide ALL VERRE- products from the POS
+        if (params.clientId !== undefined) {
+             filters.push(
+                 or(
+                     not(ilike(products.reference, 'VERRE-%')),
+                     and(
+                         ilike(products.reference, 'VERRE-%'),
+                         eq(products.clientId, params.clientId)
+                     )!
+                 )!
+             );
+        } else {
+             filters.push(not(ilike(products.reference, 'VERRE-%')));
+        }
 
         // Type filter (Check new productType first)
         if (params.type && params.type !== 'ALL') {

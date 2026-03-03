@@ -144,10 +144,19 @@ export async function saveDocumentConfig(config: import('@/types/document-templa
 
   await db
     .update(shopProfiles)
-    .set({ documentConfig: config as any })
+    .set({
+      documentSettings: config as any,
+      documentSettingsUpdatedAt: new Date(),
+    })
     .where(eq(shopProfiles.userId, session.user.id));
 
+  // Revalidate ALL pages that consume the document config so changes are
+  // immediately visible on the next print without requiring a server restart.
   revalidatePath('/dashboard/parametres');
+  revalidatePath('/print/facture', 'layout');
+  revalidatePath('/print/devis', 'layout');
+  revalidatePath('/print/bon-commande', 'layout');
+  revalidatePath('/print/recu', 'layout');
 }
 
 /**
@@ -160,13 +169,18 @@ export async function getDocumentConfig(): Promise<import('@/types/document-temp
 
   try {
     const [profile] = await db
-      .select({ documentConfig: shopProfiles.documentConfig })
+      .select({ documentSettings: shopProfiles.documentSettings })
       .from(shopProfiles)
       .where(eq(shopProfiles.userId, session.user.id))
       .limit(1);
 
-    return (profile?.documentConfig as any) ?? DEFAULT_TEMPLATE_CONFIG;
-  } catch {
+    // documentSettings is NOT NULL in the schema so it always exists
+    const stored = profile?.documentSettings as any;
+    // If stored value is empty object (fresh row), return the default config
+    if (!stored || Object.keys(stored).length === 0) return DEFAULT_TEMPLATE_CONFIG;
+    return stored as import('@/types/document-template').DocumentTemplateConfig;
+  } catch (err) {
+    console.error('[getDocumentConfig] DB error:', err);
     const { DEFAULT_TEMPLATE_CONFIG: def } = await import('@/types/document-template');
     return def;
   }

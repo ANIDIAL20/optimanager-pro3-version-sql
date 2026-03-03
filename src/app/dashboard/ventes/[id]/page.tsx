@@ -188,7 +188,7 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
                     {client && shopSettings && (
                         <>
                             <InvoiceActions sale={sale} client={client} shopSettings={shopSettings} />
-                            <Button variant="outline" className="gap-2" onClick={() => window.open(`/print/facture/${sale.id}`, "_blank")}>
+                            <Button variant="outline" className="gap-2" onClick={() => window.open(`/print/recu/${sale.id}`, "_blank")}>
                                 <Printer className="h-4 w-4" />
                                 Imprimer Reçu
                             </Button>

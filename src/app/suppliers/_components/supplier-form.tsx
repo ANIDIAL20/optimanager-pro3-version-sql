@@ -134,7 +134,7 @@ export function SupplierForm({ supplier }: SupplierFormProps) {
       contactEmail: '',
       notes: '',
       statut: 'Actif',
-    },
+    } as any,
   });
 
   const { toast } = useToast();
