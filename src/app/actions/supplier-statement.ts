@@ -2,8 +2,8 @@
 'use server';
 
 import { db } from '@/db';
-import { supplierOrders, supplierPayments } from '@/db/schema/index';
-import { eq, and, sql, desc, asc, isNull } from 'drizzle-orm';
+import { supplierOrders, supplierPayments, supplierOrderItems } from '@/db/schema/index';
+import { eq, and, sql, desc, asc, isNull, inArray } from 'drizzle-orm';
 import { createAction } from '@/lib/middleware/compose';
 import { authenticate } from '@/lib/middleware/auth.middleware';
 import { getSupplierBalance, getSupplierProducts } from '@/lib/utils/supplier-utils';
@@ -49,6 +49,34 @@ export const getSupplierStatement = createAction(
         status: (o.paymentStatus || 'unpaid').toLowerCase()
       }));
 
+      // 1. Fetch items for all these orders efficiently
+      const orderIds = orders.map(o => o.id);
+      let itemsByOrder: Record<string, any[]> = {};
+
+      if (orderIds.length > 0) {
+        const items = await db.select({
+            orderId:   supplierOrderItems.orderId,
+            label:     supplierOrderItems.label,
+            quantity:  supplierOrderItems.quantity,
+            unitPrice: supplierOrderItems.unitPrice,
+            total:     supplierOrderItems.total,
+          })
+          .from(supplierOrderItems)
+          .where(inArray(supplierOrderItems.orderId, orderIds));
+
+        itemsByOrder = items.reduce((acc, item) => {
+          const oid = String(item.orderId);
+          acc[oid] = [...(acc[oid] ?? []), item];
+          return acc;
+        }, {} as Record<string, typeof items>);
+      }
+
+      // 2. Enrich orders with items
+      const enrichedOrders = orders.map(o => ({
+        ...o,
+        items: itemsByOrder[String(o.id)] ?? [],
+      }));
+
       const payments = paymentsRaw.map(p => ({
         ...p,
         amount: Number(p.amount || 0)
@@ -60,14 +88,14 @@ export const getSupplierStatement = createAction(
       const totalBalance = totalOrders - totalPaid;
 
       console.log('[getSupplierStatement] OK:', {
-        ordersCount: orders.length,
+        ordersCount: enrichedOrders.length,
         paymentsCount: payments.length,
         totalOrders,
         totalPaid,
         totalBalance,
       });
 
-      return { orders, payments, totalOrders, totalPaid, totalBalance };
+      return { orders: enrichedOrders, payments, totalOrders, totalPaid, totalBalance };
     } catch (error) {
       console.error('Error in getSupplierStatement:', error);
       throw new Error("Erreur lors de la récupération du relevé unifié.");

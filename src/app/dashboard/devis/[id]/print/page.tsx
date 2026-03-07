@@ -9,6 +9,8 @@ import { toast } from 'sonner';
 import { BrandLoader } from '@/components/ui/loader-brand';
 import type { StandardDocumentData } from '@/types/document';
 import type { DocumentTemplateConfig } from '@/types/document-template';
+import { usePrintTitle } from '@/hooks/use-print-title';
+import { generatePdfFilename } from '@/lib/utils/filename';
 
 interface DevisPrintPageProps {
   params: Promise<{ id: string }>;
@@ -97,9 +99,12 @@ export default function DevisPrintPage({ params }: DevisPrintPageProps) {
   React.useEffect(() => {
     if (!isLoading && data && shouldAutoPrint) {
       const t = setTimeout(() => window.print(), 800);
-      return () => clearTimeout(t);
     }
   }, [isLoading, data, shouldAutoPrint]);
+
+  usePrintTitle(
+    data ? generatePdfFilename('Devis', data.documentNumber, data.client?.nom) : null
+  );
 
   if (isLoading) {
     return (

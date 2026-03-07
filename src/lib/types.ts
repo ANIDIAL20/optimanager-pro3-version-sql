@@ -308,9 +308,12 @@ export interface Supplier {
   delaiPaiement?: string; // TODO: Remove by 2026-06-01 (Legacy Migration)
   modePaiement?: string; // TODO: Remove by 2026-06-01 (Legacy Migration)
   remise?: number; // TODO: Remove by 2026-06-01 (Legacy Migration)
-  contactNom?: string;
-  contactTelephone?: string;
-  contactEmail?: string;
+  contactNom?: string;       // @deprecated use contactName
+  contactTelephone?: string;  // @deprecated use contactPhone
+  contactEmail?: string;      // @deprecated use contactEmail (direct)
+  // ✅ Étape 1 — Dedicated contact columns
+  contactName?:  string | null;
+  contactPhone?: string | null;
   notes?: string;
   status?: string;
   statut?: string; // TODO: Remove by 2026-06-01 (Legacy Migration)

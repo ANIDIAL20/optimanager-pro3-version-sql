@@ -1,5 +1,5 @@
 import { db } from '@/db';
-import { sql, eq, and } from 'drizzle-orm';
+import { sql, eq, and, isNull } from 'drizzle-orm';
 import { suppliers, supplierPayments } from '@/db/schema/suppliers.schema';
 import { supplierOrders } from '@/db/schema/supplier-orders.schema';
 import { products } from '@/db/schema'; 
@@ -7,30 +7,30 @@ import { products } from '@/db/schema';
 /**
  * Calculer le solde d'un fournisseur (Unifié: V1 + V2)
  */
-export async function getSupplierBalance(supplierId: number | string) {
+export async function getSupplierBalance(supplierId: string) {
   try {
-    const sIdStr = String(supplierId);
+    const [orderRes, paymentRes] = await Promise.all([
+      db.select({ total: sql<number>`COALESCE(SUM(${supplierOrders.montantTotal}), 0)` })
+        .from(supplierOrders)
+        .where(
+          and(
+            eq(supplierOrders.supplierId, supplierId),
+            sql`${supplierOrders.status} != 'cancelled'`,
+            isNull(supplierOrders.deletedAt)
+          )
+        ),
+      db.select({ total: sql<number>`COALESCE(SUM(${supplierPayments.amount}), 0)` })
+        .from(supplierPayments)
+        .where(
+          and(
+            eq(supplierPayments.supplierId, supplierId),
+            isNull(supplierPayments.deletedAt)
+          )
+        )
+    ]);
 
-    // Requête SQL brute pour calculer le solde
-    const result = await db.execute(sql`
-      WITH all_orders AS (
-        SELECT COALESCE(SUM(montant_total), 0) as amt 
-        FROM supplier_orders 
-        WHERE supplier_id::text = ${sIdStr} AND status != 'cancelled' AND deleted_at IS NULL
-      ),
-      all_payments AS (
-        SELECT COALESCE(SUM(amount), 0) as amt 
-        FROM supplier_payments 
-        WHERE supplier_id::text = ${sIdStr} AND deleted_at IS NULL
-      )
-      SELECT 
-        (SELECT SUM(amt) FROM all_orders) as total_orders,
-        (SELECT SUM(amt) FROM all_payments) as total_payments
-    `);
-
-    const row = result.rows[0] as any;
-    const totalOrders = Number(row?.total_orders || 0);
-    const totalPayments = Number(row?.total_payments || 0);
+    const totalOrders = Number(orderRes[0]?.total || 0);
+    const totalPayments = Number(paymentRes[0]?.total || 0);
 
     return {
       totalOrders,
@@ -44,74 +44,68 @@ export async function getSupplierBalance(supplierId: number | string) {
 }
 
 /**
- * Récupérer les produits en stock associés à ce fournisseur
+ * Extraire les produits liés aux commandes d'un fournisseur
  */
-export async function getSupplierProducts(supplierName: string) {
-    if (!supplierName) return [];
-    
-    return await db.select()
-        .from(products)
-        .where(
-            and(
-                eq(products.fournisseur, supplierName),
-                sql`deleted_at IS NULL`
-            )
-        )
-        .limit(100);
+export async function getSupplierProducts(supplierId: string) {
+  try {
+    const results = await db.execute(sql`
+      SELECT DISTINCT p.* 
+      FROM products p
+      JOIN supplier_order_items soi ON soi.product_id = p.id
+      JOIN supplier_orders so ON so.id = soi.order_id
+      WHERE so.supplier_id = ${supplierId}::uuid
+      AND so.deleted_at IS NULL
+    `);
+    return results.rows;
+  } catch (e) {
+    console.error('Error fetching supplier products:', e);
+    return [];
+  }
 }
 
 /**
- * Valider le montant d'un paiement
+ * Valider le montant d'un paiement par rapport au solde
  */
 export async function validatePaymentAmount(supplierId: string, amount: number) {
-  if (amount <= 0) {
-    return { valid: false, message: 'Le montant doit être supérieur à zéro' };
-  }
-
   const { balance } = await getSupplierBalance(supplierId);
-  if (amount > balance) {
-    return { valid: false, message: `Le montant dépasse le solde actuel (${balance} MAD)` };
-  }
-
-  return { valid: true };
+  return amount <= balance;
 }
 
 /**
- * Valider les données d'une commande
+ * Formatter une commande pour l'affichage
  */
-export async function validateOrderData(data: {
-  supplierId: string;
-  reference: string;
-  orderDate: Date;
-  totalAmount: number;
-}) {
-  const errors: string[] = [];
-
-  const suppliersResult = await db.select()
-    .from(suppliers)
-    .where(eq(suppliers.id, data.supplierId))
-    .limit(1);
-  const supplier = suppliersResult[0];
-  if (!supplier) errors.push('Fournisseur non trouvé');
-
-  const ordersResult = await db.select()
-    .from(supplierOrders)
-    .where(and(
-      eq(supplierOrders.supplierId, data.supplierId),
-      eq(supplierOrders.orderReference, data.reference)
-    ))
-    .limit(1);
-  const existingOrder = ordersResult[0];
-  if (existingOrder) errors.push('Cette référence existe déjà pour ce fournisseur');
-
-  if (data.totalAmount <= 0) errors.push('Le montant doit être supérieur à zéro');
-
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  if (data.orderDate > tomorrow) errors.push('La date ne peut pas être dans le futur');
-
+export function formatSupplierOrder(order: any) {
   return {
-    valid: errors.length === 0,
-    errors
+    ...order,
+    totalAmountFormatted: new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'MAD' }).format(order.montantTotal),
+    statusLabel: order.statut === 'REÇU' ? 'Reçu' : 'En attente',
   };
+}
+
+/**
+ * Get Supplier Info for order forms
+ */
+export async function getSupplierInfo(supplierId: string) {
+    const result = await db.select()
+        .from(suppliers)
+        .where(eq(suppliers.id, supplierId))
+        .limit(1);
+    return result[0];
+}
+
+/**
+ * Validation basique d'une commande
+ */
+export function validateOrderData(data: any): { valid: boolean; errors: string[]; error: string } {
+    const errors: string[] = [];
+    if (!data.supplierId && !data.supplierName) errors.push('Fournisseur requis');
+    // data.items is optional in some contexts (like just header), but let's check if present
+    if (data.items !== undefined && data.items.length === 0) errors.push('Articles requis');
+    if (!data.totalAmount || data.totalAmount <= 0) errors.push('Montant invalide');
+    
+    return { 
+        valid: errors.length === 0, 
+        errors,
+        error: errors.join(' | ') 
+    };
 }

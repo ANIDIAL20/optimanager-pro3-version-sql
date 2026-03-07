@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { deleteSupplier } from '@/app/actions/supplier-actions';
 import { BulkReceiveModal } from '@/components/suppliers/BulkReceiveModal';
+import { ApplyCreditDialog } from '@/components/suppliers/apply-credit-dialog';
 import {
     Card,
     CardContent,
@@ -14,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { useBreadcrumbStore } from '@/hooks/use-breadcrumb-store';
-import { AlertCircle, ArrowLeft, Truck, FileText, LayoutDashboard, Package } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Truck, FileText, LayoutDashboard, Package, TrendingDown, Minus, Coins } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -33,15 +34,42 @@ import { fr } from 'date-fns/locale';
 import { SensitiveData } from '@/components/ui/sensitive-data';
 import { SupplierActions } from '@/components/dashboard/fournisseurs/supplier-actions';
 
+import { cn } from '@/lib/utils';
+
 interface SupplierViewProps {
     supplier: any; 
     orders?: any[];
     payments?: any[];
     lensOrders?: any[];
+    availableCredit?: number;
+    credits?: any[];
     error?: string;
 }
 
-export default function SupplierView({ supplier, orders = [], payments = [], lensOrders = [], error }: SupplierViewProps) {
+function CreditActions({ credit }: { credit: any }) {
+    const [open, setOpen] = React.useState(false);
+
+    return (
+        <>
+            <Button 
+                variant="outline" 
+                size="sm" 
+                className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border-emerald-200"
+                onClick={() => setOpen(true)}
+            >
+                <Coins className="h-4 w-4 mr-2" />
+                Utiliser cet avoir
+            </Button>
+            <ApplyCreditDialog 
+                credit={credit} 
+                open={open} 
+                onOpenChange={setOpen} 
+            />
+        </>
+    );
+}
+
+export default function SupplierView({ supplier, orders = [], payments = [], lensOrders = [], availableCredit = 0, credits = [], error }: SupplierViewProps) {
     const router = useRouter();
     const { toast } = useToast();
     const { setLabel } = useBreadcrumbStore();
@@ -59,11 +87,11 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
     // ✅ FIX: All hooks MUST be called before any conditional return
     // Financial Calculations (always called, safe when orders/payments are empty arrays)
     const totalOrdered = React.useMemo(() =>
-        orders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0),
+        orders.reduce((sum: number, o: any) => sum + (Number(o.totalAmount) || 0), 0),
     [orders]);
 
     const totalPaid = React.useMemo(() =>
-        payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
+        payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0),
     [payments]);
 
     const balance = totalOrdered - totalPaid;
@@ -81,7 +109,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                 details: o.items ? `${o.items.length} articles` : 'Commande',
                 status: o.status
             })),
-            ...payments.map(p => ({
+            ...payments.map((p: any) => ({
                 id: p.id,
                 date: new Date(p.date),
                 type: 'PAIEMENT',
@@ -193,7 +221,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
             </div>
 
             {/* Financial Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-slate-500">Total Achats (TTC)</CardTitle>
@@ -224,6 +252,25 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                         </div>
                     </CardContent>
                 </Card>
+
+                {/* KPI Avoir Dispo */}
+                <Card className={`${Number(availableCredit || 0) > 0 ? 'bg-emerald-50/50 border-emerald-100' : 'bg-slate-50/50 border-slate-100'}`}>
+                    <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                         <CardTitle className={`text-sm font-medium ${Number(availableCredit || 0) > 0 ? 'text-emerald-600' : 'text-slate-500'}`}>
+                            Avoirs Disponibles
+                         </CardTitle>
+                         {Number(availableCredit || 0) > 0 ? (
+                            <TrendingDown className="h-4 w-4 text-emerald-500" />
+                         ) : (
+                            <Minus className="h-4 w-4 text-slate-400" />
+                         )}
+                    </CardHeader>
+                    <CardContent>
+                        <div className={`text-2xl font-bold ${Number(availableCredit || 0) > 0 ? 'text-emerald-700' : 'text-slate-400'}`}>
+                             <SensitiveData value={Number(availableCredit || 0)} type="currency" />
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
 
             {/* Tabs */}
@@ -240,6 +287,14 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                     </TabsTrigger>
                     <TabsTrigger value="products" className="px-4 py-2 flex items-center gap-2">
                         <Package className="h-4 w-4" /> Catalogue Produits
+                    </TabsTrigger>
+                    <TabsTrigger value="credits" className="px-4 py-2 flex items-center gap-2">
+                        <Coins className="h-4 w-4 text-emerald-500" /> Avoirs & Crédits
+                        {credits.filter((c: any) => c.status !== 'closed').length > 0 && (
+                            <Badge className="ml-1 bg-emerald-500 text-white border-none h-4 px-1 min-w-4 flex items-center justify-center text-[10px]">
+                                {credits.filter((c: any) => c.status !== 'closed').length}
+                            </Badge>
+                        )}
                     </TabsTrigger>
                 </TabsList>
 
@@ -291,7 +346,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
 
                 {/* HISTORY (RELEVE) TAB */}
                 <TabsContent value="history">
-                    <SupplierStatement supplierId={s.id} />
+                    <SupplierStatement supplierId={s.id} credits={credits} />
                 </TabsContent>
 
                 {/* LENS ORDERS TAB */}
@@ -326,7 +381,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        lensOrders.map((order) => (
+                                        lensOrders.map((order: any) => (
                                             <TableRow key={order.id} className="hover:bg-slate-50/50 transition-colors">
                                                 <TableCell className="font-medium whitespace-nowrap">
                                                     {order.createdAt ? format(new Date(order.createdAt), 'dd MMM yyyy', { locale: fr }) : '-'}
@@ -383,6 +438,91 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                 {/* PRODUCTS CATALOGUE TAB */}
                 <TabsContent value="products">
                     <SupplierProductsTab supplierName={s.nomCommercial} />
+                </TabsContent>
+
+                {/* CREDITS TAB */}
+                <TabsContent value="credits" className="space-y-6">
+                    {/* Widget Solde */}
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6 flex items-center justify-between shadow-sm">
+                        <div>
+                            <p className="text-sm font-medium text-emerald-600 mb-1">Solde d'avoirs disponible</p>
+                            <p className="text-3xl font-black text-emerald-700">{availableCredit.toFixed(2)} MAD</p>
+                        </div>
+                        <div className="h-12 w-12 bg-white rounded-full flex items-center justify-center shadow-inner">
+                            <TrendingDown className="h-7 w-7 text-emerald-500" />
+                        </div>
+                    </div>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Liste des Avoirs</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="bg-slate-50/50">
+                                        <TableHead className="font-bold">Date</TableHead>
+                                        <TableHead className="font-bold">Motif</TableHead>
+                                        <TableHead className="font-bold">Référence</TableHead>
+                                        <TableHead className="text-right font-bold">Montant Initial</TableHead>
+                                        <TableHead className="text-right font-bold">Reste à imputer</TableHead>
+                                        <TableHead className="text-center font-bold">Statut</TableHead>
+                                        <TableHead className="text-right font-bold">Actions</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {credits.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={7} className="text-center py-20">
+                                                <div className="flex flex-col items-center gap-3">
+                                                    <div className="h-16 w-16 bg-emerald-50 rounded-full flex items-center justify-center">
+                                                        <TrendingDown className="h-8 w-8 text-emerald-400" />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <p className="font-bold text-slate-700">Aucun avoir fournisseur</p>
+                                                        <p className="text-sm text-slate-400 max-w-xs mx-auto">
+                                                            Les avoirs seront créés automatiquement lors de retours de marchandise ou gérés manuellement.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        credits.map((c: any) => (
+                                            <TableRow key={c.id}>
+                                                <TableCell>{format(new Date(c.createdAt), 'dd/MM/yyyy')}</TableCell>
+                                                <TableCell>
+                                                    <span className="text-sm font-medium text-slate-600">
+                                                        {c.sourceType === 'return' ? 'Retour marchandise' : 
+                                                         c.sourceType === 'overcharge' ? 'Erreur de facturation' : 
+                                                         c.sourceType === 'manual' ? 'Avoir manuel' : (c.sourceType || 'Autre')}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell className="font-mono text-xs">{c.reference || `AV-${c.id.slice(0,8)}`}</TableCell>
+                                                <TableCell className="text-right font-bold">{Number(c.amount).toFixed(2)}</TableCell>
+                                                <TableCell className="text-right font-bold text-emerald-600">{Number(c.remainingAmount).toFixed(2)}</TableCell>
+                                                <TableCell className="text-center">
+                                                    <Badge className={cn(
+                                                        "font-bold uppercase text-[10px]",
+                                                        c.status === 'closed' ? 'bg-slate-100 text-slate-600' : 
+                                                        c.status === 'partial' ? 'bg-amber-100 text-amber-700' : 
+                                                        'bg-emerald-100 text-emerald-700'
+                                                    )}>
+                                                        {c.status === 'open' ? 'Ouvert' : c.status === 'partial' ? 'Partiel' : 'Clôturé'}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    {c.status !== 'closed' && (
+                                                        <CreditActions credit={c} />
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
                 </TabsContent>
             </Tabs>
 

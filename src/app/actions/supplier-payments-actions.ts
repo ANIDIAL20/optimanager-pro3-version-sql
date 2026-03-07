@@ -6,8 +6,8 @@
 'use server';
 
 import { db } from '@/db';
-import { supplierPayments, supplierOrders, supplierOrderPayments, suppliers } from '@/db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { supplierPayments, supplierOrders, supplierOrderPayments, suppliers, supplierCredits } from '@/db/schema';
+import { eq, and, desc, sql, ne } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { revalidatePath } from 'next/cache';
 
@@ -18,12 +18,13 @@ import { revalidatePath } from 'next/cache';
 export interface CreatePaymentInput {
     supplierId: string;
     amount: number;
-    method: string;
-    date: string;
-    reference?: string; // Check #
-    bank?: string;
+    method: 'cash' | 'cheque' | 'virement' | 'effet' | string;
+    orderIds?: string[];
+    allocations?: { orderId: string; amount: number }[];
     notes?: string;
-    allocations?: { orderId: number; amount: number }[];
+    date?: Date | string;
+    reference?: string;
+    bank?: string;
 }
 
 export interface SupplierPayment {
@@ -117,7 +118,7 @@ export const createSupplierPayment = secureAction(async (userId, user, data: Cre
                 paymentNumber: paymentNumber,
                 amount: data.amount.toString(),
                 method: data.method,
-                paymentDate: new Date(data.date),
+                paymentDate: data.date ? new Date(data.date) : new Date(),
                 reference: data.reference,
                 bank: data.bank,
                 notes: data.notes,
@@ -143,19 +144,56 @@ export const createSupplierPayment = secureAction(async (userId, user, data: Cre
                         where: and(eq(supplierOrders.id, allocation.orderId), eq(supplierOrders.userId, userId))
                      });
                      
-                     if (order) {
-                        const currentPaid = Number(order.montantPaye) || 0;
+                        if (order) {
+                        const currentPaid = Number(order.amountPaid) || 0;
                         const newPaid = currentPaid + allocation.amount;
                         const total = Number(order.montantTotal);
                         
                         await tx.update(supplierOrders)
                             .set({
-                                montantPaye: newPaid.toString(),
-                                resteAPayer: (total - newPaid).toString(),
-                                updatedAt: new Date()
+                                amountPaid: newPaid.toString(),
+                                remainingAmount: (total - newPaid).toString(),
+                                updatedAt: new Date().toISOString()
                             })
                             .where(eq(supplierOrders.id, allocation.orderId));
                      }
+                }
+            } else if (data.orderIds && data.orderIds.length > 0) {
+                let remainingToAllocate = data.amount;
+
+                for (const orderId of data.orderIds) {
+                    if (remainingToAllocate <= 0) break;
+
+                    const order = await tx.query.supplierOrders.findFirst({
+                        where: and(eq(supplierOrders.id, orderId), eq(supplierOrders.userId, userId))
+                    });
+                    if (!order) continue;
+
+                    const debt = Number(order.remainingAmount);
+                    const allocationAmount = Math.min(debt, remainingToAllocate);
+
+                    if (allocationAmount > 0) {
+                        await tx.insert(supplierOrderPayments).values({
+                            userId,
+                            paymentId,
+                            orderId,
+                            amount: allocationAmount.toString()
+                        });
+
+                        const currentPaid = Number(order.amountPaid) || 0;
+                        const newPaid = currentPaid + allocationAmount;
+                        const total = Number(order.montantTotal);
+
+                        await tx.update(supplierOrders)
+                            .set({
+                                amountPaid: newPaid.toString(),
+                                remainingAmount: (total - newPaid).toString(),
+                                updatedAt: new Date().toISOString()
+                            })
+                            .where(eq(supplierOrders.id, orderId));
+                        
+                        remainingToAllocate -= allocationAmount;
+                    }
                 }
             }
 
@@ -194,14 +232,14 @@ export const deleteSupplierPayment = secureAction(async (userId, user, paymentId
                  });
                  
                  if (order) {
-                     const reversedPaid = Number(order.montantPaye) - Number(alloc.amount);
+                     const reversedPaid = Number(order.amountPaid) - Number(alloc.amount);
                      const total = Number(order.montantTotal);
                      
                      await tx.update(supplierOrders)
                          .set({
-                             montantPaye: reversedPaid.toString(),
-                             resteAPayer: (total - reversedPaid).toString(),
-                             updatedAt: new Date()
+                             amountPaid: reversedPaid.toString(),
+                             remainingAmount: (total - reversedPaid).toString(),
+                             updatedAt: new Date().toISOString()
                          })
                          .where(eq(supplierOrders.id, alloc.orderId));
                  }
@@ -221,5 +259,27 @@ export const deleteSupplierPayment = secureAction(async (userId, user, paymentId
         return { success: true, message: 'Paiement annulé et soldes mis à jour' };
     } catch (error: any) {
         return { success: false, error: 'Erreur suppression paiement' };
+    }
+});
+/**
+ * Get available credit (avoirs) for a supplier
+ */
+export const getSupplierAvailableCredit = secureAction(async (userId, user, supplierId: string) => {
+    try {
+        const result = await db
+            .select({ 
+                total: sql<number>`COALESCE(SUM(${supplierCredits.remainingAmount}), 0)` 
+            })
+            .from(supplierCredits)
+            .where(and(
+                eq(supplierCredits.supplierId, supplierId),
+                eq(supplierCredits.userId, userId),
+                ne(supplierCredits.status, 'closed')
+            ));
+        
+        return Number(result[0]?.total || 0);
+    } catch (error: any) {
+        console.error("💥 Error fetching supplier credits:", error);
+        return 0;
     }
 });

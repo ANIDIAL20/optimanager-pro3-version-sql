@@ -55,6 +55,8 @@ export interface LensOrderInput {
 
   matiere?: string | null;
   indice?: string | null;
+  pont?: string | null;
+  branches?: string | null;
   
   // Professional Pricing Workflow
   sellingPrice: number;           // Prix de vente client (obligatoire)
@@ -362,6 +364,11 @@ export const createLensOrder = secureAction(async (userId, user, rawInput: LensO
                 diameterR: input.diameterR?.toString() || null,
                 diameterL: input.diameterL?.toString() || null,
                 
+                matiere: input.matiere || null,
+                indice: input.indice || null,
+                pont: input.pont || null,
+                branches: input.branches || null,
+                
                 sellingPrice: input.sellingPrice.toString(),
                 unitPrice: input.unitPrice.toString(),
                 quantity: input.quantity,
@@ -599,8 +606,9 @@ export const receiveLensOrder = secureAction(async (userId, user, orderId: strin
                 fournisseur: existingOrder.supplierName,
                 orderReference: data.blRef,
                 montantTotal: data.finalCost.toString(),
-                montantPaye: '0',
-                resteAPayer: data.finalCost.toString(),
+                amountPaid: '0',
+                remainingAmount: data.finalCost.toString(),
+                paymentStatus: 'unpaid',
                 statut: 'received', 
                 dateCommande: new Date(),
                 dueDate: dueDate,
@@ -787,7 +795,7 @@ export const checkSupplierReminders = secureAction(async (userId, user) => {
         const ordersToWarn = await db.query.supplierOrders.findMany({
             where: and(
                 eq(supplierOrders.userId, userId),
-                gt(supplierOrders.resteAPayer, '0'),
+                gt(supplierOrders.remainingAmount, '0'),
                 lt(supplierOrders.dueDate, threeDaysFromNow)
             )
         });
@@ -798,8 +806,8 @@ export const checkSupplierReminders = secureAction(async (userId, user) => {
             const existing = await db.query.reminders.findFirst({
                 where: and(
                     eq(reminders.userId, userId),
-                    eq(reminders.relatedId, order.id),
                     eq(reminders.relatedType, 'supplier_orders'),
+                    sql`${reminders.metadata}->>'supplierOrderId' = ${order.id}`,
                     eq(reminders.status, 'pending')
                 )
             });
@@ -811,11 +819,11 @@ export const checkSupplierReminders = secureAction(async (userId, user) => {
                     type: 'payment',
                     priority: isOverdue ? 'urgent' : 'important',
                     title: `Paiement Fournisseur: ${order.fournisseur}`,
-                    message: `Reste à payer: ${order.resteAPayer} DH. Échéance: ${order.dueDate?.toLocaleDateString('fr-FR')}`,
+                    message: `Reste à payer: ${order.remainingAmount} DH. Échéance: ${order.dueDate?.toLocaleDateString('fr-FR')}`,
                     status: 'pending',
                     dueDate: order.dueDate,
-                    relatedId: order.id,
-                    relatedType: 'supplier_orders'
+                    relatedType: 'supplier_orders',
+                    metadata: { supplierOrderId: order.id }
                 });
             }
         }
@@ -1033,9 +1041,6 @@ export const bulkReceiveLensOrders_OLD = secureAction(async (userId, user, param
                 fournisseur: supplierName,
                 orderReference: blNumber,
                 montantTotal: totalAmount.toString(),
-                montantPaye: '0',
-                resteAPayer: totalAmount.toString(),
-                // Unified Accounting Fields
                 amountPaid: '0',
                 remainingAmount: totalAmount.toString(),
                 paymentStatus: 'unpaid',
@@ -1288,26 +1293,25 @@ export const bulkReceiveLensOrders = secureAction(async (userId, user, data: { s
  */
 export const getLensOrderById = secureAction(async (userId, user, id: string) => {
     try {
-
+        // Step 1: fetch lens order (no lateral join — avoids Neon serverless issue)
         const order = await db.query.lensOrders.findFirst({
             where: and(
                 eq(lensOrders.id, parseInt(id)),
                 eq(lensOrders.userId, userId)
             ),
-            with: {
-                client: {
-                    columns: {
-                        id: true,
-                        fullName: true,
-                        phone: true,
-                        email: true,
-                    },
-                },
-            },
         });
 
         if (!order) {
             return { success: false, error: 'Commande introuvable' };
+        }
+
+        // Step 2: fetch client separately
+        let client = null;
+        if (order.clientId) {
+            client = await db.query.clients.findFirst({
+                where: eq(clients.id, order.clientId),
+                columns: { id: true, fullName: true, phone: true, email: true },
+            });
         }
 
         const shop = await db.query.shopProfiles.findFirst({
@@ -1319,6 +1323,7 @@ export const getLensOrderById = secureAction(async (userId, user, id: string) =>
             data: {
                 order: {
                     ...order,
+                    client: client ?? null,
                     // Normalise dates for serialization
                     orderDate: order.orderDate instanceof Date ? order.orderDate.toISOString() : order.orderDate,
                     receivedDate: order.receivedDate instanceof Date ? order.receivedDate.toISOString() : order.receivedDate,
@@ -1334,3 +1339,104 @@ export const getLensOrderById = secureAction(async (userId, user, id: string) =>
         return { success: false, error: error.message };
     }
 });
+
+/**
+ * Fetch the most-recent lens order for the current user in the same
+ * shape expected by LensOrderPrintClient: { order, shop }.
+ *
+ * Used by Settings → Modèles Documents → "Bon Cmd" tab to show a real
+ * prescription layout instead of the hardcoded demo.
+ * Returns null when no lens orders exist yet, or on any error.
+ */
+export const getLensOrderPreviewData = secureAction(async (userId) => {
+    try {
+        // Step 1: fetch lens order without lateral join
+        const order = await db.query.lensOrders.findFirst({
+            where: eq(lensOrders.userId, userId),
+            orderBy: [desc(lensOrders.createdAt)],
+        });
+
+        if (!order) return null;
+
+        // Step 2: fetch client separately
+        let client = null;
+        if (order.clientId) {
+            client = await db.query.clients.findFirst({
+                where: eq(clients.id, order.clientId),
+                columns: { id: true, fullName: true, phone: true, email: true },
+            });
+        }
+
+        const shop = await db.query.shopProfiles.findFirst({
+            where: eq(shopProfiles.userId, userId),
+        });
+
+        return {
+            order: {
+                ...order,
+                client: client ?? null,
+                orderDate: order.orderDate instanceof Date ? order.orderDate.toISOString() : order.orderDate,
+                receivedDate: order.receivedDate instanceof Date ? order.receivedDate.toISOString() : order.receivedDate,
+                deliveredDate: order.deliveredDate instanceof Date ? order.deliveredDate.toISOString() : order.deliveredDate,
+                createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
+                updatedAt: order.updatedAt instanceof Date ? order.updatedAt.toISOString() : order.updatedAt,
+            },
+            shop: shop ?? null,
+        };
+    } catch {
+        return null;
+    }
+});
+
+/**
+ * Get all lens orders associated with a specific Sale ID.
+ * Useful for the "Bon de Labo" output buttons in Sales views.
+ */
+export const getLensOrdersBySaleId = secureAction(async (userId, user, saleId: string | number) => {
+    try {
+        const id = typeof saleId === 'string' ? parseInt(saleId) : saleId;
+        if (isNaN(id)) return { success: false, error: 'ID Vente invalide' };
+
+        // 1. Fetch lens orders
+        const orders = await db.query.lensOrders.findMany({
+            where: and(
+                eq(lensOrders.saleId, id),
+                eq(lensOrders.userId, userId)
+            ),
+            orderBy: [desc(lensOrders.createdAt)],
+        });
+
+        if (!orders || orders.length === 0) {
+            return { success: false, error: 'Aucun Bon de Labo lié à cette vente.' };
+        }
+
+        // 2. Fetch clients for these orders
+        const clientIds = [...new Set(orders.map(o => o.clientId).filter(Boolean))];
+        let clientsMap = new Map();
+        
+        if (clientIds.length > 0) {
+            const fetchedClients = await db.query.clients.findMany({
+                where: inArray(clients.id, clientIds as number[]),
+                columns: { id: true, fullName: true, phone: true }
+            });
+            fetchedClients.forEach(c => clientsMap.set(c.id, c));
+        }
+
+        // 3. Map orders
+        const mappedOrders = orders.map(order => ({
+            ...order,
+            client: order.clientId ? (clientsMap.get(order.clientId) || null) : null,
+            orderDate: order.orderDate instanceof Date ? order.orderDate.toISOString() : order.orderDate,
+            receivedDate: order.receivedDate instanceof Date ? order.receivedDate.toISOString() : order.receivedDate,
+            deliveredDate: order.deliveredDate instanceof Date ? order.deliveredDate.toISOString() : order.deliveredDate,
+            createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt,
+            updatedAt: order.updatedAt instanceof Date ? order.updatedAt.toISOString() : order.updatedAt,
+        }));
+
+        return { success: true, orders: mappedOrders };
+    } catch (error: any) {
+        console.error('💥 Error in getLensOrdersBySaleId:', error);
+        return { success: false, error: error.message };
+    }
+});
+

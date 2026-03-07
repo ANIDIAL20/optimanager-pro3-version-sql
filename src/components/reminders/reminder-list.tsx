@@ -1,20 +1,23 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useOptimistic } from 'react';
 import { ReminderCard } from './reminder-card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getReminders } from '@/app/actions/reminder-actions';
-import { FilterX, Search, Calendar, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
+import { FilterX, Search, Calendar, DollarSign, ChevronDown, ChevronUp, Bell } from 'lucide-react';
 import { BrandLoader } from '@/components/ui/loader-brand';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { motion, AnimatePresence } from 'framer-motion';
+import { CreateReminderDialog } from './create-reminder-dialog';
+import { Reminder } from '@/hooks/use-reminders';
 
 export function ReminderList() {
   const { toast } = useToast();
-  const [reminders, setReminders] = useState<any[]>([]);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('pending');
   const [priorityFilter, setPriorityFilter] = useState('all');
@@ -24,9 +27,29 @@ export function ReminderList() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  const fetchReminders = async () => {
-    setIsLoading(true);
+  // Optimistic UI for immediate response
+  const [optimisticReminders, setOptimisticReminders] = useOptimistic(
+    reminders,
+    (state, action: { type: 'delete' | 'complete', id: number }) => {
+      if (action.type === 'delete') {
+        return state.filter(r => r.id !== action.id);
+      }
+      if (action.type === 'complete') {
+        return state.map(r => r.id === action.id ? { ...r, status: 'completed' } : r);
+      }
+      return state;
+    }
+  );
+
+  const fetchReminders = async (pageNum = 1) => {
+    if (pageNum === 1) setIsLoading(true);
+    else setIsLoadingMore(true);
     try {
       // If status is 'today', we actually want 'pending' reminders for today
       const mappedStatus = statusFilter === 'today' ? 'pending' : statusFilter;
@@ -42,8 +65,18 @@ export function ReminderList() {
         filters.priority = priorityFilter;
       }
 
-      const data = await getReminders(filters);
-      setReminders(data);
+      filters.page = pageNum;
+      filters.limit = 20;
+
+      const res = await getReminders(filters);
+      
+      if (pageNum === 1) {
+        setReminders(res.data);
+      } else {
+        setReminders(prev => [...prev, ...res.data]);
+      }
+      setHasMore(res.hasMore);
+      setPage(pageNum);
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -52,6 +85,7 @@ export function ReminderList() {
       });
     } finally {
       setIsLoading(false);
+      setIsLoadingMore(false);
     }
   };
 
@@ -69,7 +103,7 @@ export function ReminderList() {
     }
 
     const timer = setTimeout(() => {
-      fetchReminders();
+      fetchReminders(1);
     }, 500); // Debounce search
     return () => clearTimeout(timer);
   }, [statusFilter, priorityFilter, search, startDate, endDate]);
@@ -162,32 +196,66 @@ export function ReminderList() {
         <div className="flex justify-center py-12">
           <BrandLoader size="md" className="mx-auto text-gray-400" />
         </div>
-      ) : reminders.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-          <FilterX className="h-12 w-12 mx-auto text-gray-300 mb-3" />
-          <h3 className="text-lg font-medium text-gray-900">Aucun rappel trouvé</h3>
-          <p className="text-gray-500 max-w-sm mx-auto mt-1">
-            Il n'y a aucun rappel correspondant à vos critères actuels.
-          </p>
-          <Button variant="outline" className="mt-4" onClick={() => {
-            setStatusFilter('pending');
-            setPriorityFilter('all');
-            setSearch('');
-            setStartDate('');
-            setEndDate('');
-          }}>
-            Réinitialiser les filtres
-          </Button>
+      ) : optimisticReminders.length === 0 ? (
+        <div className="text-center py-16 bg-gradient-to-b from-white to-slate-50/50 rounded-2xl border border-dashed border-slate-200 shadow-sm relative overflow-hidden">
+          <div className="absolute inset-0 bg-grid-slate-100/[0.05] bg-[size:16px_16px]" />
+          <div className="relative z-10 flex flex-col items-center justify-center">
+            <div className="h-24 w-24 bg-blue-50 rounded-full flex items-center justify-center mb-6 shadow-inner shadow-blue-100/50">
+              <Bell className="h-10 w-10 text-blue-400" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">Aucun rappel pour le moment</h3>
+            <p className="text-slate-500 max-w-sm mx-auto mb-6">
+              Tout est à jour ! Profitez de cette tranquillité ou planifiez votre prochaine tâche importante.
+            </p>
+            <div className="flex gap-3">
+              {(search || startDate || endDate || priorityFilter !== 'all' || statusFilter !== 'pending') && (
+                <Button variant="outline" onClick={() => {
+                  setStatusFilter('pending');
+                  setPriorityFilter('all');
+                  setSearch('');
+                  setStartDate('');
+                  setEndDate('');
+                }}>
+                  Réinitialiser
+                </Button>
+              )}
+              <CreateReminderDialog />
+            </div>
+          </div>
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {reminders.map((reminder) => (
-            <ReminderCard
-              key={reminder.id}
-              reminder={reminder}
-              onUpdate={fetchReminders}
-            />
-          ))}
+        <div className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <AnimatePresence mode="popLayout">
+              {optimisticReminders.map((reminder) => (
+                <motion.div
+                  key={reminder.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, x: -50, height: 0 }}
+                  layout
+                >
+                  <ReminderCard
+                    reminder={reminder}
+                    onUpdate={() => fetchReminders(1)}
+                    onOptimisticDelete={() => setOptimisticReminders({ type: 'delete', id: reminder.id })}
+                    onOptimisticComplete={() => setOptimisticReminders({ type: 'complete', id: reminder.id })}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+          {hasMore && (
+            <div className="flex justify-center pt-4 pb-8">
+              <Button 
+                variant="outline" 
+                onClick={() => fetchReminders(page + 1)}
+                disabled={isLoadingMore}
+              >
+                {isLoadingMore ? 'Chargement...' : 'Charger plus de rappels'}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

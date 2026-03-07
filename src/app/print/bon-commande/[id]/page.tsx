@@ -11,6 +11,8 @@ import { bonCommandeAdapter } from '@/lib/documents/adapters';
 import type { StandardDocumentData } from '@/types/document';
 import type { DocumentTemplateConfig } from '@/types/document-template';
 import { DEFAULT_TEMPLATE_CONFIG } from '@/types/document-template';
+import { usePrintTitle } from '@/hooks/use-print-title';
+import { generatePdfFilename } from '@/lib/utils/filename';
 
 // Dynamic import keeps the server action out of the client bundle
 async function getBonCommandeData(id: string) {
@@ -51,6 +53,10 @@ export default function BonCommandePrintPage({ params }: BonCommandePrintPagePro
       setIsLoading(false);
     });
   }, [id, router, toast]);
+
+  usePrintTitle(
+    data ? generatePdfFilename('Commande_Labo', data.documentNumber, data.fournisseur?.nom || data.client?.nom) : null
+  );
 
   // Auto-print — handled by <AutoPrint /> rendered below
 

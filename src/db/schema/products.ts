@@ -71,7 +71,7 @@ export const products = pgTable('products', {
   brandIdx: index('idx_products_brand').on(table.brand),
   productTypeIdx: index('idx_products_type').on(table.productType),
   // 🔒 BUG-2 FIX: Unique (reference, userId) prevents duplicate VERRE- on retry/double-click
-  uniqueReferencePerUser: uniqueIndex('unique_product_reference_user').on(table.reference, table.userId),
+  // uniqueReferencePerUser: uniqueIndex('unique_product_reference_user').on(table.reference, table.userId),
   idx_products_not_deleted: index('idx_products_not_deleted').on(table.userId, table.deletedAt),
   idx_products_category: index('idx_products_category').on(table.category),
   idx_products_client: index('idx_products_client').on(table.clientId), // 🔖 BUG-3

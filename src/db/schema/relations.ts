@@ -6,11 +6,15 @@ import { relations, sql } from 'drizzle-orm';
 import { clients, clientInteractions, prescriptions, prescriptionsLegacy, contactLensPrescriptions } from './clients';
 import { products, invoiceImports, brands, categories, materials, colors, treatments, mountingTypes, banks, insurances } from './products';
 import { sales, saleItems, saleLensDetails, saleContactLensDetails, devis, reservations, frameReservations } from './sales';
-import { lensOrders, supplierOrderItems } from './lens-orders';
+import { lensOrders } from './lens-orders';
 import { users, accounts, sessions, verificationTokens, settings, shopProfiles } from './auth-core';
-import { clientTransactions, expenses, cashSessions, cashMovements, comptabiliteJournal, purchases } from './finance';
-import { auditLog, auditLogs, stockMovements, reminders } from './logs-misc';
-import { suppliers, supplierOrders, supplierPayments, supplierOrderPayments } from './suppliers.schema';
+import { clientTransactions, cashSessions, cashMovements, comptabiliteJournal, purchases } from './finance';
+import { expenses } from './expenses';
+import { auditLog, auditLogs, stockMovements } from './logs-misc';
+import { reminders } from './reminders';
+import { suppliers, supplierOrders, supplierPayments, supplierOrderPayments, supplierOrderItems } from './suppliers.schema';
+import { supplierCredits } from './supplier-credits';
+import { goodsReceipts, goodsReceiptItems } from './goods-receipts';
 import { notifications } from './notifications';
 
 export const clientInteractionsRelations = relations(clientInteractions, ({ one }) => ({
@@ -63,6 +67,8 @@ export const lensOrdersRelations = relations(lensOrders, ({ one }) => ({
 export const suppliersRelations = relations(suppliers, ({ many }) => ({
   orders: many(supplierOrders),
   payments: many(supplierPayments),
+  credits: many(supplierCredits),
+  receipts: many(goodsReceipts),
 }));
 
 export const salesRelations = relations(sales, ({ one, many }) => ({

@@ -24,8 +24,8 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { createSupplierPayment } from '@/app/actions/supplier-payments';
-import { getOrdersForPaymentSelect } from '@/app/actions/supplier-orders';
+import { createSupplierPayment } from '@/app/actions/supplier-payments-actions';
+import { getOrdersForPaymentSelect } from '@/app/actions/supplier-orders-actions';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { useSupplierStatement } from '@/hooks/use-supplier-statement';
@@ -105,11 +105,11 @@ export function SupplierPaymentForm({ supplierId, onSuccess }: PaymentFormProps)
       const res: any = await createSupplierPayment({
         supplierId: values.supplierId,
         amount: values.amount,
-        paymentDate: values.paymentDate, // Already a string
+        date: values.paymentDate, // Using date as expected by the new API
         method: values.method,
-        orderId: (values.orderId === 'none' || !values.orderId) ? null : values.orderId,
+        orderIds: (values.orderId === 'none' || !values.orderId) ? [] : [values.orderId],
         reference: values.reference,
-        bankName: values.bankName,
+        bank: values.bankName,
         notes: values.notes,
       });
       

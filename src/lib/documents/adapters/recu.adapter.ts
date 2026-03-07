@@ -50,12 +50,20 @@ export function toStandardDocument(rawData: any): StandardDocumentData {
       adresse: client?.address ?? doc.clientAddress ?? undefined,
     },
     shop: normalizeShop(settings),
-    ordonnance: doc.prescriptionSnapshot
-      ? {
-          prescripteur: doc.prescriptionSnapshot.doctorName ?? '—',
-          dateOrdonnance: doc.prescriptionSnapshot.prescriptionDate ?? '—',
-        }
-      : undefined,
+    ordonnance: (() => {
+      const snap = doc.prescriptionSnapshot;
+      if (!snap) return undefined;
+      const doctor = snap.doctorName;
+      const dateRaw = snap.prescriptionDate;
+      // Only show ordonnance block when we have a real doctor name and a proper date
+      if (!doctor || doctor === '—') return undefined;
+      const hasDate = dateRaw && dateRaw !== '—' && dateRaw !== 'null';
+      return {
+        prescripteur: doctor,
+        dateOrdonnance: hasDate ? dateRaw : '',
+      };
+    })(),
+
     paiements: (doc.paymentHistory ?? []).map((p: any) => ({
       date: p.date ?? p.createdAt,
       mode: p.method ?? p.type ?? p.mode ?? '—',

@@ -26,6 +26,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Separator } from '@/components/ui/separator';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
     Eye, 
     Info, 
@@ -70,6 +77,10 @@ const SaisieMesuresVerresSchema = z.object({
     orderType: z.enum(['unifocal', 'bifocal', 'progressive', 'contact']),
     lensType: z.string().min(1, 'Le type de verre est requis.'),
     index: z.string().optional(), // 🆕 Index (1.5, 1.6, etc.)
+    matiere: z.string().optional(),
+    pont: z.string().optional(),
+    branches: z.string().optional(),
+    diametreVerre: z.string().optional(),
     purchasePrice: z.coerce.number().min(0).optional().default(0), // 🆕 Prix d'achat estimé
     sellingPrice: z.coerce.number().min(0, 'Le prix de vente est obligatoire'),
     treatments: z.array(z.string()).optional(),
@@ -100,6 +111,10 @@ export function SaisieMesuresVerres({ onAddToCart }: SaisieMesuresVerresProps) {
             orderType: 'unifocal',
             lensType: '',
             index: '1.5',
+            matiere: '',
+            pont: '',
+            branches: '',
+            diametreVerre: '',
             purchasePrice: 0,
             sellingPrice: 0,
             treatments: [],
@@ -135,8 +150,17 @@ export function SaisieMesuresVerres({ onAddToCart }: SaisieMesuresVerresProps) {
                 if (Array.isArray(suppliersRes)) setSuppliers(suppliersRes);
                 else if ((suppliersRes as any).success) setSuppliers((suppliersRes as any).data);
 
-                if (Array.isArray(treatmentsRes)) setTreatmentsList(treatmentsRes);
-                else if ((treatmentsRes as any).success) setTreatmentsList((treatmentsRes as any).data);
+                if (Array.isArray(treatmentsRes)) {
+                    setTreatmentsList(treatmentsRes.filter(t => t.name !== 'Polarisant'));
+                } else if ((treatmentsRes as any).success) {
+                    setTreatmentsList((treatmentsRes as any).data.filter((t: any) => t.name !== 'Polarisant'));
+                } else {
+                    toast({
+                        variant: 'destructive',
+                        title: 'Erreur',
+                        description: 'Impossible de charger la liste des traitements.',
+                    });
+                }
 
             } catch (error) {
                 console.error("Failed to load reference data", error);
@@ -166,6 +190,8 @@ export function SaisieMesuresVerres({ onAddToCart }: SaisieMesuresVerresProps) {
         });
     };
 
+    const { sellingPrice, purchasePrice } = form.watch();
+
     if (isLoadingData) {
         return (
             <div className="flex flex-col items-center justify-center py-20 bg-slate-50/50 rounded-3xl border-2 border-dashed border-slate-200">
@@ -193,15 +219,45 @@ export function SaisieMesuresVerres({ onAddToCart }: SaisieMesuresVerresProps) {
                         </div>
                     </CardHeader>
                     <CardContent className="p-6 space-y-6">
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                            
-                            {/* OD Column */}
-                            <div className="space-y-4 p-5 bg-blue-50/30 rounded-2xl border border-blue-100/50">
-                                <h4 className="font-bold text-blue-800 text-sm flex items-center gap-2 border-b border-blue-100 pb-2 mb-4">
-                                    <span className="w-6 h-6 bg-blue-600 text-white rounded-md flex items-center justify-center text-[10px]">OD</span>
-                                    Œil Droit
-                                </h4>
-                                <div className="grid grid-cols-4 gap-3">
+                        <div className="mb-4">
+                            <FormField
+                                control={form.control}
+                                name="PD"
+                                render={({ field }) => (
+                                    <FormItem className="max-w-xs">
+                                        <FormLabel className="text-primary font-bold">Écart Pupillaire Total</FormLabel>
+                                        <FormControl>
+                                            <Input 
+                                                type="number" 
+                                                step="0.5" 
+                                                placeholder="ex: 64"
+                                                {...field} 
+                                                value={field.value ?? ''} 
+                                                onChange={(e) => {
+                                                    field.onChange(e);
+                                                    const val = parseFloat(e.target.value);
+                                                    if (!isNaN(val) && val > 0) {
+                                                        const half = val / 2;
+                                                        form.setValue('OD.pd', half, { shouldValidate: true });
+                                                        form.setValue('OS.pd', half, { shouldValidate: true });
+                                                    } else if (e.target.value === '') {
+                                                        form.setValue('OD.pd', undefined, { shouldValidate: true });
+                                                        form.setValue('OS.pd', undefined, { shouldValidate: true });
+                                                    }
+                                                }}
+                                            />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                            {/* Œil Droit */}
+                            <div className="space-y-4 rounded-lg border p-4 shadow-sm">
+                                <h4 className="font-semibold text-center text-blue-800">Œil Droit (OD)</h4>
+                                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                                     {['sph', 'cyl', 'axis', 'add'].map((field) => (
                                         <FormField
                                             key={`OD.${field}`}
@@ -209,14 +265,14 @@ export function SaisieMesuresVerres({ onAddToCart }: SaisieMesuresVerresProps) {
                                             name={`OD.${field}` as any}
                                             render={({ field: fProps }) => (
                                                 <FormItem>
-                                                    <FormLabel className="text-[10px] font-black uppercase text-slate-500">
-                                                        {field === 'sph' ? 'Sphère' : field === 'cyl' ? 'Cylindre' : field === 'axis' ? 'Axe' : 'Add'}
+                                                    <FormLabel className="text-sm font-medium">
+                                                        {field === 'sph' ? 'Sphère' : field === 'cyl' ? 'Cylindre' : field === 'axis' ? 'Axe' : 'Addition'}
                                                     </FormLabel>
                                                     <FormControl>
                                                         <Input 
                                                             type="number" 
                                                             step={field === 'axis' ? '1' : '0.25'} 
-                                                            className="h-10 bg-white font-bold text-center border-blue-100 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all rounded-lg"
+                                                            placeholder={field === 'sph' ? '+0.00' : field === 'cyl' ? '-0.00' : field === 'axis' ? '0°' : '+0.00'}
                                                             {...fProps} 
                                                             value={fProps.value ?? ''}
                                                         />
@@ -225,21 +281,19 @@ export function SaisieMesuresVerres({ onAddToCart }: SaisieMesuresVerresProps) {
                                             )}
                                         />
                                     ))}
-                                </div>
-                                <div className="grid grid-cols-2 gap-3 max-w-[50%]">
                                     {['pd', 'hauteur'].map((field) => (
                                         <FormField
                                             key={`OD.${field}`}
                                             control={form.control}
                                             name={`OD.${field}` as any}
                                             render={({ field: fProps }) => (
-                                                <FormItem>
-                                                    <FormLabel className="text-[10px] font-black uppercase text-slate-500">{field === 'pd' ? 'EP' : 'Hauteur'}</FormLabel>
+                                                <FormItem className="border-t pt-2">
+                                                    <FormLabel className="text-primary font-bold">{field === 'pd' ? 'Écart Pup. (OD)' : 'Hauteur (OD)'}</FormLabel>
                                                     <FormControl>
                                                         <Input 
                                                             type="number" 
-                                                            step="0.25" 
-                                                            className="h-10 bg-white font-bold text-center border-blue-50 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all rounded-lg"
+                                                            step="0.25"
+                                                            placeholder={field === 'pd' ? '32' : '18'}
                                                             {...fProps} 
                                                             value={fProps.value ?? ''}
                                                         />
@@ -251,13 +305,10 @@ export function SaisieMesuresVerres({ onAddToCart }: SaisieMesuresVerresProps) {
                                 </div>
                             </div>
 
-                            {/* OS Column */}
-                            <div className="space-y-4 p-5 bg-emerald-50/30 rounded-2xl border border-emerald-100/50">
-                                <h4 className="font-bold text-emerald-800 text-sm flex items-center gap-2 border-b border-emerald-100 pb-2 mb-4">
-                                    <span className="w-6 h-6 bg-emerald-600 text-white rounded-md flex items-center justify-center text-[10px]">OG</span>
-                                    Œil Gauche
-                                </h4>
-                                <div className="grid grid-cols-4 gap-3">
+                            {/* Œil Gauche */}
+                            <div className="space-y-4 rounded-lg border p-4 shadow-sm">
+                                <h4 className="font-semibold text-center text-emerald-800">Œil Gauche (OG)</h4>
+                                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                                     {['sph', 'cyl', 'axis', 'add'].map((field) => (
                                         <FormField
                                             key={`OS.${field}`}
@@ -265,14 +316,14 @@ export function SaisieMesuresVerres({ onAddToCart }: SaisieMesuresVerresProps) {
                                             name={`OS.${field}` as any}
                                             render={({ field: fProps }) => (
                                                 <FormItem>
-                                                    <FormLabel className="text-[10px] font-black uppercase text-slate-500">
-                                                        {field === 'sph' ? 'Sphère' : field === 'cyl' ? 'Cylindre' : field === 'axis' ? 'Axe' : 'Add'}
+                                                    <FormLabel className="text-sm font-medium">
+                                                        {field === 'sph' ? 'Sphère' : field === 'cyl' ? 'Cylindre' : field === 'axis' ? 'Axe' : 'Addition'}
                                                     </FormLabel>
                                                     <FormControl>
                                                         <Input 
                                                             type="number" 
                                                             step={field === 'axis' ? '1' : '0.25'} 
-                                                            className="h-10 bg-white font-bold text-center border-emerald-100 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all rounded-lg"
+                                                            placeholder={field === 'sph' ? '+0.00' : field === 'cyl' ? '-0.00' : field === 'axis' ? '0°' : '+0.00'}
                                                             {...fProps} 
                                                             value={fProps.value ?? ''}
                                                         />
@@ -281,21 +332,19 @@ export function SaisieMesuresVerres({ onAddToCart }: SaisieMesuresVerresProps) {
                                             )}
                                         />
                                     ))}
-                                </div>
-                                <div className="grid grid-cols-2 gap-3 max-w-[50%]">
                                     {['pd', 'hauteur'].map((field) => (
                                         <FormField
                                             key={`OS.${field}`}
                                             control={form.control}
                                             name={`OS.${field}` as any}
                                             render={({ field: fProps }) => (
-                                                <FormItem>
-                                                    <FormLabel className="text-[10px] font-black uppercase text-slate-500">{field === 'pd' ? 'EP' : 'Hauteur'}</FormLabel>
+                                                <FormItem className="border-t pt-2">
+                                                    <FormLabel className="text-primary font-bold">{field === 'pd' ? 'Écart Pup. (OG)' : 'Hauteur (OG)'}</FormLabel>
                                                     <FormControl>
                                                         <Input 
                                                             type="number" 
-                                                            step="0.25" 
-                                                            className="h-10 bg-white font-bold text-center border-emerald-50 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all rounded-lg"
+                                                            step="0.25"
+                                                            placeholder={field === 'pd' ? '32' : '18'}
                                                             {...fProps} 
                                                             value={fProps.value ?? ''}
                                                         />
@@ -309,26 +358,13 @@ export function SaisieMesuresVerres({ onAddToCart }: SaisieMesuresVerresProps) {
                         </div>
 
                         {/* Additional Info Row */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-100">
-                             <FormField
-                                control={form.control}
-                                name="PD"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel className="text-xs font-bold text-slate-700">Écart Pupillaire Total</FormLabel>
-                                        <FormControl>
-                                            <Input type="number" step="0.5" className="bg-slate-50" {...field} value={field.value ?? ''} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
                             <FormField
                                 control={form.control}
                                 name="doctorName"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel className="text-xs font-bold text-slate-700">Médecin Prescripteur</FormLabel>
+                                        <FormLabel className="text-xs font-bold text-slate-700">Médecin Prescripteur (Optionnel)</FormLabel>
                                         <FormControl>
                                             <Input placeholder="Dr. ..." className="bg-slate-50" {...field} />
                                         </FormControl>
@@ -367,6 +403,7 @@ export function SaisieMesuresVerres({ onAddToCart }: SaisieMesuresVerresProps) {
                         </div>
                     </CardHeader>
                     <CardContent className="p-6 space-y-8">
+                        {/* ROW 1: Fournisseur */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <FormField
                                 control={form.control}
@@ -384,6 +421,10 @@ export function SaisieMesuresVerres({ onAddToCart }: SaisieMesuresVerresProps) {
                                     </FormItem>
                                 )}
                             />
+                        </div>
+
+                        {/* ROW 2: Géométrie | Désignation */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <FormField
                                 control={form.control}
                                 name="orderType"
@@ -407,9 +448,7 @@ export function SaisieMesuresVerres({ onAddToCart }: SaisieMesuresVerresProps) {
                                     </FormItem>
                                 )}
                             />
-                        </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <FormField
                                 control={form.control}
                                 name="lensType"
@@ -423,7 +462,10 @@ export function SaisieMesuresVerres({ onAddToCart }: SaisieMesuresVerresProps) {
                                     </FormItem>
                                 )}
                             />
+                        </div>
 
+                        {/* ROW 3: Indice | Matière */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <FormField
                                 control={form.control}
                                 name="index"
@@ -448,8 +490,33 @@ export function SaisieMesuresVerres({ onAddToCart }: SaisieMesuresVerresProps) {
                                     </FormItem>
                                 )}
                             />
+
+                            <FormField
+                                control={form.control}
+                                name="matiere"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-xs font-bold text-slate-700 uppercase">Matière</FormLabel>
+                                        <FormControl>
+                                            <SearchableSelect 
+                                                options={[
+                                                    { label: 'Organique', value: 'Organique' },
+                                                    { label: 'Polycarbonate', value: 'Polycarbonate' },
+                                                    { label: 'Minéral', value: 'Minéral' },
+                                                    { label: 'Trivex', value: 'Trivex' },
+                                                ]}
+                                                value={field.value}
+                                                onChange={field.onChange}
+                                                placeholder="Sélectionner la matière"
+                                            />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
                         </div>
 
+                        {/* ROW 4: Traitements */}
                         <div className="space-y-4">
                             <FormLabel className="text-xs font-bold text-slate-700 uppercase">Traitements optionnels</FormLabel>
                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -478,7 +545,53 @@ export function SaisieMesuresVerres({ onAddToCart }: SaisieMesuresVerresProps) {
                             </div>
                         </div>
 
-                        {/* Tarification & Marge */}
+                        {/* ROW 5: Mesures de Montage */}
+                        <div className="space-y-4">
+                            <FormLabel className="text-xs font-bold text-slate-700 uppercase">Mesures de Montage</FormLabel>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <FormField
+                                    control={form.control}
+                                    name="pont"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-[10px] font-black uppercase text-slate-500">Pont</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="ex. 17" className="h-10 bg-white" {...field} value={field.value ?? ''} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="branches"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-[10px] font-black uppercase text-slate-500">Branches</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="ex. 145" className="h-10 bg-white" {...field} value={field.value ?? ''} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="diametreVerre"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-[10px] font-black uppercase text-slate-500">Diamètre Verre</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="ex. 70" className="h-10 bg-white" {...field} value={field.value ?? ''} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                        </div>
+
+                        {/* ROW 6: Pricing Card */}
                         <div className="bg-gradient-to-br from-indigo-700 to-blue-900 p-8 rounded-2xl text-white shadow-xl shadow-blue-200 relative overflow-hidden">
                              {/* Decoration */}
                             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10" />
@@ -549,13 +662,13 @@ export function SaisieMesuresVerres({ onAddToCart }: SaisieMesuresVerresProps) {
                                         <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
                                             <p className="text-blue-200 text-[10px] font-bold uppercase mb-1">Marge Estimée</p>
                                             <p className="text-3xl font-black tabular-nums">
-                                                {(form.watch('sellingPrice') - form.watch('purchasePrice')).toFixed(2)} <span className="text-sm font-bold text-blue-300">DH</span>
+                                                {(sellingPrice - purchasePrice).toFixed(2)} <span className="text-sm font-bold text-blue-300">DH</span>
                                             </p>
                                         </div>
                                         <div className="hidden lg:block">
                                             <p className="text-blue-200 text-[10px] font-bold uppercase mb-1">Rentabilité</p>
                                             <p className="text-xl font-bold text-emerald-400">
-                                                {form.watch('purchasePrice') > 0 ? (((form.watch('sellingPrice') - form.watch('purchasePrice')) / form.watch('purchasePrice')) * 100).toFixed(0) : '0'}%
+                                                {sellingPrice > 0 ? (((sellingPrice - purchasePrice) / sellingPrice) * 100).toFixed(0) : '0'}%
                                             </p>
                                         </div>
                                     </div>
@@ -599,11 +712,3 @@ export function SaisieMesuresVerres({ onAddToCart }: SaisieMesuresVerresProps) {
 
 // Sub-components as defined in the native Shadcn template would go here 
 // for cleaner code, but for this refactoring we keep it cohesive.
-
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";

@@ -18,6 +18,7 @@ import {
 import type { Sale, Client } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { PrintPreviewDialog } from '@/components/printing/print-preview-dialog';
+import { printInPlace } from '@/lib/print-in-place';
 
 // Shop settings type (matching InvoicePDF)
 interface ShopSettings {
@@ -45,19 +46,19 @@ export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsPro
     const [showPrintPreview, setShowPrintPreview] = React.useState(false);
     const { toast } = useToast();
 
-    // Unified Print — opens /print/facture/[id] in a new tab
+    // Unified Print — uses iframe utility for same-page printing
     const handlePrint = () => {
-        window.open(`/print/facture/${sale.id}`, '_blank');
+        printInPlace(`/print/facture/${sale.id}`);
     };
 
     // PDF download — open print page with autoprint=true so browser saves it
     const handleDownload = () => {
-        window.open(`/print/facture/${sale.id}?autoprint=true`, '_blank');
+        window.open(`/print/facture/${sale.id}?autoprint=1`, '_blank', "noopener,noreferrer");
     };
 
     // Aperçu design actuel — same URL, no autoprint
     const handlePreviewLatestDesign = () => {
-        window.open(`/print/facture/${sale.id}`, '_blank');
+        window.open(`/print/facture/${sale.id}`, '_blank', "noopener,noreferrer");
     };
 
     const handleShare = async () => {

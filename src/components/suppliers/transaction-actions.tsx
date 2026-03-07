@@ -36,12 +36,13 @@ import {
   DialogTitle 
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { deleteSupplierOrder } from '@/app/actions/supplier-orders';
-import { deleteSupplierPayment } from '@/app/actions/supplier-payments';
+import { deleteSupplierOrder } from '@/app/actions/supplier-orders-actions';
+import { deleteSupplierPayment } from '@/app/actions/supplier-payments-actions';
 import { useSession } from 'next-auth/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { printInPlace } from '@/lib/print-in-place';
 
 interface TransactionActionsProps {
   transaction: {
@@ -50,7 +51,7 @@ interface TransactionActionsProps {
     reference: string;
     amount: number;
     date: Date;
-    supplierId: number;
+    supplierId: string;
   };
 }
 
@@ -60,7 +61,7 @@ export function TransactionActions({ transaction }: TransactionActionsProps) {
   const [showDeleteAlert, setShowDeleteAlert] = React.useState(false);
   const [showDetails, setShowDetails] = React.useState(false);
   
-  const id = parseInt(transaction.id.split('-')[1]);
+  const id = transaction.id.split('-').slice(1).join('-'); // Re-join if UUID contains hyphens
   const isAdmin = session?.user?.role === 'ADMIN';
 
   const handleDelete = async () => {
@@ -106,10 +107,10 @@ export function TransactionActions({ transaction }: TransactionActionsProps) {
             className="text-blue-600"
             onClick={() => {
               if (transaction.type === 'ACHAT') {
-                window.open(`/print/bon-commande/${id}`, '_blank');
+                printInPlace(`/print/bon-commande/${id}`);
               } else {
                 // Payments don't have their own print page yet
-                window.open(`/print/bon-commande/${id}`, '_blank');
+                printInPlace(`/print/bon-commande/${id}`);
               }
             }}
           >

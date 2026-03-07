@@ -7,6 +7,7 @@ import { fr } from 'date-fns/locale';
 import { Printer, ArrowLeft } from 'lucide-react';
 import { formatMAD } from '@/lib/format-currency';
 import { formatCurrencyToWords } from '@/lib/format-number-to-words';
+import { formatOpticalValue } from '@/lib/format-optical';
 import type { StandardDocumentData } from '@/types/document';
 import type { DocumentTemplateConfig } from '@/types/document-template';
 import { DEFAULT_TEMPLATE_CONFIG } from '@/types/document-template';
@@ -57,7 +58,8 @@ export function PrintDocumentTemplate({
   const tvaBreakdown = React.useMemo(() => {
     const map: Record<number, { base: number; tax: number; ttc: number }> = {};
     for (const item of data.items) {
-      const rate = item.tvaRate ?? 20;
+      const rawRate = Number(item.tvaRate);
+      const rate = isNaN(rawRate) ? 20 : rawRate;
       const ttc = item.total;
       const base = ttc / (1 + rate / 100);
       const tax = ttc - base;
@@ -73,6 +75,9 @@ export function PrintDocumentTemplate({
   const paymentMethods = data.shop.paymentMethods?.length
     ? data.shop.paymentMethods
     : ['Espèces', 'Chèque', 'Virement bancaire'];
+
+  // ── Dynamic Document Title for Printing/PDF (Devis, Reçu, Bon Cmd) ──────────
+
 
   return (
     <>
@@ -211,10 +216,10 @@ export function PrintDocumentTemplate({
               <div className="text-xs text-slate-900">
                 <p className="font-bold text-sm mb-1">{data.client.nom}</p>
                 {data.client.telephone && (
-                  <p className="text-slate-600 text-[10px]">{data.client.telephone}</p>
+                  <p className="text-[10px]" style={{ color: secondary }}>{data.client.telephone}</p>
                 )}
                 {data.client.adresse && (
-                  <p className="text-slate-600 text-[10px]">{data.client.adresse}</p>
+                  <p className="text-[10px]" style={{ color: secondary }}>{data.client.adresse}</p>
                 )}
                 {data.client.mutuelle && (
                   <div className="mt-1.5 text-[10px] text-blue-700 font-medium pt-1 border-t border-slate-200">
@@ -335,19 +340,24 @@ export function PrintDocumentTemplate({
                   {isBonCmd ? 'Qté cmdée' : 'Qté'}
                 </th>
                 <th className="py-2 text-right text-[9px] font-bold uppercase tracking-wider w-[12%]">
-                  {isBonCmd ? 'Prix unit. HT' : 'P.U. HT'}
+                  {isBonCmd ? 'Prix unit. HT' : 'P.U. TTC'}
                 </th>
                 <th className="py-2 pr-2 text-right text-[9px] font-bold uppercase tracking-wider w-[13%] rounded-tr-sm">
-                  {isBonCmd ? 'Montant HT' : 'Total HT'}
+                  {isBonCmd ? 'Montant HT' : 'Total TTC'}
                 </th>
               </tr>
             </thead>
             <tbody className="text-[10px]">
               {data.items.map((item, i) => {
-                // HT from TTC
-                const rate = item.tvaRate ?? 20;
-                const unitHT = item.prixUnitaire / (1 + rate / 100);
-                const totalHT = item.total / (1 + rate / 100);
+                // Always compute HT for TVA breakdown table (kept below)
+                const rawRate = Number(item.tvaRate);
+                const rate = isNaN(rawRate) ? 20 : rawRate;
+                const unitHT  = item.prixUnitaire / (1 + rate / 100);
+                const totalHT = item.total         / (1 + rate / 100);
+
+                // Rows: BON DE COMMANDE shows HT (B2B), all others show TTC
+                const displayUnitPrice  = isBonCmd ? unitHT  : item.prixUnitaire;
+                const displayTotalPrice = isBonCmd ? totalHT : item.total;
 
                 return (
                   <React.Fragment key={item.id ?? i}>
@@ -356,9 +366,9 @@ export function PrintDocumentTemplate({
                   >
                     <td className={`${isRecu ? 'py-1' : 'py-2'} pl-2 pr-2`}>
                       <p className="font-semibold text-slate-900 leading-tight">
-                        {item.description}
+                        {(item as any).lensType || (item as any).designation || (item as any).name || (item as any).supplierName || item.description}
                       </p>
-                      {item.reference && (
+                      {item.reference && !item.reference.startsWith('LENS-PACK') && (
                         <p className="text-[9px] text-slate-500 font-mono mt-0.5">
                           Réf: {item.reference}
                         </p>
@@ -389,44 +399,72 @@ export function PrintDocumentTemplate({
                         </div>
                       )}
                     </td>
-                    <td className={`${isRecu ? 'py-1' : 'py-2'} text-slate-700`}>{item.marque  ?? '-'}</td>
-                    <td className={`${isRecu ? 'py-1' : 'py-2'} text-slate-700`}>{item.modele  ?? '-'}</td>
-                    <td className={`${isRecu ? 'py-1' : 'py-2'} text-center text-slate-600 font-medium`}>
+                    <td className={`${isRecu ? 'py-1' : 'py-2'} text-slate-700`}>{(item.marque && item.marque !== 'N/A' && item.marque !== '-') ? item.marque : ''}</td>
+                    <td className={`${isRecu ? 'py-1' : 'py-2'} text-slate-700`}>{(item.modele && item.modele !== 'N/A' && item.modele !== '-') ? item.modele : ''}</td>
+                    <td className={`${isRecu ? 'py-1' : 'py-2'} text-center font-medium`} style={{ color: secondary }}>
                       {item.quantite}
                     </td>
-                    <td className={`${isRecu ? 'py-1' : 'py-2'} text-right text-slate-600 font-medium`}>
-                      {unitHT.toFixed(2)}
+                    <td className={`${isRecu ? 'py-1' : 'py-2'} text-right font-medium`} style={{ color: secondary }}>
+                      {displayUnitPrice.toFixed(2)}
                     </td>
                     <td className={`${isRecu ? 'py-1' : 'py-2'} pr-2 text-right font-bold text-slate-900`}>
-                      {totalHT.toFixed(2)}
+                      {displayTotalPrice.toFixed(2)}
                     </td>
                   </tr>
-                  {item.lensDetails && (
-                    <tr className="border-b border-slate-100 last:border-0 break-inside-avoid bg-slate-50/50">
-                      <td colSpan={isBonCmd ? 4 : 6} className="pb-2.5 pl-2 pr-2 pt-1 border-t-0">
-                        <div className="flex flex-wrap gap-2 text-print-black">
-                          {item.lensDetails.map((d: any, li: number) => (
-                            <div
-                              key={li}
-                              className="text-[9px] bg-white text-slate-700 px-2 py-1
-                                         rounded shadow-sm border border-slate-200 font-mono flex items-center gap-1.5"
-                            >
-                              <span className="font-bold border-r border-slate-300 pr-1.5" style={{ color: primary }}>{d.eye}</span>
-                              <span className="flex gap-2">
-                                {d.sphere   && <span>S: {d.sphere}</span>}
-                                {d.cylinder && <span>C: {d.cylinder}</span>}
-                                {d.axis     && <span>A: {d.axis}°</span>}
-                                {d.addition && <span>Add: {d.addition}</span>}
-                                {d.treatment && (
-                                  <span className="text-slate-500 italic pl-1 border-l border-slate-300">{d.treatment}</span>
-                                )}
-                              </span>
+                  {item.lensDetails && item.lensDetails.length > 0 && (() => {
+                    const meta = item.lensDetails[0] as any;
+                    const hasExtra = meta.geometry || meta.index || meta.brand || meta.treatment;
+                    return (
+                      <>
+                        <tr className="border-b border-slate-100 last:border-0 break-inside-avoid">
+                          <td colSpan={isBonCmd ? 4 : 6} className="pb-2 pl-4 pr-2 pt-0.5 border-t-0">
+                            <div className="space-y-0.5">
+                              {item.lensDetails!.map((d: any, li: number) => (
+                                <div key={li} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[9px] font-mono text-slate-700">
+                                  <span className="font-bold w-5 shrink-0" style={{ color: primary }}>{d.eye}</span>
+                                  <span className="text-slate-400">Sph</span><span className="font-medium">{formatOpticalValue(d.sphere)}</span>
+                                  <span className="text-slate-400">Cyl</span><span className="font-medium">{formatOpticalValue(d.cylinder)}</span>
+                                  <span className="text-slate-400">Axe</span><span className="font-medium">{d.axis ? `${d.axis}°` : '—'}</span>
+                                  {d.addition && <><span className="text-slate-400">Add</span><span className="font-medium">{d.addition}</span></>}
+                                  {d.ep       && <><span className="text-slate-400">EP</span><span className="font-medium">{d.ep}</span></>}
+                                  {d.hauteur  && <><span className="text-slate-400">Haut</span><span className="font-medium">{d.hauteur}</span></>}
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
+                          </td>
+                        </tr>
+                        {hasExtra && (
+                          <tr className="border-b border-slate-100 last:border-0 break-inside-avoid">
+                            <td colSpan={isBonCmd ? 4 : 6} className="pb-2 pl-4 pr-2 pt-0 border-t-0">
+                              <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[8.5px] text-slate-500 font-sans">
+                                {meta.geometry && (
+                                  <span className="bg-slate-100 rounded px-1.5 py-0.5 font-medium text-slate-600">
+                                    <span className="font-semibold">Géométrie:</span> {meta.geometry.charAt(0).toUpperCase() + meta.geometry.slice(1)}
+                                  </span>
+                                )}
+                                {meta.index && (
+                                  <span className="bg-slate-100 rounded px-1.5 py-0.5 font-medium text-slate-600">
+                                    <span className="font-semibold">Indice:</span> {meta.index}
+                                  </span>
+                                )}
+                                {meta.brand && (
+                                  <span className="bg-slate-100 rounded px-1.5 py-0.5 font-medium text-slate-600">
+                                    {meta.brand}
+                                  </span>
+                                )}
+                                {meta.treatment && (
+                                  <span className="bg-blue-50 rounded px-1.5 py-0.5 italic text-blue-600">
+                                    {meta.treatment}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })()}
+
                   </React.Fragment>
                 );
               })}
@@ -474,12 +512,12 @@ export function PrintDocumentTemplate({
           {/* Summary totals (right) */}
           <div className="w-64">
             <div className="space-y-1.5 mb-2 px-3">
-              <div className="flex justify-between text-[10px] text-slate-600">
+              <div className="flex justify-between text-[10px]" style={{ color: secondary }}>
                 <span className="font-medium">Total HT</span>
                 <span>{data.totals.sousTotal.toFixed(2)} DH</span>
               </div>
               {!isBonCmd && !isRecu && data.totals.tva != null && (
-                <div className="flex justify-between text-[10px] text-slate-600">
+                <div className="flex justify-between text-[10px]" style={{ color: secondary }}>
                   <span className="font-medium">Total TVA</span>
                   <span>{data.totals.tva.toFixed(2)} DH</span>
                 </div>
@@ -493,7 +531,7 @@ export function PrintDocumentTemplate({
                   {isBonCmd ? 'Total HT estimé' : 'Total TTC'}
                 </span>
                 <span className="text-lg font-bold text-white">
-                  {formatMAD(data.totals.totalTTC)}
+                  {formatMAD((data.totals as any).totalTTC ?? (data.totals as any).total ?? data.totals.sousTotal ?? 0)}
                 </span>
               </div>
             </div>
@@ -556,7 +594,7 @@ export function PrintDocumentTemplate({
             <p className="text-[9px] font-bold uppercase text-slate-700 mb-1.5">
               Modes de paiement acceptés
             </p>
-            <p className="text-[10px] text-slate-600">{paymentMethods.join(' • ')}</p>
+            <p className="text-[10px]" style={{ color: secondary }}>{paymentMethods.join(' • ')}</p>
           </div>
         )}
 
@@ -612,15 +650,15 @@ export function PrintDocumentTemplate({
             <div>
               <p className="font-bold uppercase mb-1 text-[8px]" style={{ color: primary }}>Conditions</p>
               {isBonCmd ? (
-                <p>Ce bon de commande est établi conformément à nos conditions générales d’achat.</p>
+                <p style={{ color: secondary }}>Ce bon de commande est établi conformément à nos conditions générales d’achat.</p>
               ) : isDevis ? (
-                <p>Ce devis est valable {data.validityDays ?? 15} jours.</p>
+                <p style={{ color: secondary }}>Ce devis est valable {data.validityDays ?? 15} jours.</p>
               ) : isRecu ? (
-                <p>Paiement reçu le {formatDate(data.date)}.</p>
+                <p style={{ color: secondary }}>Paiement reçu le {formatDate(data.date)}.</p>
               ) : (
                 <>
-                  <p>{data.shop.paymentTerms ?? 'Paiement comptant à réception.'}</p>
-                  <p>Marchandise livrée, non reprise, non échangée.</p>
+                  <p style={{ color: secondary }}>{data.shop.paymentTerms ?? 'Paiement comptant à réception.'}</p>
+                  <p style={{ color: secondary }}>Marchandise livrée, non reprise, non échangée.</p>
                 </>
               )}
             </div>

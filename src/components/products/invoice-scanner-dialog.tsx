@@ -58,6 +58,8 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Brand, Category, Material, Color, Supplier } from '@/lib/types';
 import { processAIScanResult } from '@/features/invoice-scanner/utils/process-scan-result';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useQueryClient } from '@tanstack/react-query';
+import { productKeys } from '@/hooks/use-products';
 
 // --- Schema Definition (Matching Manual Form) ---
 
@@ -105,6 +107,7 @@ export function InvoiceScannerDialog() {
     const [suppliers, setSuppliers] = React.useState<Supplier[]>([]);
     const [isCreatingSetting, setIsCreatingSetting] = React.useState(false);
     const router = useRouter();
+    const queryClient = useQueryClient();
 
     // Form
     const form = useForm<ScannerFormValues>({
@@ -265,12 +268,15 @@ export function InvoiceScannerDialog() {
                                         bank: created.bank ?? '',
                                         banque: created.bank ?? '',
                                         rib: created.rib ?? '',
+                                        contactEmail: created.contactEmail ?? undefined,
+                                        contactName: created.contactName ?? undefined,
+                                        contactPhone: created.contactPhone ?? undefined,
                                         notes: created.notes ?? '',
                                         status: created.status ?? 'Actif',
                                         statut: created.status ?? 'Actif',
                                         isActive: created.isActive ?? true,
                                         defaultTaxMode: created.defaultTaxMode ?? 'HT',
-                                        currentBalance: Number(created.currentBalance || 0),
+                                        currentBalance: 0,
                                         createdAt: created.createdAt ?? new Date(),
                                         dateCreation: created.createdAt ?? new Date(),
                                         updatedAt: created.updatedAt ?? new Date(),
@@ -428,6 +434,8 @@ export function InvoiceScannerDialog() {
                  setPreviewUrl(null);
                  form.reset();
                  replace([]);
+                 queryClient.invalidateQueries({ queryKey: productKeys.lists() });
+                 router.refresh(); // <-- Add this to update the table
              } else {
                  throw new Error(result.error);
              }
@@ -474,7 +482,15 @@ export function InvoiceScannerDialog() {
         });
     };
 
-    // P1: Duplicate Detection
+    const [customMargin, setCustomMargin] = React.useState<string>('');
+
+    const applyCustomMargin = () => {
+        const val = parseFloat(customMargin);
+        if (!isNaN(val) && val > 0) {
+            applyMarginToAll(val);
+        }
+    };
+
     const duplicateMap = React.useMemo(() => {
         const map = new Map<string, number[]>();
         fields.forEach((item, index) => {
@@ -676,6 +692,29 @@ export function InvoiceScannerDialog() {
                                                     {pct}%
                                                 </Button>
                                             ))}
+                                            <div className="w-px h-4 bg-slate-300 mx-0.5" />
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="999"
+                                                step="1"
+                                                placeholder="?"
+                                                value={customMargin}
+                                                onChange={e => setCustomMargin(e.target.value)}
+                                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); applyCustomMargin(); } }}
+                                                className="w-10 h-6 text-[10px] font-bold text-center bg-transparent border-none outline-none text-slate-600 placeholder:text-slate-300"
+                                            />
+                                            <span className="text-[10px] text-slate-400 font-bold">%</span>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 w-6 p-0 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 rounded text-[10px] font-bold"
+                                                onClick={applyCustomMargin}
+                                                title="Appliquer la marge personnalisée"
+                                            >
+                                                ✓
+                                            </Button>
                                         </div>
 
                                         <div className="h-8 w-px bg-slate-200 mx-1" />

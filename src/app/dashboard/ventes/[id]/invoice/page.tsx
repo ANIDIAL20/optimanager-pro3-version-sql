@@ -9,6 +9,8 @@ import { useToast } from '@/hooks/use-toast';
 import { BrandLoader } from '@/components/ui/loader-brand';
 import type { StandardDocumentData } from '@/types/document';
 import type { DocumentTemplateConfig } from '@/types/document-template';
+import { usePrintTitle } from '@/hooks/use-print-title';
+import { generatePdfFilename } from '@/lib/utils/filename';
 
 interface InvoicePageProps {
   params: Promise<{ id: string }>;
@@ -93,6 +95,10 @@ export default function InvoicePage({ params }: InvoicePageProps) {
       setIsLoading(false);
     });
   }, [id, router, toast]);
+
+  usePrintTitle(
+    data ? generatePdfFilename('Facture', data.documentNumber, data.client?.nom) : null
+  );
 
   if (isLoading) {
     return (

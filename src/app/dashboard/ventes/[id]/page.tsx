@@ -16,11 +16,12 @@ import { fr } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { ReturnItemsDialog } from '@/components/sales/return-items-dialog';
 import { PaymentDialog } from '@/components/dashboard/commandes/payment-dialog';
+import { LensOrderShareDialog } from '@/components/vente/LensOrderShareDialog';
 
-// Server Actions
 import { getSale } from '@/app/actions/sales-actions';
 import { getClient } from '@/app/actions/clients-actions';
 import { getShopProfile } from '@/app/actions/shop-actions';
+import { printInPlace } from '@/lib/print-in-place';
 
 export default function SaleDetailsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = React.use(params);
@@ -32,6 +33,7 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
     const [isLoading, setIsLoading] = React.useState(true);
     const [showReturnDialog, setShowReturnDialog] = React.useState(false);
     const [showPaymentDialog, setShowPaymentDialog] = React.useState(false);
+    const [showShareDialog, setShowShareDialog] = React.useState(false);
     const [refreshTrigger, setRefreshTrigger] = React.useState(0);
 
     const handleRefresh = React.useCallback(() => {
@@ -188,11 +190,11 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
                     {client && shopSettings && (
                         <>
                             <InvoiceActions sale={sale} client={client} shopSettings={shopSettings} />
-                            <Button variant="outline" className="gap-2" onClick={() => window.open(`/print/recu/${sale.id}`, "_blank")}>
+                            <Button variant="outline" className="gap-2" onClick={() => printInPlace(`/print/recu/${sale.id}`)}>
                                 <Printer className="h-4 w-4" />
                                 Imprimer Reçu
                             </Button>
-                            <Button variant="outline" className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50" onClick={() => window.open(`/dashboard/lens-orders/${sale.id}/print`, "_blank")}>
+                            <Button variant="outline" className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50" onClick={() => setShowShareDialog(true)}>
                                 <Glasses className="h-4 w-4" />
                                 Bon de Labo
                             </Button>
@@ -215,6 +217,11 @@ export default function SaleDetailsPage({ params }: { params: Promise<{ id: stri
                                 open={showPaymentDialog}
                                 onOpenChange={setShowPaymentDialog}
                                 onPaymentSuccess={handleRefresh}
+                            />
+                            <LensOrderShareDialog
+                                saleId={sale.id}
+                                open={showShareDialog}
+                                onOpenChange={setShowShareDialog}
                             />
                         </>
                     )}

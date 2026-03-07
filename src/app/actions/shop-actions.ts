@@ -178,11 +178,47 @@ export async function getDocumentConfig(): Promise<import('@/types/document-temp
     const stored = profile?.documentSettings as any;
     // If stored value is empty object (fresh row), return the default config
     if (!stored || Object.keys(stored).length === 0) return DEFAULT_TEMPLATE_CONFIG;
-    return stored as import('@/types/document-template').DocumentTemplateConfig;
+    // Merge with DEFAULT to fill any missing keys (e.g., fields added after user's last save)
+    return { ...DEFAULT_TEMPLATE_CONFIG, ...stored } as import('@/types/document-template').DocumentTemplateConfig;
   } catch (err) {
     console.error('[getDocumentConfig] DB error:', err);
     const { DEFAULT_TEMPLATE_CONFIG: def } = await import('@/types/document-template');
     return def;
+  }
+}
+
+/**
+ * Fetch document config for use inside Server Component print pages.
+ *
+ * Identical to getDocumentConfig() but wraps the entire function — including
+ * the auth() call — in a broad try/catch. This prevents a ClientFetchError
+ * (thrown when AUTH_URL / NEXTAUTH_URL is misconfigured, or when the page
+ * opens in a new browser tab before the session cookie is forwarded) from
+ * crashing the print page. Falls back to DEFAULT_TEMPLATE_CONFIG so the
+ * document still renders with a valid template.
+ *
+ * Do NOT use this for write operations — use getDocumentConfig() there.
+ */
+export async function getDocumentConfigForPrint(): Promise<import('@/types/document-template').DocumentTemplateConfig> {
+  const { DEFAULT_TEMPLATE_CONFIG } = await import('@/types/document-template');
+  try {
+    const session = await auth();
+    if (!session?.user?.id) return DEFAULT_TEMPLATE_CONFIG;
+
+    const [profile] = await db
+      .select({ documentSettings: shopProfiles.documentSettings })
+      .from(shopProfiles)
+      .where(eq(shopProfiles.userId, session.user.id))
+      .limit(1);
+
+    const stored = profile?.documentSettings as any;
+    if (!stored || Object.keys(stored).length === 0) return DEFAULT_TEMPLATE_CONFIG;
+    // Merge with DEFAULT to fill any missing keys (e.g., fields added after user's last save)
+    return { ...DEFAULT_TEMPLATE_CONFIG, ...stored } as import('@/types/document-template').DocumentTemplateConfig;
+  } catch {
+    // Swallow ClientFetchError / network errors / DB errors gracefully.
+    // The print page will render with the default template instead of crashing.
+    return DEFAULT_TEMPLATE_CONFIG;
   }
 }
 

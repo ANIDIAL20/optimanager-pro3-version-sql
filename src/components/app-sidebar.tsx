@@ -152,11 +152,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
 
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton asChild tooltip="Réception Groupée">
-                                        <BulkReceiveModal />
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
 
                                 <SidebarMenuItem>
                                     <SidebarMenuButton asChild isActive={pathname === '/dashboard/devis'} tooltip="Devis">

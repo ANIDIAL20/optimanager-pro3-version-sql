@@ -236,7 +236,7 @@ export const frameReservations = pgTable('frame_reservations', {
   id: serial('id').primaryKey(),
 
   // Note: storeId references users.id as 'stores' table doesn't exist in this project
-  storeId: text('store_id').notNull().references(() => users.id),
+  storeId: text('store_id').notNull(),
   clientId: integer('client_id').notNull().references(() => clients.id),
   clientName: text('client_name').notNull(),
 

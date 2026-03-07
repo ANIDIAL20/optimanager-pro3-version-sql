@@ -9,7 +9,10 @@ export * from './logs-misc';
 export * from './relations';
 export * from './suppliers.schema';
 export * from './notifications';
-
+export * from './expenses';
+export * from './reminders';
+export * from './supplier-credits';
+export * from './goods-receipts';
 
 // Types
 import { prescriptions } from './clients';

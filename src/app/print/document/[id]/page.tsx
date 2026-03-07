@@ -8,8 +8,9 @@ import { getDocumentAction } from '@/app/actions/document-actions';
 import { auth } from '@/auth';
 import { redirect, notFound } from 'next/navigation';
 import { eq } from 'drizzle-orm';
-import { PrintDocumentTemplate } from '@/components/printing/print-document-template';
+import { PrintShell } from '@/components/printing/print-shell';
 import type { StandardDocumentData } from '@/types/document';
+import { getDocumentConfig } from '@/app/actions/shop-actions';
 
 export default async function PrintDocumentPage({
   params,
@@ -32,6 +33,8 @@ export default async function PrintDocumentPage({
   const shopProfile = await db.query.shopProfiles.findFirst({
     where: eq(shopProfiles.userId, session.user.id),
   });
+
+  const config = await getDocumentConfig();
 
   const shop = shopProfile ?? {
     shopName: 'Mon Opticien',
@@ -84,8 +87,9 @@ export default async function PrintDocumentPage({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 print:bg-white print:py-0">
-      <PrintDocumentTemplate data={data} showToolbar />
-    </div>
+    <PrintShell 
+      data={data} 
+      config={config} 
+    />
   );
 }

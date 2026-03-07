@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import * as React from 'react';
@@ -58,6 +57,13 @@ const LensOrderSchema = z.object({
   sellingPrice: z.number().positive('Le prix de vente est obligatoire'),
   estimatedBuyingPrice: z.number().min(0).optional(),
 
+  pont: z.string().optional(),
+  branches: z.string().optional(),
+  diametreVerre: z.string().optional(),
+
+  indice: z.string().optional(),
+  matiere: z.string().optional(),
+
   treatments: z.array(z.string()).optional(),
   notes: z.string().optional(),
 });
@@ -92,6 +98,11 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
       lensType: '',
       sellingPrice: 0,
       estimatedBuyingPrice: undefined,
+      pont: '',
+      branches: '',
+      diametreVerre: '',
+      indice: '',
+      matiere: '',
       treatments: [],
       notes: '',
     },
@@ -104,7 +115,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
       try {
         const [prescriptionsRes, suppliersRes, treatmentsRes] = await Promise.all([
           getPrescriptions(clientId),
-          getSuppliersList(undefined),
+          getSuppliersList(),
           getSettings('treatments'),
         ]);
 
@@ -122,9 +133,9 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
 
         // Handle Treatments (returns Array directly)
         if (Array.isArray(treatmentsRes)) {
-          setTreatments(treatmentsRes);
+          setTreatments(treatmentsRes.filter((t: any) => t.name !== 'Polarisant'));
         } else if ((treatmentsRes as any).data) {
-          setTreatments((treatmentsRes as any).data);
+          setTreatments((treatmentsRes as any).data.filter((t: any) => t.name !== 'Polarisant'));
         }
 
       } catch (error) {
@@ -176,15 +187,14 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
     setIsSubmitting(true);
     try {
       // Validate conversions
-      const pId = parseInt(data.prescriptionId);
-      const sId = parseInt(data.supplierId);
-
-      if (isNaN(pId)) {
+      const pId = data.prescriptionId; // keep as string (or whatever it is originally)
+      if (!pId) {
         toast({ title: "Erreur", description: "Prescription invalide", variant: "destructive" });
         setIsSubmitting(false);
         return;
       }
-      if (isNaN(sId)) {
+      
+      if (!data.supplierId) {
         toast({ title: "Erreur", description: "Fournisseur invalide", variant: "destructive" });
         setIsSubmitting(false);
         return;
@@ -193,12 +203,17 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
       // Safe find using loose assumption (s.id could be number, data.supplierId is string)
       const supplier = suppliers.find(s => s.id?.toString() === data.supplierId);
 
-
+      const parsedClientId = parseInt(clientId);
+      if (isNaN(parsedClientId)) {
+        toast({ title: "Erreur", description: "Client invalide", variant: "destructive" });
+        setIsSubmitting(false);
+        return;
+      }
 
       const orderInput: LensOrderInput = {
-        clientId: parseInt(clientId),
-        prescriptionId: pId,
-        supplierId: sId,
+        clientId: parsedClientId,
+        prescriptionId: parseInt(pId) || null,
+        supplierId: data.supplierId,
         orderType: data.orderType,
         lensType: data.lensType,
         treatment: data.treatments?.join(', ') || null,
@@ -219,11 +234,13 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
 
         ecartPupillaireR: fullSelectedPrescription?.data?.od?.pd?.toString() || null,
         ecartPupillaireL: fullSelectedPrescription?.data?.og?.pd?.toString() || null,
-        diameterR: fullSelectedPrescription?.data?.od?.diameter?.toString() || null,
-        diameterL: fullSelectedPrescription?.data?.og?.diameter?.toString() || null,
+        diameterR: data.diametreVerre || fullSelectedPrescription?.data?.od?.diameter?.toString() || null,
+        diameterL: data.diametreVerre || fullSelectedPrescription?.data?.og?.diameter?.toString() || null,
 
-        matiere: fullSelectedPrescription?.data?.matiere || null,
-        indice: fullSelectedPrescription?.data?.indice || null,
+        matiere: data.matiere || fullSelectedPrescription?.data?.matiere || null,
+        indice: data.indice || fullSelectedPrescription?.data?.indice || null,
+        pont: data.pont || null,
+        branches: data.branches || null,
 
         // Professional Pricing
         sellingPrice: data.sellingPrice,
@@ -235,7 +252,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
         totalPrice: data.sellingPrice,
 
         status: 'pending',
-        notes: data.notes || '',
+        notes: data.notes || undefined,
       };
 
       const result = await createLensOrder(orderInput);
@@ -276,7 +293,12 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
           treatments: [],
           notes: '',
           sellingPrice: 0,
-          estimatedBuyingPrice: undefined
+          estimatedBuyingPrice: undefined,
+          pont: '',
+          branches: '',
+          diametreVerre: '',
+          indice: '',
+          matiere: '',
         });
         if (onSuccess) onSuccess();
       } else {
@@ -432,6 +454,60 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
               </div>
             )}
 
+            {mode !== 'contacts' && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <h3 className="font-headline text-lg">Caractéristiques Techniques</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <FormField
+                    control={form.control}
+                    name="indice"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Indice (Index)</FormLabel>
+                        <SearchableSelect
+                          options={[
+                            { label: '1.5 Standard', value: '1.5 Standard' },
+                            { label: '1.6 Aminci', value: '1.6 Aminci' },
+                            { label: '1.67 Très aminci', value: '1.67 Très aminci' },
+                            { label: '1.74 Ultra aminci', value: '1.74 Ultra aminci' },
+                          ]}
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="Sélectionner l'indice"
+                          searchPlaceholder="Rechercher..."
+                        />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="matiere"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Matière</FormLabel>
+                        <SearchableSelect
+                          options={[
+                            { label: 'Organique', value: 'Organique' },
+                            { label: 'Polycarbonate', value: 'Polycarbonate' },
+                            { label: 'Minéral', value: 'Minéral' },
+                            { label: 'Trivex', value: 'Trivex' },
+                          ]}
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="Sélectionner la matière"
+                          searchPlaceholder="Rechercher..."
+                        />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+            )}
+
             {mode === 'contacts' && (
               <FormField
                 control={form.control}
@@ -504,6 +580,56 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                 </FormItem>
               )}
             />
+
+            {/* Mesures de Montage */}
+            {mode !== 'contacts' && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <h3 className="font-headline text-lg">Mesures de Montage</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <FormField
+                    control={form.control}
+                    name="pont"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Pont</FormLabel>
+                        <FormControl>
+                          <Input placeholder="ex. 17" {...field} value={field.value ?? ''} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="branches"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Branches</FormLabel>
+                        <FormControl>
+                          <Input placeholder="ex. 145" {...field} value={field.value ?? ''} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="diametreVerre"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Diamètre Verre</FormLabel>
+                        <FormControl>
+                          <Input placeholder="ex. 70" {...field} value={field.value ?? ''} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* ========================================
                 PROFESSIONAL PRICING SECTION
@@ -666,7 +792,7 @@ export function LensOrderForm({ clientId, onSuccess, mode = 'glasses' }: LensOrd
                           </div>
                           <div>
                             <p className="text-xs font-medium text-slate-600">{status}</p>
-                            <p className="text-sm font-bold ${textColor}">Marge Prévisionnelle</p>
+                            <p className={`text-sm font-bold ${textColor}`}>Marge Prévisionnelle</p>
                           </div>
                         </div>
                         <div className="text-right">

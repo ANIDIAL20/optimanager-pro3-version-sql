@@ -42,6 +42,7 @@ import { useToast } from '@/hooks/use-toast';
 import { BrandLoader } from '@/components/ui/loader-brand';
 import { SensitiveData } from '@/components/ui/sensitive-data';
 import { ReceiveOrderDialog } from './receive-order-dialog';
+import { printInPlace } from '@/lib/print-in-place';
 
 interface LensOrderListProps {
   clientId: string;
@@ -242,7 +243,7 @@ export function LensOrderList({ clientId, clientName, mode = 'glasses', onUseOrd
   // Navigate to the dedicated Bon de Commande Labo print page
   const handlePrint = () => {
     if (!selectedOrder) return;
-    window.open(`/dashboard/lens-orders/${selectedOrder.id}/print`, '_blank');
+    printInPlace(`/dashboard/lens-orders/${selectedOrder.id}/print`);
     setIsShareDialogOpen(false);
   };
   const handleUpdateStatus = async () => {

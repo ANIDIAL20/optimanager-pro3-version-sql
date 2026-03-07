@@ -17,9 +17,9 @@ const reminderSchema = z.object({
   priority: z.enum(['urgent', 'important', 'normal', 'info']).default('normal'),
   title: z.string().min(1, 'Le titre est requis'),
   message: z.string().optional(),
-  status: z.enum(['pending', 'read', 'completed', 'ignored']).default('pending'),
+  status: z.enum(['pending', 'read', 'completed', 'ignored', 'snoozed', 'cancelled']).default('pending'),
   dueDate: z.string().optional().nullable(), // String for form submission, converted to Date
-  relatedId: z.number().optional().nullable(),
+  relatedId: z.union([z.number(), z.string()]).optional().nullable(),
   relatedType: z.string().optional().nullable(),
   metadata: z.any().optional(),
 });
@@ -37,6 +37,7 @@ export async function getReminders(filters?: {
   startDate?: string;
   endDate?: string;
   search?: string; // For searching in title (e.g. Client Name)
+  page?: number;
 }) {
   const session = await auth();
 
@@ -79,6 +80,14 @@ export async function getReminders(filters?: {
     ) as any);
   }
 
+  const countQuery = db
+    .select({ count: sql<number>`count(*)` })
+    .from(reminders)
+    .where(and(...conditions));
+
+  const totalData = await countQuery;
+  const totalCount = Number(totalData[0]?.count || 0);
+
   let query = db
     .select()
     .from(reminders)
@@ -89,13 +98,14 @@ export async function getReminders(filters?: {
       desc(reminders.createdAt)
     );
 
-  if (filters?.limit) {
-    // @ts-ignore
-    query = query.limit(filters.limit);
-  }
+  const limitParam = filters?.limit || 20;
+  const pageParam = filters?.page || 1;
+  const offsetParam = (pageParam - 1) * limitParam;
+
+  query = query.limit(limitParam).offset(offsetParam);
 
   const data = await query;
-  return data;
+  return { data, totalCount, hasMore: (offsetParam + data.length) < totalCount };
 }
 
 /**
@@ -308,6 +318,48 @@ export async function completeReminder(id: number) {
 }
 
 /**
+ * Snooze a reminder by adding days to its dueDate
+ */
+export async function snoozeReminder(id: number, addDays: 1 | 7) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    throw new Error('Non authentifié');
+  }
+
+  const currentReminder = await db.query.reminders.findFirst({
+    where: and(eq(reminders.id, id), eq(reminders.userId, session.user.id))
+  });
+
+  if (!currentReminder?.dueDate) {
+    return null;
+  }
+
+  const newDate = new Date(currentReminder.dueDate);
+  newDate.setDate(newDate.getDate() + addDays);
+
+  const [updated] = await db
+    .update(reminders)
+    .set({
+      status: 'snoozed',
+      dueDate: newDate,
+      updatedAt: new Date(),
+    } as any)
+    .where(
+      and(
+        eq(reminders.id, id),
+        eq(reminders.userId, session.user.id)
+      )
+    )
+    .returning();
+
+  revalidatePath('/dashboard');
+  revalidatePath('/');
+  revalidateTag('reminders');
+  return updated;
+}
+
+/**
  * Delete a reminder
  */
 export async function deleteReminder(id: number) {
@@ -430,8 +482,29 @@ export async function checkDeadlines(shouldRevalidate = true) {
   }
   */
 
+  // Get existing pending payment reminders in bulk for both sales and supplier_orders
+  const existingPaymentReminders = await db
+    .select()
+    .from(reminders)
+    .where(
+      and(
+        eq(reminders.userId, session.user.id),
+        eq(reminders.type, 'payment'),
+        eq(reminders.status, 'pending')
+      )
+    );
+
+  const existingSalesRemindersMap = new Set(
+    existingPaymentReminders.filter(r => r.relatedType === 'sales').map(r => String(r.relatedId))
+  );
+
+  const existingSupplierRemindersMap = new Set(
+    existingPaymentReminders.filter(r => r.relatedType === 'supplier_orders').map(r => String(r.relatedId))
+  );
+
+  const newRemindersToInsert = [];
+
   // 2. Check Unpaid Sales (Debts)
-  // Get unpaid sales
   const unpaidSales = await db
     .select()
     .from(sales)
@@ -442,45 +515,28 @@ export async function checkDeadlines(shouldRevalidate = true) {
       )
     );
 
-  // Check if reminder already exists for each unpaid sale
   for (const sale of unpaidSales) {
-    const existingReminder = await db
-      .select()
-      .from(reminders)
-      .where(
-        and(
-          eq(reminders.userId, session.user.id),
-          eq(reminders.type, 'payment'),
-          eq(reminders.relatedId, sale.id),
-          eq(reminders.relatedType, 'sales'),
-          eq(reminders.status, 'pending')
-        )
-      )
-      .limit(1);
-
-    if (existingReminder.length === 0) {
-      // Check if it's due (e.g., older than 7 days)
+    if (!existingSalesRemindersMap.has(String(sale.id))) {
       const saleDate = sale.date ? new Date(sale.date) : new Date();
       const diffTime = Math.abs(new Date().getTime() - saleDate.getTime());
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
       if (diffDays >= 7) {
-        await db.insert(reminders).values({
+        newRemindersToInsert.push({
           userId: session.user.id,
           type: 'payment',
           priority: diffDays > 30 ? 'urgent' : 'important',
           title: `Paiement en attente: ${sale.clientName}`,
           message: `Reste à payer: ${sale.resteAPayer} DH pour la vente #${sale.saleNumber || sale.id}.`,
           status: 'pending',
-          relatedId: sale.id,
+          relatedId: String(sale.id),
           relatedType: 'sales',
           dueDate: new Date(), // Due immediately
           metadata: { details: `Vente du ${saleDate.toLocaleDateString()}`, totalAmount: sale.totalTTC, resteAPayer: sale.resteAPayer },
-        } as any);
+        });
         newRemindersCount++;
       }
     }
-
   }
 
   // 3. Check Supplier Payment Deadlines
@@ -497,64 +553,55 @@ export async function checkDeadlines(shouldRevalidate = true) {
   for (const order of dueSupplierOrders) {
     if (!order.dueDate) continue;
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const due = new Date(order.dueDate);
-    due.setHours(0, 0, 0, 0);
+    if (!existingSupplierRemindersMap.has(String(order.id))) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const due = new Date(order.dueDate);
+        due.setHours(0, 0, 0, 0);
 
-    const diffTime = due.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const diffTime = due.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-    let shouldRemind = false;
-    let priority = 'normal';
-    let msg = '';
+        let shouldRemind = false;
+        let priority = 'normal';
+        let msg = '';
 
-    if (diffDays < 0) {
-      shouldRemind = true;
-      priority = 'urgent';
-      msg = `FACTURE IMPAYÉE: Commande ${order.fournisseur} en retard de ${Math.abs(diffDays)} jours.`;
-    } else if (diffDays <= 3) {
-      shouldRemind = true;
-      priority = diffDays === 0 ? 'urgent' : 'important';
-      msg = `ÉCHÉANCE PROCHE: Commande ${order.fournisseur} à payer dans ${diffDays} jours.`;
+        if (diffDays < 0) {
+          shouldRemind = true;
+          priority = 'urgent';
+          msg = `FACTURE IMPAYÉE: Commande ${order.fournisseur} en retard de ${Math.abs(diffDays)} jours.`;
+        } else if (diffDays <= 3) {
+          shouldRemind = true;
+          priority = diffDays === 0 ? 'urgent' : 'important';
+          msg = `ÉCHÉANCE PROCHE: Commande ${order.fournisseur} à payer dans ${diffDays} jours.`;
+        }
+
+        if (shouldRemind) {
+          newRemindersToInsert.push({
+            userId: session.user.id,
+            type: 'payment',
+            priority: priority,
+            title: `Paiement Fournisseur: ${order.fournisseur}`,
+            message: msg,
+            status: 'pending',
+            relatedId: String(order.id),
+            relatedType: 'supplier_orders',
+            dueDate: order.dueDate,
+            metadata: {
+              details: `Montant dû: ${order.resteAPayer} DH`,
+              orderId: order.id,
+              totalAmount: order.montantTotal,
+              resteAPayer: order.resteAPayer
+            },
+          });
+          newRemindersCount++;
+        }
     }
+  }
 
-    if (shouldRemind) {
-      const existingReminder = await db
-        .select()
-        .from(reminders)
-        .where(
-          and(
-            eq(reminders.userId, session.user.id),
-            eq(reminders.type, 'payment'),
-            eq(reminders.relatedId, order.id),
-            eq(reminders.relatedType, 'supplier_orders'),
-            eq(reminders.status, 'pending')
-          )
-        )
-        .limit(1);
-
-      if (existingReminder.length === 0) {
-        await db.insert(reminders).values({
-          userId: session.user.id,
-          type: 'payment',
-          priority: priority,
-          title: `Paiement Fournisseur: ${order.fournisseur}`,
-          message: msg,
-          status: 'pending',
-          relatedId: order.id,
-          relatedType: 'supplier_orders',
-          dueDate: order.dueDate,
-          metadata: {
-            details: `Montant dû: ${order.resteAPayer} DH`,
-            orderId: order.id,
-            totalAmount: order.montantTotal,
-            resteAPayer: order.resteAPayer
-          },
-        } as any);
-        newRemindersCount++;
-      }
-    }
+  // 4. Batch Insert
+  if (newRemindersToInsert.length > 0) {
+    await db.insert(reminders).values(newRemindersToInsert).onConflictDoNothing();
   }
 
   if (newRemindersCount > 0 && shouldRevalidate) {

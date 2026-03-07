@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { Download, Database, RotateCcw, AlertTriangle, Upload, Trash2 } from 'lucide-react';
 import { exportUserData, getBackupStats, restoreUserData, resetUserAccount } from '@/app/actions/backup-actions';
 import { Input } from '@/components/ui/input';
@@ -22,7 +22,6 @@ import { Separator } from '@/components/ui/separator';
 import { BrandLoader } from '@/components/ui/loader-brand';
 
 export function DataBackup() {
-    const { toast } = useToast();
     const [isDownloading, setIsDownloading] = React.useState(false);
     const [isRestoring, setIsRestoring] = React.useState(false);
     const [isResetting, setIsResetting] = React.useState(false);
@@ -74,14 +73,11 @@ export function DataBackup() {
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
             
-            toast({
-                title: 'Backup téléchargé',
+            toast.success('Backup téléchargé', {
                 description: 'Format compressé (GZIP). Conservez-le en lieu sûr.',
             });
         } catch (error) {
-            toast({
-                variant: 'destructive',
-                title: 'Erreur',
+            toast.error('Erreur', {
                 description: "Impossible d'exporter les données.",
             });
         } finally {
@@ -101,9 +97,19 @@ export function DataBackup() {
             const result = await restoreUserData(formData);
             
             if (result.success) {
-                toast({
-                    title: 'Restauration réussie',
-                    description: `${result.count} enregistrements restaurés avec succès.`,
+                const v = (result as any).validation;
+                const bv = (result as any).backupVersion ?? '1.x';
+                toast.success(`Restauration réussie — v${bv}`, {
+                    description: v
+                        ? [
+                            `👥 Clients : ${v.clients.restored}/${v.clients.expected}`,
+                            `📦 Produits : ${v.products.restored}/${v.products.expected}`,
+                            `💰 Ventes : ${v.sales.restored}/${v.sales.expected}`,
+                            `🏪 Fournisseurs : ${v.suppliers.restored}/${v.suppliers.expected}`,
+                            `📋 Ordonnances : ${v.prescriptions.restored}/${v.prescriptions.expected}`,
+                          ].join('\n')
+                        : 'Vos données ont été restaurées avec succès.',
+                    duration: 8000,
                 });
                 setShowConfirmRestore(false);
                 setRestoreFile(null);
@@ -111,9 +117,7 @@ export function DataBackup() {
                 window.location.reload();
             }
         } catch (error: any) {
-            toast({
-                variant: 'destructive',
-                title: 'Échec de la restauration',
+            toast.error('Échec de la restauration', {
                 description: error.message || "Une erreur inconnue est survenue.",
             });
         } finally {
@@ -129,8 +133,7 @@ export function DataBackup() {
             setIsResetting(true);
             await resetUserAccount();
             
-            toast({
-                title: 'Compte réinitialisé',
+            toast.success('Compte réinitialisé', {
                 description: "Toutes les données ont été effacées avec succès.",
             });
             setShowConfirmReset(false);
@@ -138,9 +141,7 @@ export function DataBackup() {
             loadStats();
             window.location.reload();
         } catch (error: any) {
-            toast({
-                variant: 'destructive',
-                title: 'Échec de la réinitialisation',
+            toast.error('Échec de la réinitialisation', {
                 description: error.message,
             });
         } finally {

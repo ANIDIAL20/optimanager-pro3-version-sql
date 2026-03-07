@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { getSupplierStatement } from '@/app/actions/supplier-statement';
 
-export function useSupplierStatement(supplierId: number) {
+export function useSupplierStatement(supplierId: string) {
   return useQuery({
     queryKey: ['supplier-statement', supplierId],
     queryFn: () => getSupplierStatement(supplierId),

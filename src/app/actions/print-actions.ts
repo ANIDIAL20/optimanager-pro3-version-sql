@@ -38,14 +38,28 @@ export const getPrintData = secureAction(async (userId, user, documentId: string
                 const { desc } = await import('drizzle-orm');
                 const itemsWithLensDetails = await Promise.all((result.items as any[] || []).map(async (item) => {
                     let lensDetails = item.lensDetails;
-                    
+
+                    // Broadened detection: any item that looks like a lens/verre product
+                    const ref = (item.reference ?? '').toLowerCase();
+                    const cat = (item.category ?? item.categorie ?? '').toLowerCase();
+                    const typ = (item.productType ?? item.type ?? '').toLowerCase();
+                    const nom = (item.productName ?? item.nomProduit ?? item.designation ?? '').toLowerCase();
                     const isVerre =
-                        item.reference?.startsWith('VERRE-') ||
-                        item.reference?.startsWith('LG-') ||
-                        item.productType === 'VERRE' ||
-                        item.category === 'Verres';
+                        ref.startsWith('verre-') ||
+                        ref.startsWith('lg-') ||
+                        ref.startsWith('lens-') ||
+                        typ === 'verre' ||
+                        typ === 'lens' ||
+                        cat.includes('verre') ||
+                        cat.includes('lens') ||
+                        nom.includes('verre') ||
+                        nom.includes('progressif') ||
+                        nom.includes('unifocal') ||
+                        nom.includes('bifocal') ||
+                        nom.includes('transitions');
 
                     if (isVerre && !lensDetails) {
+                        // Strict: only the lens order explicitly linked to THIS sale
                         const lensOrder = await db.query.lensOrders.findFirst({
                             where: and(
                                 eq(lensOrders.saleId, result.id),
@@ -53,28 +67,44 @@ export const getPrintData = secureAction(async (userId, user, documentId: string
                             ),
                             orderBy: desc(lensOrders.createdAt),
                         });
+                        // ⚠️ No clientId fallback — it would pull lens orders from OTHER sales
+
 
                         if (lensOrder) {
                             lensDetails = [];
-                            if (lensOrder.sphereR || lensOrder.cylindreR) {
-                                lensDetails.push({
-                                    eye: 'OD',
-                                    sphere: lensOrder.sphereR,
-                                    cylinder: lensOrder.cylindreR,
-                                    axis: lensOrder.axeR,
-                                    addition: lensOrder.additionR,
-                                    treatment: lensOrder.treatment,
-                                });
-                            }
-                            if (lensOrder.sphereL || lensOrder.cylindreL) {
-                                lensDetails.push({
-                                    eye: 'OG',
-                                    sphere: lensOrder.sphereL,
-                                    cylinder: lensOrder.cylindreL,
-                                    axis: lensOrder.axeL,
-                                    addition: lensOrder.additionL,
-                                    treatment: lensOrder.treatment,
-                                });
+                            if (lensOrder.sphereR || lensOrder.cylindreR || lensOrder.sphereL || lensOrder.cylindreL) {
+                                if (lensOrder.sphereR || lensOrder.cylindreR) {
+                                    lensDetails.push({
+                                        eye: 'OD',
+                                        sphere: lensOrder.sphereR ?? undefined,
+                                        cylinder: lensOrder.cylindreR ?? undefined,
+                                        axis: lensOrder.axeR ?? undefined,
+                                        addition: lensOrder.additionR ?? undefined,
+                                        ep: lensOrder.ecartPupillaireR ?? undefined,
+                                        hauteur: lensOrder.hauteurR ?? undefined,
+                                        treatment: lensOrder.treatment ?? undefined,
+                                        // Shared metadata (same for both eyes)
+                                        geometry: lensOrder.orderType ?? undefined,
+                                        index: lensOrder.indice ?? undefined,
+                                        brand: lensOrder.lensType ?? undefined,
+                                    });
+                                }
+                                if (lensOrder.sphereL || lensOrder.cylindreL) {
+                                    lensDetails.push({
+                                        eye: 'OG',
+                                        sphere: lensOrder.sphereL ?? undefined,
+                                        cylinder: lensOrder.cylindreL ?? undefined,
+                                        axis: lensOrder.axeL ?? undefined,
+                                        addition: lensOrder.additionL ?? undefined,
+                                        ep: lensOrder.ecartPupillaireL ?? undefined,
+                                        hauteur: lensOrder.hauteurL ?? undefined,
+                                        treatment: lensOrder.treatment ?? undefined,
+                                        // Shared metadata (same for both eyes)
+                                        geometry: lensOrder.orderType ?? undefined,
+                                        index: lensOrder.indice ?? undefined,
+                                        brand: lensOrder.lensType ?? undefined,
+                                    });
+                                }
                             }
                         }
                     }

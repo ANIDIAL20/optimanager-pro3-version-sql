@@ -4,12 +4,13 @@ import React from 'react';
 import type { Client, OrderDetail, Sale } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Download, Printer, Share2 } from 'lucide-react';
+import { Download, Printer, Share2, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/logo';
 import { SensitiveData } from '@/components/ui/sensitive-data';
 import { formatCurrencyToWords } from '@/lib/format-number-to-words';
+import { printInPlace } from '@/lib/print-in-place';
 
 interface SaleWithDetails extends Sale {
   details: OrderDetail[];
@@ -25,11 +26,15 @@ export function Invoice({ sale, client }: InvoiceProps) {
 
   // All print/PDF actions now route through the unified print page
   const handlePrint = () => {
-    window.open(`/print/facture/${sale.id}`, '_blank');
+    printInPlace(`/print/facture/${sale.id}`);
   };
 
   const handleDownloadPdf = () => {
-    window.open(`/print/facture/${sale.id}?autoprint=true`, '_blank');
+    window.open(`/print/facture/${sale.id}?autoprint=1`, '_blank', "noopener,noreferrer");
+  };
+
+  const handlePreview = () => {
+    window.open(`/print/facture/${sale.id}`, '_blank', "noopener,noreferrer");
   };
 
   const handleShare = () => {
@@ -136,8 +141,9 @@ export function Invoice({ sale, client }: InvoiceProps) {
       </div>
       <div className="p-4 bg-muted flex justify-end gap-2">
         <Button variant="outline" onClick={handleShare}><Share2 className="mr-2" /> Partager</Button>
-        <Button variant="outline" onClick={handlePrint}><Printer className="mr-2" /> Imprimer</Button>
-        <Button onClick={handleDownloadPdf}><Download className="mr-2" /> Télécharger PDF</Button>
+        <Button variant="outline" onClick={handlePreview}><FileText className="mr-2 h-4 w-4" /> Aperçu</Button>
+        <Button variant="outline" onClick={handlePrint}><Printer className="mr-2 h-4 w-4" /> Imprimer</Button>
+        <Button onClick={handleDownloadPdf}><Download className="mr-2 h-4 w-4" /> Télécharger PDF</Button>
       </div>
     </div>
   );

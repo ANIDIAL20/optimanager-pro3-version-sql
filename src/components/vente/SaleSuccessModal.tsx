@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Printer, Glasses, Home, Receipt } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { printInPlace } from "@/lib/print-in-place";
 
 interface SaleSuccessModalProps {
   isOpen: boolean;
@@ -20,18 +21,18 @@ export function SaleSuccessModal({ isOpen, onClose, saleId, avance, lensOrderIds
   const router = useRouter();
 
   const handlePrintInvoice = () => {
-    window.open(`/print/facture/${saleId}`, "_blank");
+    printInPlace(`/print/facture/${saleId}`);
   };
 
   const handlePrintRecu = () => {
-    window.open(`/print/recu/${saleId}`, "_blank");
+    printInPlace(`/print/recu/${saleId}`);
   };
 
   const handlePrintLabOrder = () => {
     if (lensOrderIds && lensOrderIds.length > 0) {
       // Open one tab per lens order
       lensOrderIds.forEach((id) => {
-        window.open(`/dashboard/lens-orders/${id}/print`, "_blank");
+        printInPlace(`/dashboard/lens-orders/${id}/print`);
       });
     } else {
       // Fallback: no lens order IDs passed — open global lens orders list

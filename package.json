@@ -11,7 +11,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "db:push": "drizzle-kit push",
+    "db:push": "drizzle-kit push && npx tsx --env-file=.env.local scripts/create-views.ts",
     "db:studio": "drizzle-kit studio",
     "db:migrate": "tsx scripts/migrate-firebase-to-neon.ts",
     "db:migrate:all": "tsx scripts/migrate-all-collections.ts",

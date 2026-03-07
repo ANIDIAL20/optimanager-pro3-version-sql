@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Page, Text, View, Document, StyleSheet, Image } from '@react-pdf/renderer';
 import { format, isValid } from 'date-fns';
 import { formatCurrencyToWords } from '@/lib/format-number-to-words';
+import { formatOpticalValue } from '@/lib/format-optical';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocType, type DocumentSettings, type DocumentSettingsBase } from '@/types/document-settings-types';
 
 // Helper for formatting currency
@@ -285,8 +286,8 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
                     <View key={i} style={styles.tableRow} wrap={false}>
                         <View style={styles.rowMain}>
                             <View style={styles.colDesc}>
-                                <Text>{item.productName || item.label}</Text>
-                                {item.reference && <Text style={{fontSize: 8, color: '#718096', marginTop: 2}}>Réf: {item.reference}</Text>}
+                                <Text>{item.lensType || item.designation || item.name || item.supplierName || item.productName || item.label}</Text>
+                                {item.reference && !item.reference.startsWith('LENS-PACK') && <Text style={{fontSize: 8, color: '#718096', marginTop: 2}}>Réf: {item.reference}</Text>}
                             </View>
                             <Text style={styles.colBrand}>{item.brand || '-'}</Text>
                             <Text style={styles.colModel}>{item.model || '-'}</Text>
@@ -301,8 +302,8 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
                                 {od && (
                                     <View style={styles.opticalRow}>
                                         <Text style={[styles.optVal, {width: '8%', color: primaryColor}]}>OD</Text>
-                                        <Text style={styles.optLabel}>Sph: <Text style={styles.optVal}>{od.sphere}</Text></Text>
-                                        <Text style={styles.optLabel}>Cyl: <Text style={styles.optVal}>{od.cylinder}</Text></Text>
+                                        <Text style={styles.optLabel}>Sph: <Text style={styles.optVal}>{formatOpticalValue(od.sphere)}</Text></Text>
+                                        <Text style={styles.optLabel}>Cyl: <Text style={styles.optVal}>{formatOpticalValue(od.cylinder)}</Text></Text>
                                         {od.axis && <Text style={styles.optLabel}>Axe: <Text style={styles.optVal}>{od.axis}°</Text></Text>}
                                         {od.addition && <Text style={styles.optLabel}>Add: <Text style={styles.optVal}>{od.addition}</Text></Text>}
                                     </View>
@@ -310,8 +311,8 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
                                 {og && (
                                     <View style={styles.opticalRow}>
                                         <Text style={[styles.optVal, {width: '8%', color: primaryColor}]}>OG</Text>
-                                        <Text style={styles.optLabel}>Sph: <Text style={styles.optVal}>{og.sphere}</Text></Text>
-                                        <Text style={styles.optLabel}>Cyl: <Text style={styles.optVal}>{og.cylinder}</Text></Text>
+                                        <Text style={styles.optLabel}>Sph: <Text style={styles.optVal}>{formatOpticalValue(og.sphere)}</Text></Text>
+                                        <Text style={styles.optLabel}>Cyl: <Text style={styles.optVal}>{formatOpticalValue(og.cylinder)}</Text></Text>
                                         {og.axis && <Text style={styles.optLabel}>Axe: <Text style={styles.optVal}>{og.axis}°</Text></Text>}
                                         {og.addition && <Text style={styles.optLabel}>Add: <Text style={styles.optVal}>{og.addition}</Text></Text>}
                                     </View>
@@ -336,7 +337,7 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
                 </View>
                 <View style={styles.totalFinal}>
                     <Text style={{fontSize: 12, fontWeight: 'bold', color: primaryColor}}>NET À PAYER</Text>
-                    <Text style={{fontSize: 12, fontWeight: 'bold', color: primaryColor}}>{formatMoney(Number(doc.totalTTC || 0))}</Text>
+                    <Text style={{fontSize: 12, fontWeight: 'bold', color: primaryColor}}>{formatMoney(Number(doc.totalTTC || doc.total || doc.sousTotal || 0))}</Text>
                 </View>
             </View>
         </View>

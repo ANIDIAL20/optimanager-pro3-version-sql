@@ -1,77 +1,55 @@
-'use client';
-
 import * as React from 'react';
-import { getSuppliersList } from '@/app/actions/supplier-actions';
+import { Suspense } from 'react';
 import { getGlobalSupplierBalances } from '@/app/actions/supplier-orders-actions';
+import { getSuppliersListPaginated } from '@/app/actions/supplier-actions';
+import { requireAuth } from '@/lib/auth-helpers';
 
 import { columns as supplierColumns } from '@/components/dashboard/fournisseurs/columns';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { Button } from '@/components/ui/button';
-import {
-  Plus,
-  Truck,
-  Eye,
-  Glasses,
-  AlertTriangle,
-  PackageCheck
-} from 'lucide-react';
+import { Plus, Truck, AlertTriangle } from 'lucide-react';
 import { BulkReceiveModal } from '@/components/suppliers/BulkReceiveModal';
 import Link from 'next/link';
-import { Separator } from '@/components/ui/separator';
 import { SuppliersClientView } from './_components/suppliers-client-view';
-import { BrandLoader } from '@/components/ui/loader-brand';
+import { SuppliersTableSkeleton } from './_components/suppliers-table-skeleton';
 import { SensitiveData } from '@/components/ui/sensitive-data';
 
 export const dynamic = 'force-dynamic';
 
-export default function SuppliersPage() {
-  const [suppliers, setSuppliers] = React.useState<any[]>([]);
-  const [globalStats, setGlobalStats] = React.useState({ total_purchases: 0, total_debt: 0 });
-  const [loading, setLoading] = React.useState(true);
+export default async function SuppliersPage({ 
+  searchParams 
+}: { 
+  searchParams: Promise<Record<string, string>> | Record<string, string> 
+}) {
+  const user = await requireAuth();
+  // Using Promise.resolve ensures we can await searchParams safely whether it's an object or a Promise (Next.js 15+ async searchParams)
+  const awaitedParams = await Promise.resolve(searchParams);
+  
+  // Extract query parameters
+  const search = awaitedParams.search || '';
+  const category = (awaitedParams.category !== 'all' && awaitedParams.category) ? awaitedParams.category : undefined;
+  const page = parseInt(awaitedParams.page || '1', 10) || 1;
 
-  React.useEffect(() => {
-    const fetchSuppliers = async () => {
-      try {
-        const [suppliersData, globalData] = await Promise.all([
-          getSuppliersList(),
-          getGlobalSupplierBalances()
-        ]);
+  // Fetch paginated data for the current page
+  // ✅ Direct call — auth() works normally in Server Components (no unstable_cache)
+  const result = await getSuppliersListPaginated({
+    search,
+    category,
+    page,
+    limit: 20
+  });
 
-        // Handle secureActionWithResponse wrapper
-        const suppliersList = Array.isArray(suppliersData) ? suppliersData : (suppliersData?.data || []);
-        setSuppliers(suppliersList);
-
-        if (globalData?.success && globalData?.data) {
-          setGlobalStats(globalData.data);
-        } else if (globalData && typeof globalData === 'object' && 'total_purchases' in globalData) {
-          // Handle case where data is not wrapped
-          setGlobalStats(globalData as any);
-        }
-      } catch (error) {
-        console.error("Failed to fetch suppliers:", error);
-        setSuppliers([]); // Ensure suppliers is always an array
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSuppliers();
-  }, []);
-
-  // Calculate stats
-  const stats = React.useMemo(() => ({
-    total: suppliers.length,
-    verres: suppliers.filter(s => s.category?.includes('Verres') || s.category?.includes('Lenses')).length,
-    montures: suppliers.filter(s => s.category?.includes('Montures') || s.category?.includes('Frames')).length,
-  }), [suppliers]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full min-h-[400px]">
-        <BrandLoader size="lg" />
-      </div>
-    );
+  // Fetch global metrics
+  const globalData = await getGlobalSupplierBalances();
+  let globalStats = { total_purchases: 0, total_debt: 0 };
+  
+  if (globalData?.success && globalData?.data) {
+     globalStats = globalData.data;
+  } else if (globalData && typeof globalData === 'object' && 'total_purchases' in globalData) {
+     globalStats = globalData as any;
   }
+
+  const { data: suppliers, totalCount, totalPages } = result;
 
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8 pt-6">
@@ -111,7 +89,7 @@ export default function SuppliersPage() {
             </div>
             <div>
               <p className="text-sm font-medium text-slate-600">Total Fournisseurs</p>
-              <h3 className="text-2xl font-bold text-slate-800">{stats.total}</h3>
+              <h3 className="text-2xl font-bold text-slate-800">{totalCount}</h3>
             </div>
           </div>
         </SpotlightCard>
@@ -145,8 +123,18 @@ export default function SuppliersPage() {
         </SpotlightCard>
       </div>
 
-      {/* Client-side search and filtering */}
-      <SuppliersClientView suppliers={suppliers} columns={supplierColumns} />
+      {/* Client-side search and filtering mapped over URL parameters + Main Table */}
+      <Suspense fallback={<SuppliersTableSkeleton />}>
+        <SuppliersClientView 
+           initialData={suppliers} 
+           columns={supplierColumns} 
+           totalCount={totalCount}
+           currentPage={page}
+           totalPages={totalPages}
+           initialSearch={search}
+           initialCategory={category || 'all'}
+        />
+      </Suspense>
     </div>
   );
 }

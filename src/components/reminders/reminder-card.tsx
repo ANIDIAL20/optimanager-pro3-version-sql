@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
 import { Button } from '@/components/ui/button';
@@ -8,31 +6,21 @@ import { CheckCircle, Clock, Trash2, AlertCircle, Info, Bell, DollarSign, Box, S
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { completeReminder, deleteReminder, markReminderAsRead } from '@/app/actions/reminder-actions';
-import { useToast } from '@/hooks/use-toast';
 import { EditReminderDialog } from './edit-reminder-dialog';
-
-interface Reminder {
-  id: number;
-  type: string;
-  priority: string;
-  title: string;
-  message?: string | null;
-  status: string;
-  dueDate?: Date | null;
-  createdAt: Date;
-  metadata?: any;
-}
+import { useReminders, Reminder } from '@/hooks/use-reminders';
 
 interface ReminderCardProps {
   reminder: Reminder;
   onUpdate: () => void;
+  onOptimisticDelete?: () => void;
+  onOptimisticComplete?: () => void;
 }
 
-export function ReminderCard({ reminder, onUpdate }: ReminderCardProps) {
-  const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
+export function ReminderCard({ reminder, onUpdate, onOptimisticDelete, onOptimisticComplete }: ReminderCardProps) {
   const [editOpen, setEditOpen] = useState(false);
+  const { isPending, handleComplete, handleDelete } = useReminders({
+    onSuccess: onUpdate
+  });
 
   // Priority config with SpotlightCard colors
   const priorityConfig: Record<string, { color: string; spotlightColor: string; icon: any; label: string; border: string; glow: string }> = {
@@ -84,32 +72,6 @@ export function ReminderCard({ reminder, onUpdate }: ReminderCardProps) {
   const config = priorityConfig[reminder.priority] || priorityConfig.normal;
   const TypeIcon = typeIcons[reminder.type] || Info;
 
-  const handleComplete = async () => {
-    try {
-      setIsLoading(true);
-      await completeReminder(reminder.id);
-      toast({ title: 'Rappel terminé', description: 'Le rappel a été marqué comme traité.' });
-      onUpdate();
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de terminer le rappel.' });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    try {
-      setIsLoading(true);
-      await deleteReminder(reminder.id);
-      toast({ title: 'Rappel supprimé', description: 'Le rappel a été supprimé.' });
-      onUpdate();
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de supprimer le rappel.' });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
     <>
       <SpotlightCard
@@ -127,7 +89,13 @@ export function ReminderCard({ reminder, onUpdate }: ReminderCardProps) {
         {/* Header */}
         <div className="space-y-4">
           <div className="flex justify-between items-start">
-            <div className="flex gap-2 items-center flex-wrap">
+            <div className="flex gap-2 items-center flex-wrap relative">
+              {reminder.priority === 'urgent' && reminder.status !== 'completed' && (
+                <span className="absolute -left-2 -top-2 flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+                </span>
+              )}
               <Badge variant="outline" className={cn("flex gap-1 items-center", config.color)}>
                 <config.icon className="h-3 w-3" />
                 {config.label}
@@ -172,8 +140,8 @@ export function ReminderCard({ reminder, onUpdate }: ReminderCardProps) {
                 size="sm"
                 variant="outline"
                 className="h-8 border-green-200 text-green-700 hover:bg-green-50 hover:text-green-800"
-                onClick={handleComplete}
-                disabled={isLoading}
+                onClick={() => handleComplete(reminder.id, onOptimisticComplete)}
+                disabled={isPending}
               >
                 <CheckCircle className="h-3.5 w-3.5 mr-1" />
                 Terminer
@@ -184,7 +152,7 @@ export function ReminderCard({ reminder, onUpdate }: ReminderCardProps) {
               variant="ghost"
               className="h-8 text-slate-400 hover:text-blue-500"
               onClick={() => setEditOpen(true)}
-              disabled={isLoading}
+              disabled={isPending}
             >
               <Pencil className="h-3.5 w-3.5" />
             </Button>
@@ -192,8 +160,8 @@ export function ReminderCard({ reminder, onUpdate }: ReminderCardProps) {
               size="sm"
               variant="ghost"
               className="h-8 text-slate-400 hover:text-red-500"
-              onClick={handleDelete}
-              disabled={isLoading}
+              onClick={() => handleDelete(reminder.id, onOptimisticDelete)}
+              disabled={isPending}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>

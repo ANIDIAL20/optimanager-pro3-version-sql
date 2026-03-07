@@ -19,7 +19,13 @@ import { PrintDocumentTemplate } from '@/components/printing/print-document-temp
 import type { DocumentTemplateConfig, TemplateId, HeaderLayout, FontSize } from '@/types/document-template';
 import { DEFAULT_TEMPLATE_CONFIG } from '@/types/document-template';
 import { saveDocumentConfig, getDocumentConfig } from '@/app/actions/shop-actions';
-import type { StandardDocumentData } from '@/types/document.js';
+import { getLensOrderPreviewData } from '@/app/actions/lens-orders-actions';
+import {
+  LensOrderPrintClient,
+  type LensOrderData,
+  type ShopData,
+} from '@/app/dashboard/lens-orders/[id]/print/_components/lens-order-print-client';
+import type { StandardDocumentData } from '@/types/document';
 
 // ── Demo data for live preview ──────────────────────────────────────────────
 const DEMO_SHOP = {
@@ -180,6 +186,13 @@ export function DocumentSettingsForm({ shopId, initialShopProfile, initialConfig
   const [previewType, setPreviewType] = useState<'FACTURE' | 'DEVIS' | 'BON DE COMMANDE' | 'REÇU'>('FACTURE');
   const [isPending, startTransition] = useTransition();
 
+  // ── Real Lens Order (Bon Cmd) preview data ─────────────────────────────────
+  // Fetched lazily the first time the "Bon Cmd" tab is opened.
+  // null  = not yet fetched OR no lens orders exist (shows demo)
+  const [lensPreviewData, setLensPreviewData] = useState<{ order: LensOrderData; shop: ShopData | null } | null>(null);
+  const [lensPreviewLoading, setLensPreviewLoading] = useState(false);
+  const [lensPreviewFetched, setLensPreviewFetched] = useState(false);
+
   // ── Dynamic A4 scale ───────────────────────────────────────────────────────
   // 794px ≈ 210mm at 96 dpi (A4 width). We keep a small padding factor so the
   // sheet doesn't touch the container edges.
@@ -217,6 +230,21 @@ export function DocumentSettingsForm({ shopId, initialShopProfile, initialConfig
     return () => ro.disconnect();
   }, [recalcScale]);
 
+  // Lazy-fetch real lens order data the first time "Bon Cmd" tab is opened
+  useEffect(() => {
+    if (previewType !== 'BON DE COMMANDE' || lensPreviewFetched) return;
+    setLensPreviewLoading(true);
+    getLensOrderPreviewData()
+      .then((result) => {
+        setLensPreviewData(result ?? null);
+      })
+      .catch(() => setLensPreviewData(null))
+      .finally(() => {
+        setLensPreviewFetched(true);
+        setLensPreviewLoading(false);
+      });
+  }, [previewType, lensPreviewFetched]);
+
   // Build shop from initialShopProfile if available
   const demoShop: typeof DEMO_SHOP = {
     ...DEMO_SHOP,
@@ -228,6 +256,8 @@ export function DocumentSettingsForm({ shopId, initialShopProfile, initialConfig
     rib: initialShopProfile?.rib ?? DEMO_SHOP.rib,
   };
   const demoData = buildDemo(previewType, demoShop);
+  // For BON DE COMMANDE: previewData is always demoData (LensOrderPrintClient renders separately)
+  const previewData: StandardDocumentData = demoData;
 
   const update = (patch: Partial<DocumentTemplateConfig>) =>
     setConfig(prev => ({ ...prev, ...patch }));
@@ -488,6 +518,16 @@ export function DocumentSettingsForm({ shopId, initialShopProfile, initialConfig
             <Printer className="h-4 w-4 text-indigo-400" />
             Aperçu en direct
             <span className="text-[10px] text-slate-400 font-normal ml-1">— mise à jour instantanée</span>
+            {/* Bon de Commande real-data status badge */}
+            {previewType === 'BON DE COMMANDE' && (
+              lensPreviewLoading
+                ? <span className="text-[9px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded ml-1">Chargement...</span>
+                : lensPreviewFetched && !lensPreviewData
+                  ? <span className="text-[9px] bg-amber-900/60 text-amber-300 px-1.5 py-0.5 rounded ml-1">Aperçu démo — aucune commande</span>
+                  : lensPreviewData
+                    ? <span className="text-[9px] bg-green-900/60 text-green-300 px-1.5 py-0.5 rounded ml-1">Données réelles ✓</span>
+                    : null
+            )}
           </div>
           {/* Doc type toggle */}
           <div className="flex bg-slate-700 rounded-lg p-0.5">
@@ -519,11 +559,19 @@ export function DocumentSettingsForm({ shopId, initialShopProfile, initialConfig
             }}
             className="shadow-2xl"
           >
-            <PrintDocumentTemplate
-              data={demoData}
-              config={config}
-              showToolbar={false}
-            />
+            {previewType === 'BON DE COMMANDE' && lensPreviewData ? (
+              <LensOrderPrintClient
+                data={lensPreviewData}
+                config={config}
+                showToolbar={false}
+              />
+            ) : (
+              <PrintDocumentTemplate
+                data={previewData}
+                config={config}
+                showToolbar={false}
+              />
+            )}
           </div>
         </div>
 

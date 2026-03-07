@@ -31,7 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { createSupplierPayment } from '@/app/actions/supplier-orders-actions';
+import { createSupplierPayment } from '@/app/actions/supplier-payments-actions';
 import { useRouter } from 'next/navigation';
 
 const paymentSchema = z.object({
@@ -49,7 +49,7 @@ interface SupplierPaymentDialogProps {
     onOpenChange: (open: boolean) => void;
     supplierId: string;
     supplierName: string;
-    orderId?: number; // Optional: Pay for a specific order
+    orderId?: string; // Optional: Pay for a specific order
     maxAmount?: number; // Optional: Remaining debt on that order
 }
 

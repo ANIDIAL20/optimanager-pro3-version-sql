@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, boolean, decimal, integer, json, jsonb, primaryKey, uuid, index, real, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, timestamp, boolean, decimal, integer, json, jsonb, primaryKey, uuid, index, real, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
 import type { AdapterAccount } from "next-auth/adapters";
 import { relations, sql } from 'drizzle-orm';
 import { users } from './auth-core';
@@ -24,7 +24,7 @@ export const auditLog = pgTable("audit_log", {
 // ✅ Structured Audit Logs (NEW)
 export const auditLogs = pgTable('audit_logs', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: text('user_id').notNull().references(() => users.id),
+  userId: text('user_id').notNull(),
   entityType: text('entity_type').notNull(), // 'sale', 'product', 'client'
   entityId: text('entity_id').notNull(),
   action: text('action').notNull(), // 'create', 'update', 'delete', 'login'
@@ -58,24 +58,5 @@ export const stockMovements = pgTable('stock_movements', {
   date: timestamp('date'),
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow(),
-});
-
-// ========================================
-// REMINDERS TABLE
-// ========================================
-export const reminders = pgTable('reminders', {
-  id: serial('id').primaryKey(),
-  userId: text('user_id').notNull(), // Data isolation
-  type: text('type').notNull(), // 'cheque', 'payment', 'stock', 'order', 'appointment', 'maintenance', 'admin'
-  priority: text('priority').notNull().default('normal'), // 'urgent', 'important', 'normal', 'info'
-  title: text('title').notNull(),
-  message: text('message'),
-  status: text('status').notNull().default('pending'), // 'pending', 'read', 'completed', 'ignored'
-  dueDate: timestamp('due_date'),
-  relatedId: integer('related_id'), // Generic FK
-  relatedType: text('related_type'), // Table name for FK
-  metadata: json('metadata'), // Extra data (amount, action link, etc.)
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
 });
 

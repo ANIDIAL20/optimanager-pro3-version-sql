@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { createSupplierOrder } from '@/app/actions/supplier-orders';
+import { createSupplierOrder } from '@/app/actions/supplier-orders-actions';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 

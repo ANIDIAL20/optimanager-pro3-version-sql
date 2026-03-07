@@ -46,23 +46,17 @@ const PrescriptionSchema = z.object({
   odCylindre: z.string().optional(),
   odAxe: z.string().optional(),
   odAddition: z.string().optional(),
-  odBc: z.string().optional(),
-  odDia: z.string().optional(),
 
   ogSphere: z.string().optional(),
   ogCylindre: z.string().optional(),
   ogAxe: z.string().optional(),
   ogAddition: z.string().optional(),
-  ogBc: z.string().optional(),
-  ogDia: z.string().optional(),
 
+  ecartPupillaireTotal: z.string().optional(),
   odEcartPupillaire: z.string().optional(),
   ogEcartPupillaire: z.string().optional(),
   odHauteurMontage: z.string().optional(),
   ogHauteurMontage: z.string().optional(),
-  pontage: z.string().optional(),
-  branches: z.string().optional(),
-  diametre: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -83,21 +77,15 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
       odCylindre: '',
       odAxe: '',
       odAddition: '',
-      odBc: '',
-      odDia: '',
       ogSphere: '',
       ogCylindre: '',
       ogAxe: '',
       ogAddition: '',
-      ogBc: '',
-      ogDia: '',
+      ecartPupillaireTotal: '',
       odEcartPupillaire: '',
       ogEcartPupillaire: '',
       odHauteurMontage: '',
       ogHauteurMontage: '',
-      pontage: '',
-      branches: '',
-      diametre: '',
       notes: '',
       prescripteur: '',
     },
@@ -261,7 +249,36 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
             </div>
 
             <div className="space-y-4">
-              <h3 className="font-headline text-lg">Correction Optique et Lentilles</h3>
+              <h3 className="font-headline text-lg">Correction Optique</h3>
+              <div className="mb-2">
+                <FormField
+                  control={form.control}
+                  name="ecartPupillaireTotal"
+                  render={({ field }) => (
+                    <FormItem className="max-w-xs">
+                      <FormLabel className="text-primary font-bold">Écart Pupillaire Total</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="ex: 64" 
+                          {...field} 
+                          value={field.value ?? ''}
+                          onChange={(e) => {
+                            field.onChange(e);
+                            const val = parseFloat(e.target.value);
+                            if (!isNaN(val)) {
+                              form.setValue('odEcartPupillaire', (val / 2).toString());
+                              form.setValue('ogEcartPupillaire', (val / 2).toString());
+                            } else if (e.target.value === '') {
+                              form.setValue('odEcartPupillaire', '');
+                              form.setValue('ogEcartPupillaire', '');
+                            }
+                          }}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
                 {/* Oeil Droit */}
                 <div className="space-y-4 rounded-lg border p-4">
@@ -279,12 +296,7 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
                     <FormField control={form.control} name="odAddition" render={({ field }) => (
                       <FormItem><FormLabel>Addition</FormLabel><FormControl><Input placeholder="+0.00" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                     )} />
-                    <FormField control={form.control} name="odBc" render={({ field }) => (
-                      <FormItem><FormLabel>BC (Lentilles)</FormLabel><FormControl><Input placeholder="8.6" {...field} value={field.value ?? ''} /></FormControl></FormItem>
-                    )} />
-                    <FormField control={form.control} name="odDia" render={({ field }) => (
-                      <FormItem><FormLabel>DIA (Lentilles)</FormLabel><FormControl><Input placeholder="14.2" {...field} value={field.value ?? ''} /></FormControl></FormItem>
-                    )} />
+
                     <FormField control={form.control} name="odEcartPupillaire" render={({ field }) => (
                       <FormItem className="border-t pt-2"><FormLabel className="text-primary font-bold">Écart Pup. (OD)</FormLabel><FormControl><Input placeholder="32" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                     )} />
@@ -309,12 +321,7 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
                     <FormField control={form.control} name="ogAddition" render={({ field }) => (
                       <FormItem><FormLabel>Addition</FormLabel><FormControl><Input placeholder="+0.00" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                     )} />
-                    <FormField control={form.control} name="ogBc" render={({ field }) => (
-                      <FormItem><FormLabel>BC (Lentilles)</FormLabel><FormControl><Input placeholder="8.6" {...field} value={field.value ?? ''} /></FormControl></FormItem>
-                    )} />
-                    <FormField control={form.control} name="ogDia" render={({ field }) => (
-                      <FormItem><FormLabel>DIA (Lentilles)</FormLabel><FormControl><Input placeholder="14.2" {...field} value={field.value ?? ''} /></FormControl></FormItem>
-                    )} />
+
                     <FormField control={form.control} name="ogEcartPupillaire" render={({ field }) => (
                       <FormItem className="border-t pt-2"><FormLabel className="text-primary font-bold">Écart Pup. (OG)</FormLabel><FormControl><Input placeholder="32" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                     )} />
@@ -323,20 +330,6 @@ export function PrescriptionForm({ clientId, onSuccess }: PrescriptionFormProps)
                     )} />
                   </div>
                 </div>
-              </div>
-            </div>
-            <div className="space-y-4">
-              <h3 className="font-headline text-lg">Mesures de Montage</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                <FormField control={form.control} name="pontage" render={({ field }) => (
-                  <FormItem><FormLabel>Pontage</FormLabel><FormControl><Input placeholder="e.g., 17" {...field} value={field.value ?? ''} /></FormControl></FormItem>
-                )} />
-                <FormField control={form.control} name="branches" render={({ field }) => (
-                  <FormItem><FormLabel>Branches</FormLabel><FormControl><Input placeholder="e.g., 145" {...field} value={field.value ?? ''} /></FormControl></FormItem>
-                )} />
-                <FormField control={form.control} name="diametre" render={({ field }) => (
-                  <FormItem><FormLabel>Diamètre Verre</FormLabel><FormControl><Input placeholder="e.g., 70" {...field} value={field.value ?? ''} /></FormControl></FormItem>
-                )} />
               </div>
             </div>
 

@@ -37,7 +37,7 @@ const paymentSchema = z.object({
   bank: z.string().optional(),
   notes: z.string().optional(),
   allocations: z.array(z.object({
-    orderId: z.number(),
+    orderId: z.string(),
     amount: z.number(),
     orderRef: z.string().optional(),
     maxAmount: z.number().optional()
@@ -118,7 +118,7 @@ export function SupplierPaymentForm() {
         
         if (allocate > 0) {
             newAllocations.push({
-                orderId: parseInt(order.id),
+                orderId: String(order.id),
                 amount: allocate,
                 orderRef: order.orderReference || `#${order.id}`,
                 maxAmount: debt
@@ -338,7 +338,7 @@ export function SupplierPaymentForm() {
                              </div>
                              {unpaidOrders.map(order => {
                                  const debt = order.totalAmount - order.amountPaid;
-                                 const currentAlloc = allocations.find(a => a.orderId === parseInt(order.id))?.amount || 0;
+                                 const currentAlloc = allocations.find(a => a.orderId === String(order.id))?.amount || 0;
                                  
                                  return (
                                      <div key={order.id} className="flex items-center justify-between gap-4 py-2">
@@ -361,10 +361,10 @@ export function SupplierPaymentForm() {
                                                 max={debt}
                                                 onChange={e => {
                                                     const val = Math.min(parseFloat(e.target.value) || 0, debt);
-                                                    const existing = allocations.filter(a => a.orderId !== parseInt(order.id));
+                                                    const existing = allocations.filter(a => a.orderId !== String(order.id));
                                                     if (val > 0) {
                                                         form.setValue('allocations', [...existing, {
-                                                            orderId: parseInt(order.id),
+                                                            orderId: String(order.id),
                                                             amount: val,
                                                             orderRef: order.orderReference,
                                                             maxAmount: debt

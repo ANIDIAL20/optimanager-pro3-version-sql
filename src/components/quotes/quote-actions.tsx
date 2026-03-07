@@ -18,6 +18,7 @@ import type { Devis } from '@/app/actions/devis-actions';
 import type { Client } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { PrintPreviewDialog } from '@/components/printing/print-preview-dialog';
+import { printInPlace } from '@/lib/print-in-place';
 
 interface ShopSettings {
     shopName: string;
@@ -41,17 +42,17 @@ export function QuoteActions({ devis, shopSettings, client }: QuoteActionsProps)
 
     // ✅ Aperçu design actuel — opens /print/devis/[id]
     const handlePreviewLatestDesign = () => {
-        window.open(`/print/devis/${devis.id}`, '_blank');
+        window.open(`/print/devis/${devis.id}`, '_blank', "noopener,noreferrer");
     };
 
-    // Unified Print — opens /print/devis/[id] in a new tab
+    // Unified Print — uses the iframe utility for same-page printing
     const handlePrint = () => {
-        window.open(`/print/devis/${devis.id}`, '_blank');
+        printInPlace(`/print/devis/${devis.id}`);
     };
 
     // PDF download — open with autoprint so browser can save
     const handleDownload = () => {
-        window.open(`/print/devis/${devis.id}?autoprint=true`, '_blank');
+        window.open(`/print/devis/${devis.id}?autoprint=1`, '_blank', "noopener,noreferrer");
     };
 
     const handleShare = async () => {

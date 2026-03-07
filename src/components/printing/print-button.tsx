@@ -4,6 +4,7 @@ import React from 'react';
 import { Printer, FileDown, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { printInPlace } from '@/lib/print-in-place';
 
 export type PrintDocType = 'facture' | 'devis' | 'bon-commande' | 'recu';
 export type PrintVariant = 'print' | 'pdf' | 'share';
@@ -59,7 +60,13 @@ export function PrintButton({
       }
       return;
     }
-    window.open(buildUrl(), '_blank');
+    const url = buildUrl();
+
+    if (variant === 'print') {
+      printInPlace(url);
+    } else {
+      window.open(url, '_blank');
+    }
   };
 
   const icons: Record<PrintVariant, React.ReactNode> = {

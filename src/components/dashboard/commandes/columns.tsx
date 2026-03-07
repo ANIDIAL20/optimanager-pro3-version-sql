@@ -24,8 +24,10 @@ import type { Sale } from "@/lib/types";
 import { SensitiveData } from "@/components/ui/sensitive-data";
 import { InvoiceActions } from "@/components/invoices/invoice-actions";
 import { PaymentDialog } from "./payment-dialog";
+import { LensOrderShareDialog } from "@/components/vente/LensOrderShareDialog";
 import { deleteSale, updateDeliveryStatus } from "@/app/actions/sales-actions";
 import { useToast } from "@/hooks/use-toast";
+import { printInPlace } from "@/lib/print-in-place";
 
 // Extended Sale type with client info for display
 export type Order = Sale & {
@@ -243,6 +245,7 @@ export const columns: ColumnDef<Order>[] = [
 function OrderActions({ order }: { order: Order }) {
     const router = useRouter();
     const [showPaymentDialog, setShowPaymentDialog] = React.useState(false);
+    const [showShareDialog, setShowShareDialog] = React.useState(false);
     
     // TODO: Replace with SQL queries
     // const firestore = useFirestore();
@@ -313,12 +316,12 @@ function OrderActions({ order }: { order: Order }) {
                             Voir les détails
                         </DropdownMenuItem>
 
-                        <DropdownMenuItem onClick={() => window.open(`/print/recu/${order.id}`, "_blank")}>
+                        <DropdownMenuItem onClick={() => printInPlace(`/print/recu/${order.id}`)}>
                             <span className="mr-2">🖨️</span>
                             Imprimer le Reçu
                         </DropdownMenuItem>
 
-                        <DropdownMenuItem onClick={() => window.open(`/dashboard/lens-orders/${order.id}/print`, "_blank")}>
+                        <DropdownMenuItem onClick={() => setShowShareDialog(true)}>
                             <Glasses className="mr-2 h-4 w-4" />
                             Bon de Labo
                         </DropdownMenuItem>
@@ -381,11 +384,17 @@ function OrderActions({ order }: { order: Order }) {
                 </DropdownMenu>
             </div>
 
-            {/* Payment Dialog */}
             <PaymentDialog
                 order={order}
                 open={showPaymentDialog}
                 onOpenChange={setShowPaymentDialog}
+            />
+
+            {/* Bon de Labo / Share Dialog */}
+            <LensOrderShareDialog
+                saleId={order.id}
+                open={showShareDialog}
+                onOpenChange={setShowShareDialog}
             />
         </>
     );

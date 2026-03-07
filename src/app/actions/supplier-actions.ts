@@ -1,101 +1,77 @@
-// @ts-nocheck
-
 'use server';
 
 import { db } from '@/db';
-import { suppliers } from '@/db/schema';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { suppliers, supplierBalanceView } from '@/db/schema';
+import { eq, and, desc, sql, like } from 'drizzle-orm';
 import { secureAction, secureActionWithResponse } from '@/lib/secure-action';
 import { revalidatePath, revalidateTag } from 'next/cache';
-import { unstable_noStore as noStore } from 'next/cache';
 import { measurePerformance } from '@/lib/performance';
 import { getClientUsageStats } from './adminActions';
-
-
-// Helper to serialize contact info into notes
-function serializeContactInfo(data: any) {
-  const contact = {
-    nom: data.contactNom,
-    tel: data.contactTelephone,
-    email: data.contactEmail
-  };
-  // If no contact info, return original notes
-  if (!contact.nom && !contact.tel && !contact.email) return data.notes || '';
-  
-  const contactJson = JSON.stringify(contact);
-  const cleanNotes = (data.notes || '').replace(/\[CONTACT_DATA_JSON:.*?\]/, '').trim();
-  return `${cleanNotes}\n[CONTACT_DATA_JSON:${contactJson}]`;
-}
-
-// Helper to deserialize
-function parseContactInfo(notes: string | null) {
-  if (!notes) return { nom: '', tel: '', email: '', cleanNotes: '' };
-  
-  const match = notes.match(/\[CONTACT_DATA_JSON:(.*?)\]/);
-  if (match && match[1]) {
-    try {
-      const contact = JSON.parse(match[1]);
-      const cleanNotes = notes.replace(match[0], '').trim();
-      return { ...contact, cleanNotes };
-    } catch (e) { 
-      return { nom: '', tel: '', email: '', cleanNotes: notes }; 
-    }
-  }
-  return { nom: '', tel: '', email: '', cleanNotes: notes }; // No contact data found
-}
+import { CACHE_TAGS } from '@/lib/cache-tags';
 
 /**
  * Get all suppliers for the current user
  */
 export const getSuppliersList = secureActionWithResponse(async (userId, user) => {
   return await measurePerformance(`getSuppliersList-${userId}`, async () => {
-    noStore();
-    
-    console.log('⚡ [v2] Fetching suppliers list for user:', userId);
+    console.log('⚡ [v3] Fetching suppliers list for user:', userId);
 
     try {
-      const results = await db.query.suppliers.findMany({
-        where: eq(suppliers.userId, userId),
-        orderBy: [desc(suppliers.createdAt)]
-      });
+      // ✅ Étape 2 — JOIN avec la view pour obtenir le solde réel calculé
+      const results = await db
+        .select()
+        .from(suppliers)
+        .leftJoin(
+          supplierBalanceView,
+          and(
+            eq(supplierBalanceView.supplierId, suppliers.id),
+            eq(supplierBalanceView.userId, suppliers.userId)
+          )
+        )
+        .where(eq(suppliers.userId, userId))
+        .orderBy(desc(suppliers.createdAt));
       
-      const mappedItems = results.map((row: any) => {
-        const contactInfo = parseContactInfo(row.notes);
-        return {
-          id: row.id,
-          userId: row.userId,
-          name: row.name || '',
-          email: row.email || '',
-          phone: row.phone || '',
-          address: row.address || '',
-          city: row.city || '',
-          ice: row.ice || '',
-          if: row.if || '',
-          rc: row.rc || '',
-          taxId: row.taxId || '',
-          category: row.category || '',
-          paymentTerms: row.paymentTerms || '30',
-          paymentMethod: row.paymentMethod || '',
-          bank: row.bank || '',
-          rib: row.rib || '',
-          notes: contactInfo.cleanNotes,
-          status: row.status || 'Actif',
-          createdAt: row.createdAt,
-          updatedAt: row.updatedAt,
-          
-          // Legacy/UI Compatibility keys
-          nomCommercial: row.name || '',
-          telephone: row.phone || '',
-          typeProduits: (row.category || '').split(', ').filter(Boolean),
-          adresse: row.address || '',
-          ville: row.city || '',
-          contactNom: contactInfo.nom || '',
-          contactTelephone: contactInfo.tel || '',
-          contactEmail: contactInfo.email || '',
-          defaultTaxMode: row.defaultTaxMode || 'HT',
-          currentBalance: Number(row.currentBalance || 0),
-        };
-      });
+      const mappedItems = results.map(({ suppliers: row, supplier_balance_view: view }) => ({
+        id: row.id,
+        userId: row.userId,
+        name: row.name || '',
+        email: row.email || '',
+        phone: row.phone || '',
+        address: row.address || '',
+        city: row.city || '',
+        ice: row.ice || '',
+        if: row.if || '',
+        rc: row.rc || '',
+        taxId: row.taxId || '',
+        category: row.category || '',
+        paymentTerms: row.paymentTerms || '30',
+        paymentMethod: row.paymentMethod || '',
+        bank: row.bank || '',
+        rib: row.rib || '',
+        notes: (row.notes || '').replace(/\[CONTACT_DATA_JSON:[\s\S]*?\]/, '').trim(),
+        status: row.status || 'Actif',
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        
+        // ✅ Étape 1 — Reading from dedicated columns
+        contactName:  row.contactName  || '',
+        contactPhone: row.contactPhone || '',
+
+        // Legacy UI compatibility aliases
+        nomCommercial: row.name || '',
+        telephone: row.phone || '',
+        typeProduits: (row.category || '').split(', ').filter(Boolean),
+        adresse: row.address || '',
+        ville: row.city || '',
+        contactNom:       row.contactName  || '',
+        contactTelephone: row.contactPhone || '',
+        contactEmail:     row.contactEmail || '',
+        defaultTaxMode: row.defaultTaxMode || 'HT',
+        // ✅ Étape 2 — solde_reel from view (fallback removed)
+        currentBalance: Number(view?.soldeReel ?? 0),
+        totalAchats:   Number(view?.totalAchats ?? 0),
+        totalPaiements: Number(view?.totalPaiements ?? 0),
+      }));
 
       return mappedItems;
     } catch (error: any) {
@@ -105,27 +81,54 @@ export const getSuppliersList = secureActionWithResponse(async (userId, user) =>
   }, { userId });
 });
 
+// ✅ Étape 4 — Paginated + filtered supplier list (server-side)
+export interface GetSuppliersParams {
+  search?:   string;
+  category?: string;
+  page?:     number;  // 1-indexed, default 1
+  limit?:    number;  // default 20
+}
+
+
+import { querySuppliersListPaginated } from '@/lib/db-queries/suppliers';
+
+export const getSuppliersListPaginated = secureAction(async (userId, user, params: GetSuppliersParams = {}) => {
+  try {
+    return await querySuppliersListPaginated(userId, params);
+  } catch (error: any) {
+    console.error('[getSuppliersListPaginated] ERROR:', error);
+    throw new Error(`Erreur récupération fournisseurs: ${error.message}`);
+  }
+});
+
 /**
  * Get a single supplier by ID
  */
 export const getSupplier = secureAction(async (userId, user, id: string) => {
-  noStore();
-
   try {
-    console.log(`🔍 [getSupplier] Fetching supplier ${id} via Drizzle Query API`);
+    console.log(`🔍 [getSupplier] Fetching supplier ${id}`);
     
-    const row = await db.query.suppliers.findFirst({
-        where: and(eq(suppliers.id, id), eq(suppliers.userId, userId))
-    });
+    // ✅ Étape 2 — JOIN avec la view pour le solde réel
+    const results = await db
+      .select()
+      .from(suppliers)
+      .leftJoin(
+        supplierBalanceView,
+        and(
+          eq(supplierBalanceView.supplierId, suppliers.id),
+          eq(supplierBalanceView.userId, suppliers.userId)
+        )
+      )
+      .where(and(eq(suppliers.id, id), eq(suppliers.userId, userId)))
+      .limit(1);
 
-    if (!row) {
+    if (!results.length) {
       console.warn(`⚠️ [getSupplier] No supplier found with ID ${id}`);
       return null;
     }
 
-    // Map the row safely
-    const contactInfo = parseContactInfo(row.notes);
-    
+    const { suppliers: row, supplier_balance_view: view } = results[0];
+
     return {
         id: row.id,
         userId: row.userId,
@@ -143,22 +146,25 @@ export const getSupplier = secureAction(async (userId, user, id: string) => {
         paymentMethod: row.paymentMethod || '',
         bank: row.bank || '',
         rib: row.rib || '',
-        notes: contactInfo.cleanNotes,
+        notes: (row.notes || '').replace(/\[CONTACT_DATA_JSON:[\s\S]*?\]/, '').trim(),
         status: row.status || 'Actif',
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
-        
-        // UI compatibility keys
+        contactName:  row.contactName  || '',
+        contactPhone: row.contactPhone || '',
+        contactEmail: row.contactEmail || '',
         nomCommercial: row.name || '',
         telephone: row.phone || '',
         typeProduits: (row.category || '').split(', ').filter(Boolean),
         adresse: row.address || '',
         ville: row.city || '',
-        contactNom: contactInfo.nom || '',
-        contactTelephone: contactInfo.tel || '',
-        contactEmail: contactInfo.email || '',
+        contactNom:       row.contactName  || '',
+        contactTelephone: row.contactPhone || '',
         defaultTaxMode: row.defaultTaxMode || 'HT',
-        currentBalance: Number(row.currentBalance || 0),
+        // ✅ Étape 2 — solde_reel from view
+        currentBalance: Number(view?.soldeReel ?? 0),
+        totalAchats:    Number(view?.totalAchats ?? 0),
+        totalPaiements: Number(view?.totalPaiements ?? 0),
     };
 
   } catch (error: any) {
@@ -179,8 +185,7 @@ export const createSupplier = secureAction(async (userId, user, data: any) => {
        throw new Error(`Vous avez atteint la limite de fournisseurs pour votre plan (${usage.suppliers.limit}). Veuillez mettre à niveau.`);
   }
 
-  // Serialize contact info into notes
-  const notesWithContact = serializeContactInfo(data);
+  const notesPayload = data.notes || null;
 
   try {
     const [created] = await db
@@ -201,13 +206,21 @@ export const createSupplier = secureAction(async (userId, user, data: any) => {
         paymentMethod: data.paymentMethod || null,
         bank: data.bank || null,
         rib: data.rib || null,
-        notes: notesWithContact,
+        notes: notesPayload,
         status: data.status || 'Actif',
         defaultTaxMode: data.defaultTaxMode || 'HT',
+        // ✅ Étape 1 — Writing directly to dedicated columns
+        contactName:  data.contactNom       || null,
+        contactPhone: data.contactTelephone || null,
+        contactEmail: data.contactEmail     || null,
       } as any)
       .returning();
 
-    revalidateTag('suppliers');
+    // Invalide uniquement le cache du bon utilisateur (performant) + invalide le tag global en sécurité.
+    // @ts-ignore
+    revalidateTag(`${CACHE_TAGS.suppliers}-${userId}`);
+    // @ts-ignore
+    revalidateTag(CACHE_TAGS.suppliers);
     revalidatePath('/suppliers');
     return created;
   } catch (error: any) {
@@ -245,8 +258,12 @@ export const updateSupplier = secureAction(async (userId, user, id: string, data
   }
 
   if (data.contactNom !== undefined || data.contactTelephone !== undefined || data.contactEmail !== undefined) {
-      dbPayload.notes = serializeContactInfo(data);
-  } else if (data.notes !== undefined) {
+    // ✅ Étape 1 — Write directly to dedicated columns
+    if (data.contactNom       !== undefined) dbPayload.contactName  = data.contactNom       || null;
+    if (data.contactTelephone !== undefined) dbPayload.contactPhone = data.contactTelephone || null;
+    if (data.contactEmail     !== undefined) dbPayload.contactEmail = data.contactEmail     || null;
+  }
+  if (data.notes !== undefined) {
       dbPayload.notes = data.notes;
   }
 
@@ -258,7 +275,11 @@ export const updateSupplier = secureAction(async (userId, user, id: string, data
       .where(and(eq(suppliers.id, id), eq(suppliers.userId, userId)))
       .returning();
 
-    revalidateTag('suppliers');
+    // Invalide uniquement le cache du bon utilisateur + global
+    // @ts-ignore
+    revalidateTag(`${CACHE_TAGS.suppliers}-${userId}`);
+    // @ts-ignore
+    revalidateTag(CACHE_TAGS.suppliers);
     revalidatePath('/dashboard/fournisseurs');
     return updated;
   } catch (err: any) {
@@ -280,7 +301,11 @@ export const deleteSupplier = secureAction(async (userId, user, id: string) => {
       )
     );
 
-  revalidateTag('suppliers');
+  // Invalide uniquement le cache du bon utilisateur + global
+  // @ts-ignore
+  revalidateTag(`${CACHE_TAGS.suppliers}-${userId}`);
+  // @ts-ignore
+  revalidateTag(CACHE_TAGS.suppliers);
   revalidatePath('/dashboard/fournisseurs');
   return { success: true };
 });

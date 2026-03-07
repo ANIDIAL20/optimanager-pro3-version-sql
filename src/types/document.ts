@@ -21,7 +21,13 @@ export interface DocumentItem {
     cylinder?: string;
     axis?: string;
     addition?: string;
+    ep?: string;         // écart pupillaire
+    hauteur?: string;    // hauteur de montage
     treatment?: string;
+    // Shared per-item metadata (same value for OD and OG, displayed once)
+    geometry?: string;   // 'Unifocal' | 'Progressif' | 'Bifocal' | 'Lentilles'
+    index?: string;      // '1.5' | '1.6' | '1.67' | '1.74'
+    brand?: string;      // Marque + Modèle du verre
   }>;
   contactLensDetails?: Array<{
     eye: string;

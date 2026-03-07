@@ -1,72 +1,45 @@
-'use client';
-
-import * as React from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { BrandLoader } from '@/components/ui/loader-brand';
+/**
+ * /print/facture/[id] — Server Component
+ *
+ * Both getPrintData() and getDocumentConfig() run on the server before the
+ * first byte of HTML is sent to the browser, so the correct DocumentTemplateConfig
+ * (bold / modern / minimal / etc.) is applied on the very first paint.
+ * There is no flash of the default "classic" template.
+ */
+import { notFound } from 'next/navigation';
 import { getPrintData } from '@/app/actions/print-actions';
-import { getDocumentConfig } from '@/app/actions/shop-actions';
-import { PrintDocumentTemplate } from '@/components/printing/print-document-template';
-import { AutoPrint } from '@/components/printing/auto-print';
-import { useToast } from '@/hooks/use-toast';
-import { factureAdapter } from '@/lib/documents/adapters';
-import type { StandardDocumentData } from '@/types/document';
-import type { DocumentTemplateConfig } from '@/types/document-template';
+import { getDocumentConfigForPrint } from '@/app/actions/shop-actions';
 import { DEFAULT_TEMPLATE_CONFIG } from '@/types/document-template';
+import { factureAdapter } from '@/lib/documents/adapters';
+import { PrintShell } from '@/components/printing/print-shell';
 
 interface FacturePrintPageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ auto?: string; autoprint?: string; preview?: string }>;
 }
 
-export default function FacturePrintPage({ params }: FacturePrintPageProps) {
-  const { id } = React.use(params);
-  const router = useRouter();
-  const { toast } = useToast();
+export default async function FacturePrintPage({
+  params,
+  searchParams,
+}: FacturePrintPageProps) {
+  const { id } = await params;
+  const sp = await searchParams;
 
-  const searchParams = useSearchParams();
-  const shouldAutoPrint = searchParams.get('auto') === 'true' || searchParams.get('autoprint') === 'true';
-  const isPreview = !!searchParams.get('preview');
+  const [result, docConfig] = await Promise.all([
+    getPrintData(id, 'facture'),
+    getDocumentConfigForPrint(),
+  ]);
 
-  const [data, setData] = React.useState<StandardDocumentData | null>(null);
-  const [docConfig, setDocConfig] = React.useState<DocumentTemplateConfig | undefined>(undefined);
-  const [isLoading, setIsLoading] = React.useState(true);
+  if (!result.success || !result.data) notFound();
 
-  React.useEffect(() => {
-    if (!id) return;
-    Promise.all([
-      getPrintData(id, 'facture'),
-      getDocumentConfig(),
-    ]).then(async ([result, cfg]) => {
-      setDocConfig(cfg);
-      if (result.success && result.data) {
-        setData(await factureAdapter.toStandardDocument(result.data));
-      } else {
-        toast({ variant: 'destructive', title: 'Erreur', description: (result as any).error });
-        router.push('/dashboard/ventes');
-      }
-      setIsLoading(false);
-    });
-  }, [id, router, toast]);
-
-  // Auto-print — handled by <AutoPrint /> rendered below
-
-  if (isLoading) {
-    return (
-      <div className="fixed inset-0 z-[100] bg-white flex items-center justify-center">
-        <BrandLoader size="md" className="text-gray-400" />
-      </div>
-    );
-  }
-  if (!data) return null;
+  const data = await factureAdapter.toStandardDocument(result.data);
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 print:bg-white print:py-0">
-      {shouldAutoPrint && !isLoading && <AutoPrint />}
-      <PrintDocumentTemplate
-        data={data}
-        config={docConfig ?? DEFAULT_TEMPLATE_CONFIG}
-        showToolbar={!isPreview}
-        onBack={() => router.back()}
-      />
-    </div>
+    <PrintShell
+      data={data}
+      config={docConfig ?? DEFAULT_TEMPLATE_CONFIG}
+      autoprint={sp.auto === 'true' || sp.autoprint === 'true'}
+      isPreview={!!sp.preview}
+    />
   );
 }

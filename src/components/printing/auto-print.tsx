@@ -22,7 +22,21 @@ import { useEffect } from 'react';
 
 export function AutoPrint() {
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const shouldPrint = params.get('autoprint') === 'true' || params.get('autoprint') === '1';
+
+    // Disable auto-print if we are inside the hidden printInPlace iframe.
+    // The parent window handles the print() call.
+    if (!shouldPrint || window !== window.parent) return;
+
     let cancelled = false;
+    let timeoutId: NodeJS.Timeout;
+
+    const handleAfterPrint = () => {
+      window.close();
+    };
+
+    window.addEventListener('afterprint', handleAfterPrint);
 
     async function trigger() {
       // 1. Wait for all web fonts to load
@@ -46,13 +60,17 @@ export function AutoPrint() {
 
       if (cancelled) return;
 
-      window.print();
+      timeoutId = setTimeout(() => {
+        if (!cancelled) window.print();
+      }, 500);
     }
 
     trigger();
 
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
+      window.removeEventListener('afterprint', handleAfterPrint);
     };
   }, []);
 

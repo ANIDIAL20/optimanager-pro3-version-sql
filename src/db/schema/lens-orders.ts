@@ -21,7 +21,7 @@ export const lensOrders = pgTable('lens_orders', {
   orderType: text('order_type').notNull(), // 'progressive', 'bifocal', 'unifocal', 'contact'
   lensType: text('lens_type').notNull(),
   supplierId: uuid('supplier_id').references(() => suppliers.id),
-  supplierOrderId: integer('supplier_order_id').references(() => supplierOrders.id),
+  supplierOrderId: uuid('supplier_order_id').references(() => supplierOrders.id),
   treatment: text('treatment'),
   supplierName: text('supplier_name').notNull(),
 
@@ -49,6 +49,8 @@ export const lensOrders = pgTable('lens_orders', {
 
   matiere: text('matiere'),
   indice: text('indice'),
+  pont: text('pont'),
+  branches: text('branches'),
 
   // ========================================
   // PROFESSIONAL PRICING WORKFLOW
@@ -108,38 +110,3 @@ export const lensOrders = pgTable('lens_orders', {
 }));
 
 // Modular schemas used: ./schema/suppliers.schema.ts, ./schema/supplier-orders.schema.ts, ./schema/supplier-payments.schema.ts
-
-
-// ========================================
-// 7. SUPPLIER ORDER ITEMS
-// ========================================
-export const supplierOrderItems = pgTable('supplier_order_items', {
-  id: serial('id').primaryKey(),
-  supplierOrderId: integer('supplier_order_id').references(() => supplierOrders.id, { onDelete: 'cascade' }),
-
-  productType: text('product_type'),
-  productName: text('product_name'),
-  description: text('description'),
-
-  // Specific specs
-  lensType: text('lens_type'),
-  lensMaterial: text('lens_material'),
-  lensIndex: text('lens_index'),
-  coating: text('coating'),
-
-  // Specific specs (Explicit)
-  sphere: text('sphere'),
-  cylindre: text('cylindre'),
-  axe: text('axe'),
-  addition: text('addition'),
-  hauteur: text('hauteur'),
-
-  quantity: integer('quantity').notNull(),
-  receivedQuantity: integer('received_quantity').default(0),
-
-  unitPrice: decimal('unit_price', { precision: 10, scale: 2 }),
-  totalPrice: decimal('total_price', { precision: 10, scale: 2 }),
-
-  createdAt: timestamp('created_at').defaultNow(),
-});
-

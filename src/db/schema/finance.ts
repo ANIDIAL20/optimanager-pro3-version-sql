@@ -28,34 +28,6 @@ export const clientTransactions = pgTable('client_transactions', {
 });
 
 // ========================================
-// 12. EXPENSES (CHARGES) TABLE
-// ========================================
-export const expenses = pgTable('expenses', {
-  id: serial('id').primaryKey(),
-  userId: text('user_id').notNull(), // Multi-tenancy
-
-  title: text('title').notNull(),
-  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
-
-  // 'EAU', 'ELECTRICITE', 'LOYER', 'INTERNET', 'SALAIRE', 'AUTRE', 'IMPOT', 'TRANSPORT'
-  category: text('category').notNull().default('AUTRE'),
-
-  status: text('status').default('PAYE'), // 'PAYE', 'IMPAYE'
-  date: timestamp('date').defaultNow().notNull(),
-
-  // Metadata
-  proofUrl: text('proof_url'), // Link to receipt/invoice image
-  notes: text('notes'),
-
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').$onUpdate(() => new Date()),
-}, (table) => ({
-  userIdIdx: index('expenses_user_id_idx').on(table.userId),
-  dateIdx: index('expenses_date_idx').on(table.date),
-  categoryIdx: index('expenses_category_idx').on(table.category),
-}));
-
-// ========================================
 // 12.5 CASH SESSIONS & MOVEMENTS (CAISSE)
 // ========================================
 export const cashSessions = pgTable('cash_sessions', {
