@@ -546,7 +546,7 @@ export async function checkDeadlines(shouldRevalidate = true) {
     .where(
       and(
         eq(supplierOrders.userId, session.user.id),
-        gt(supplierOrders.resteAPayer, '0')
+        gt(supplierOrders.remainingAmount, '0')
       )
     );
 
@@ -588,10 +588,10 @@ export async function checkDeadlines(shouldRevalidate = true) {
             relatedType: 'supplier_orders',
             dueDate: order.dueDate,
             metadata: {
-              details: `Montant dû: ${order.resteAPayer} DH`,
+              details: `Montant dû: ${order.remainingAmount} DH`,
               orderId: order.id,
               totalAmount: order.montantTotal,
-              resteAPayer: order.resteAPayer
+              remainingAmount: order.remainingAmount
             },
           });
           newRemindersCount++;

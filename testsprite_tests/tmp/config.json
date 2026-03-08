@@ -1,8 +1,9 @@
 {
-  "status": "commited",
+  "status": "init",
   "type": "frontend",
   "scope": "codebase",
-  "localEndpoint": "http://localhost:3000",
+  "localEndpoint": "http://localhost:3000/",
   "loginUser": "wissal@gmail.com",
-  "loginPassword": "123456"
+  "loginPassword": "123456",
+  "serverPort": 57491
 }

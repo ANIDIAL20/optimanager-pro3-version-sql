@@ -34,6 +34,28 @@ export type SupplierOrder = {
     items?: any;
 };
 
+export type CreateSupplierOrderItemInput = {
+    productId?: number | null;
+    reference?: string | null;
+    label?: string;
+    nomProduit?: string;
+    quantity?: number;
+    unitPrice?: number;
+};
+
+export type CreateSupplierOrderInput = {
+    supplierId?: string;
+    supplierName?: string;
+    date: Date | string;
+    items?: CreateSupplierOrderItemInput[];
+    subTotal?: number;
+    discount?: number;
+    totalAmount: number;
+    amountPaid?: number;
+    orderReference?: string;
+    notes?: string;
+};
+
 /**
  * Get Supplier Orders
  */
@@ -66,14 +88,14 @@ export const getSupplierOrders = secureAction(async (userId, user, supplierId?: 
 
         return { success: true, orders: formattedOrders };
     } catch (error: any) {
-        console.error("💥 Error fetching supplier orders (Drizzle):", error);
+        console.error("ðŸ’¥ Error fetching supplier orders (Drizzle):", error);
         return { success: false, error: "Erreur chargement commandes: " + error.message, orders: [] };
     }
 });
 
-export const createSupplierOrder = secureAction(async (userId, user, data: any) => {
+export const createSupplierOrder = secureAction(async (userId, user, data: CreateSupplierOrderInput) => {
     try {
-        console.log("📝 Creating Supplier Order (SQL):", data);
+        console.log("ðŸ“ Creating Supplier Order (SQL):", data);
 
         const paid = Number(data.amountPaid) || 0;
         
@@ -168,7 +190,7 @@ export const createSupplierOrder = secureAction(async (userId, user, data: any) 
             if (supplier) {
                 // If 'paid' < 'total', the difference is debt.
                 // Actually usually the whole Invoice amount is added to balance, and Payments reduce it.
-                // But here we might just track "Reste à payer".
+                // But here we might just track "Reste Ã  payer".
                 // Let's simpler:
                 /* 
                 await tx.update(suppliers)
@@ -181,21 +203,22 @@ export const createSupplierOrder = secureAction(async (userId, user, data: any) 
             }
 
             await logSuccess(userId, 'CREATE', 'supplier_orders', String(orderId), { supplier: supplier ? (supplier as any).name : data.supplierName, total: data.totalAmount }, null);
-            revalidatePath('/dashboard/supplier-orders');
-            // ✅ Étape 3 — Cache invalidation
+            revalidatePath('/suppliers', 'layout');
+            revalidatePath('/suppliers/[id]', 'page');
+            // âœ… Ã‰tape 3 â€” Cache invalidation
             // @ts-ignore
             revalidateTag(CACHE_TAGS.supplierOrders);
             // @ts-ignore
             revalidateTag(`${CACHE_TAGS.suppliers}-${userId}`);
             // @ts-ignore
             revalidateTag(CACHE_TAGS.suppliers); // balance view changes
-            return { success: true, id: String(orderId), message: 'Commande créée avec succès' };
+            return { success: true, id: String(orderId), message: 'Commande crÃ©Ã©e avec succÃ¨s' };
         });
 
     } catch (error: any) {
         await logFailure(userId, 'CREATE_SUPPLIER_ORDER', 'supplier_orders', error.message);
         console.error("Error creating supplier order:", error);
-        return { success: false, error: 'Erreur création commande' };
+        return { success: false, error: 'Erreur crÃ©ation commande' };
     }
 });
 
@@ -206,7 +229,7 @@ export const createSupplierOrder = secureAction(async (userId, user, data: any) 
  * Confirm Reception (Full or Partial)
  */
 // Core Internal Logic (Not a Server Action)
-async function updateOrderReceptionCore(userId: string, user: any, orderId: string, data: { status: string; receivedItems?: any[], deliveryStatus?: string } = { status: 'REÇU' }) {
+async function updateOrderReceptionCore(userId: string, user: any, orderId: string, data: { status: string; receivedItems?: any[], deliveryStatus?: string } = { status: 'REÃ‡U' }) {
     try {
         const id = orderId;
         
@@ -221,15 +244,15 @@ async function updateOrderReceptionCore(userId: string, user: any, orderId: stri
              if (!order) throw new Error("Commande introuvable");
 
              // 2. Prevent Double Counting
-             if (order.statut === 'REÇU' || order.deliveryStatus === 'FULL') {
-                 if (data.status === 'REÇU') {
+             if (order.statut === 'REÃ‡U' || order.deliveryStatus === 'FULL') {
+                 if (data.status === 'REÃ‡U') {
                     // return; 
                  }
              }
 
              // 3. Update Stock
-             if (data.status === 'REÇU') {
-                 // ✅ Étape 5 — Lire depuis la table relationnelle
+             if (data.status === 'REÃ‡U') {
+                 // âœ… Ã‰tape 5 â€” Lire depuis la table relationnelle
                  const items = await tx.select()
                      .from(supplierOrderItems)
                      .where(eq(supplierOrderItems.orderId, id));
@@ -259,7 +282,7 @@ async function updateOrderReceptionCore(userId: string, user: any, orderId: stri
                                productId: product.id,
                                quantite: qty,
                                type: 'Achat',
-                               notes: `Réception BC #${order.orderReference || id}`,
+                               notes: `RÃ©ception BC #${order.orderReference || id}`,
                                createdAt: new Date(),
                            });
 
@@ -292,16 +315,17 @@ async function updateOrderReceptionCore(userId: string, user: any, orderId: stri
               await logSuccess(userId, 'UPDATE_STATUS', 'supplier_orders', id.toString(), { status: data.status, deliveryStatus: data.deliveryStatus || 'FULL' }, order, { ...order, statut: data.status, delivery_status: data.deliveryStatus || 'FULL' });
         });
 
-        revalidatePath('/dashboard/supplier-orders');
+        revalidatePath('/suppliers', 'layout');
+            revalidatePath('/suppliers/[id]', 'page');
         revalidatePath('/dashboard/stock');
-        // ✅ Étape 3 — Cache invalidation
+        // âœ… Ã‰tape 3 â€” Cache invalidation
         // @ts-ignore
         revalidateTag(CACHE_TAGS.supplierOrders);
         // @ts-ignore
         revalidateTag(`${CACHE_TAGS.suppliers}-${userId}`);
         // @ts-ignore
         revalidateTag(CACHE_TAGS.suppliers);
-        return { success: true, message: 'Réception mise à jour et stock ajusté' };
+        return { success: true, message: 'RÃ©ception mise Ã  jour et stock ajustÃ©' };
     } catch (error: any) {
         return { success: false, error: error.message };
     }
@@ -310,7 +334,7 @@ async function updateOrderReceptionCore(userId: string, user: any, orderId: stri
 /**
  * Confirm Reception (Full or Partial)
  */
-export const updateOrderReception = secureAction(async (userId, user, orderId: string, data: { status: string; receivedItems?: any[], deliveryStatus?: string } = { status: 'REÇU' }) => {
+export const updateOrderReception = secureAction(async (userId, user, orderId: string, data: { status: string; receivedItems?: any[], deliveryStatus?: string } = { status: 'REÃ‡U' }) => {
     return await updateOrderReceptionCore(userId, user, orderId, data);
 });
 
@@ -319,7 +343,7 @@ export const updateOrderReception = secureAction(async (userId, user, orderId: s
  */
 export const confirmOrderReception = secureAction(async (userId, user, orderId: string) => {
      // Use internal core logic instead of calling another server action
-     return await updateOrderReceptionCore(userId, user, orderId, { status: 'REÇU', deliveryStatus: 'FULL' });
+     return await updateOrderReceptionCore(userId, user, orderId, { status: 'REÃ‡U', deliveryStatus: 'FULL' });
 });
 
 /**
@@ -330,15 +354,16 @@ export const deleteSupplierOrder = secureAction(async (userId, user, orderId: st
         await db.delete(supplierOrders)
             .where(and(eq(supplierOrders.id, orderId), eq(supplierOrders.userId, userId)));
             
-        revalidatePath('/dashboard/supplier-orders');
-        // ✅ Étape 3 — Cache invalidation
+        revalidatePath('/suppliers', 'layout');
+            revalidatePath('/suppliers/[id]', 'page');
+        // âœ… Ã‰tape 3 â€” Cache invalidation
         // @ts-ignore
         revalidateTag(CACHE_TAGS.supplierOrders);
         // @ts-ignore
         revalidateTag(`${CACHE_TAGS.suppliers}-${userId}`);
         // @ts-ignore
         revalidateTag(CACHE_TAGS.suppliers);
-        return { success: true, message: 'Commande supprimée' };
+        return { success: true, message: 'Commande supprimÃ©e' };
     } catch (error: any) {
         return { success: false, error: error.message };
     }
@@ -370,7 +395,7 @@ export const getSupplierStats = secureAction(async (userId, user, supplierId: st
 
         return { success: true, stats };
     } catch (error: any) {
-        console.error("💥 Error fetching supplier stats:", error);
+        console.error("ðŸ’¥ Error fetching supplier stats:", error);
         return { success: false, error: error.message };
     }
 });
@@ -397,7 +422,7 @@ export const getGlobalSupplierBalances = secureAction(async (userId) => {
             }
         };
     } catch (error: any) {
-        console.error("💥 Error fetching global supplier balances:", error);
+        console.error("ðŸ’¥ Error fetching global supplier balances:", error);
         return { success: false, error: error.message };
     }
 });
@@ -436,7 +461,7 @@ export const getSupplierOrderPrintData = secureAction(async (userId, user, order
         };
     } catch (error: any) {
         console.error('Error fetching bon de commande print data:', error);
-        return { success: false, error: 'Erreur lors de la récupération des données' };
+        return { success: false, error: 'Erreur lors de la rÃ©cupÃ©ration des donnÃ©es' };
     }
 });
 
@@ -444,9 +469,9 @@ export const getSupplierOrderPrintData = secureAction(async (userId, user, order
  * Fetch the most-recent supplier order for the current user and convert it
  * into a StandardDocumentData using the same adapter as the print route.
  *
- * Used by Settings → Modèles Documents → "Bon Cmd" tab to show real order
+ * Used by Settings â†’ ModÃ¨les Documents â†’ "Bon Cmd" tab to show real order
  * data instead of the hardcoded demo. Returns null when no orders exist yet,
- * or on any error — the form falls back to the demo in that case.
+ * or on any error â€” the form falls back to the demo in that case.
  */
 export const getBonCommandePreviewData = secureAction(async (userId) => {
   try {
@@ -507,7 +532,7 @@ export const getOrdersForPaymentSelect = secureAction(async (userId, user, suppl
             paymentStatus: row.paymentStatus
         }));
     } catch (error: any) {
-        console.error("💥 Error fetching orders for selection:", error);
+        console.error("ðŸ’¥ Error fetching orders for selection:", error);
         return [];
     }
 });

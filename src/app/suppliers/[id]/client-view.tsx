@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { useBreadcrumbStore } from '@/hooks/use-breadcrumb-store';
+import { useSupplierBalance } from '@/hooks/use-supplier-balance';
 import { AlertCircle, ArrowLeft, Truck, FileText, LayoutDashboard, Package, TrendingDown, Minus, Coins } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
@@ -74,29 +75,13 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
     const { toast } = useToast();
     const { setLabel } = useBreadcrumbStore();
 
-    // Update Breadcrumb Label with Supplier Name
-    React.useEffect(() => {
-        if (supplier) {
-            const name = supplier.name || supplier.nomCommercial;
-            if (name && supplier.id) {
-                setLabel(supplier.id, name);
-            }
-        }
-    }, [supplier, setLabel]);
+    const { data: balanceData } = useSupplierBalance(supplier?.id || '');
 
-    // ✅ FIX: All hooks MUST be called before any conditional return
-    // Financial Calculations (always called, safe when orders/payments are empty arrays)
-    const totalOrdered = React.useMemo(() =>
-        orders.reduce((sum: number, o: any) => sum + (Number(o.totalAmount) || 0), 0),
-    [orders]);
+    const totalOrdered = Number(balanceData?.totalOrders ?? orders.reduce((sum: number, o: any) => sum + (Number(o.totalAmount) || 0), 0));
+    const totalPaid = Number(balanceData?.totalPayments ?? payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0));
+    const balance = Number(balanceData?.balance ?? (totalOrdered - totalPaid));
 
-    const totalPaid = React.useMemo(() =>
-        payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0),
-    [payments]);
-
-    const balance = totalOrdered - totalPaid;
-
-    // Transaction History (Relevé) - Merged & Sorted
+    // Transaction History (RelevÃƒÆ’Ã‚Â©) - Merged & Sorted
     const history = React.useMemo(() => {
         const combined = [
             ...orders.map(o => ({
@@ -117,7 +102,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                 debit: 0,
                 credit: Number(p.amount) || 0,
                 details: p.method || 'Paiement',
-                status: 'PAYÉ'
+                status: 'PAYÃƒÆ’Ã¢â‚¬Â°'
             }))
         ];
 
@@ -130,7 +115,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
         }).reverse();
     }, [orders, payments]);
 
-    // ✅ Conditional return is AFTER all hooks
+    // ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Conditional return is AFTER all hooks
     if (error || !supplier) {
         return (
             <div className="flex flex-1 flex-col gap-4">
@@ -196,7 +181,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                             </h1>
                         </div>
                         <div className="flex items-center gap-2">
-                             <p className="text-slate-500 ml-1">{s.raisonSociale || 'Détails du fournisseur'}</p>
+                             <p className="text-slate-500 ml-1">{s.raisonSociale || 'DÃƒÆ’Ã‚Â©tails du fournisseur'}</p>
                              {s.typeProduits && s.typeProduits.length > 0 && (
                                 <div className="flex flex-wrap gap-2 ml-4">
                                     {s.typeProduits.map((type: string) => (
@@ -234,7 +219,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                 </Card>
                 <Card>
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-500">Total Payé</CardTitle>
+                        <CardTitle className="text-sm font-medium text-slate-500">Total PayÃƒÆ’Ã‚Â©</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-emerald-600">
@@ -244,7 +229,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                 </Card>
                 <Card>
                     <CardHeader className="pb-2">
-                         <CardTitle className="text-sm font-medium text-slate-500">Reste à Payer (Solde)</CardTitle>
+                         <CardTitle className="text-sm font-medium text-slate-500">Reste ÃƒÆ’Ã‚Â  Payer (Solde)</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className={`text-2xl font-bold ${balance > 0 ? 'text-red-600' : 'text-slate-900'}`}>
@@ -280,7 +265,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                         <LayoutDashboard className="h-4 w-4" /> Vue d'ensemble
                     </TabsTrigger>
                     <TabsTrigger value="history" className="px-4 py-2 flex items-center gap-2">
-                        <FileText className="h-4 w-4" /> Historique (Relevé)
+                        <FileText className="h-4 w-4" /> Historique (RelevÃƒÆ’Ã‚Â©)
                     </TabsTrigger>
                     <TabsTrigger value="lens-orders" className="px-4 py-2 flex items-center gap-2">
                         <Truck className="h-4 w-4 text-blue-500" /> Commandes de Verres (Labo)
@@ -289,7 +274,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                         <Package className="h-4 w-4" /> Catalogue Produits
                     </TabsTrigger>
                     <TabsTrigger value="credits" className="px-4 py-2 flex items-center gap-2">
-                        <Coins className="h-4 w-4 text-emerald-500" /> Avoirs & Crédits
+                        <Coins className="h-4 w-4 text-emerald-500" /> Avoirs & CrÃƒÆ’Ã‚Â©dits
                         {credits.filter((c: any) => c.status !== 'closed').length > 0 && (
                             <Badge className="ml-1 bg-emerald-500 text-white border-none h-4 px-1 min-w-4 flex items-center justify-center text-[10px]">
                                 {credits.filter((c: any) => c.status !== 'closed').length}
@@ -304,17 +289,17 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                         {/* Left Column: Contact & Info */}
                         <div className="lg:col-span-2 space-y-6">
                             <Card>
-                                <CardHeader><CardTitle>Informations Générales</CardTitle></CardHeader>
+                                <CardHeader><CardTitle>Informations GÃƒÆ’Ã‚Â©nÃƒÆ’Ã‚Â©rales</CardTitle></CardHeader>
                                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                      <div className="space-y-1"><p className="text-sm text-slate-500">Email</p><p className="font-medium">{s.email || '-'}</p></div>
-                                     <div className="space-y-1"><p className="text-sm text-slate-500">Téléphone</p><p className="font-medium">{s.telephone || '-'}</p></div>
+                                     <div className="space-y-1"><p className="text-sm text-slate-500">TÃƒÆ’Ã‚Â©lÃƒÆ’Ã‚Â©phone</p><p className="font-medium">{s.telephone || '-'}</p></div>
                                      <div className="space-y-1 md:col-span-2"><p className="text-sm text-slate-500">Adresse</p><p className="font-medium">{s.adresse || '-'} {s.ville} {s.pays}</p></div>
                                 </CardContent>
                             </Card>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <Card>
-                                    <CardHeader><CardTitle>Légal & Fiscal</CardTitle></CardHeader>
+                                    <CardHeader><CardTitle>LÃƒÆ’Ã‚Â©gal & Fiscal</CardTitle></CardHeader>
                                     <CardContent className="space-y-3">
                                         <div className="flex justify-between"><span className="text-sm text-slate-500">ICE</span><span className="font-medium">{s.ice || '-'}</span></div>
                                         <div className="flex justify-between"><span className="text-sm text-slate-500">IF</span><span className="font-medium">{s.if || '-'}</span></div>
@@ -326,7 +311,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                                      <CardContent className="space-y-3">
                                         <div className="flex justify-between"><span className="text-sm text-slate-500">Banque</span><span className="font-medium">{s.banque || '-'}</span></div>
                                         <div className="flex justify-between"><span className="text-sm text-slate-500">RIB</span><span className="font-medium break-all">{s.rib || '-'}</span></div>
-                                        <div className="flex justify-between"><span className="text-sm text-slate-500">Délai</span><span className="font-medium">{s.delaiPaiement} jours</span></div>
+                                        <div className="flex justify-between"><span className="text-sm text-slate-500">DÃƒÆ’Ã‚Â©lai</span><span className="font-medium">{s.delaiPaiement} jours</span></div>
                                      </CardContent>
                                 </Card>
                             </div>
@@ -355,7 +340,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                         <CardHeader className="flex flex-row items-center justify-between">
                             <div>
                                 <CardTitle>Commandes de Verres (Labo)</CardTitle>
-                                <p className="text-sm text-slate-500">Liste des verres commandés chez ce laboratoire</p>
+                                <p className="text-sm text-slate-500">Liste des verres commandÃƒÆ’Ã‚Â©s chez ce laboratoire</p>
                             </div>
                             <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-100">
                                 {lensOrders.length} commandes
@@ -367,7 +352,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                                     <TableRow className="bg-slate-50/50">
                                         <TableHead className="font-bold">Date</TableHead>
                                         <TableHead className="font-bold">Client</TableHead>
-                                        <TableHead className="font-bold">Réf Vente</TableHead>
+                                        <TableHead className="font-bold">RÃƒÆ’Ã‚Â©f Vente</TableHead>
                                         <TableHead className="font-bold">Type de Verre</TableHead>
                                         <TableHead className="font-bold">Correction</TableHead>
                                         <TableHead className="font-bold">Statut</TableHead>
@@ -377,7 +362,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                                     {lensOrders.length === 0 ? (
                                         <TableRow>
                                             <TableCell colSpan={6} className="text-center py-12 text-slate-400 italic">
-                                                Aucune commande de verres trouvée pour ce fournisseur.
+                                                Aucune commande de verres trouvÃƒÆ’Ã‚Â©e pour ce fournisseur.
                                             </TableCell>
                                         </TableRow>
                                     ) : (
@@ -395,7 +380,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                                                             #{order.sale.saleNumber}
                                                         </Badge>
                                                     ) : (
-                                                        <span className="text-slate-400 italic text-xs">Non facturé</span>
+                                                        <span className="text-slate-400 italic text-xs">Non facturÃƒÆ’Ã‚Â©</span>
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
@@ -421,9 +406,9 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                                                         `}
                                                     >
                                                         {order.status === 'pending' && 'En attente'}
-                                                        {order.status === 'ordered' && 'Commandé'}
-                                                        {order.status === 'received' && 'Reçu'}
-                                                        {order.status === 'delivered' && 'Livré'}
+                                                        {order.status === 'ordered' && 'CommandÃƒÆ’Ã‚Â©'}
+                                                        {order.status === 'received' && 'ReÃƒÆ’Ã‚Â§u'}
+                                                        {order.status === 'delivered' && 'LivrÃƒÆ’Ã‚Â©'}
                                                     </Badge>
                                                 </TableCell>
                                             </TableRow>
@@ -437,7 +422,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
 
                 {/* PRODUCTS CATALOGUE TAB */}
                 <TabsContent value="products">
-                    <SupplierProductsTab supplierName={s.nomCommercial} />
+                    <SupplierProductsTab supplierId={s.id} />
                 </TabsContent>
 
                 {/* CREDITS TAB */}
@@ -463,9 +448,9 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                                     <TableRow className="bg-slate-50/50">
                                         <TableHead className="font-bold">Date</TableHead>
                                         <TableHead className="font-bold">Motif</TableHead>
-                                        <TableHead className="font-bold">Référence</TableHead>
+                                        <TableHead className="font-bold">RÃƒÆ’Ã‚Â©fÃƒÆ’Ã‚Â©rence</TableHead>
                                         <TableHead className="text-right font-bold">Montant Initial</TableHead>
-                                        <TableHead className="text-right font-bold">Reste à imputer</TableHead>
+                                        <TableHead className="text-right font-bold">Reste ÃƒÆ’Ã‚Â  imputer</TableHead>
                                         <TableHead className="text-center font-bold">Statut</TableHead>
                                         <TableHead className="text-right font-bold">Actions</TableHead>
                                     </TableRow>
@@ -481,7 +466,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                                                     <div className="space-y-1">
                                                         <p className="font-bold text-slate-700">Aucun avoir fournisseur</p>
                                                         <p className="text-sm text-slate-400 max-w-xs mx-auto">
-                                                            Les avoirs seront créés automatiquement lors de retours de marchandise ou gérés manuellement.
+                                                            Les avoirs seront crÃƒÆ’Ã‚Â©ÃƒÆ’Ã‚Â©s automatiquement lors de retours de marchandise ou gÃƒÆ’Ã‚Â©rÃƒÆ’Ã‚Â©s manuellement.
                                                         </p>
                                                     </div>
                                                 </div>
@@ -508,7 +493,7 @@ export default function SupplierView({ supplier, orders = [], payments = [], len
                                                         c.status === 'partial' ? 'bg-amber-100 text-amber-700' : 
                                                         'bg-emerald-100 text-emerald-700'
                                                     )}>
-                                                        {c.status === 'open' ? 'Ouvert' : c.status === 'partial' ? 'Partiel' : 'Clôturé'}
+                                                        {c.status === 'open' ? 'Ouvert' : c.status === 'partial' ? 'Partiel' : 'ClÃƒÆ’Ã‚Â´turÃƒÆ’Ã‚Â©'}
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell className="text-right">

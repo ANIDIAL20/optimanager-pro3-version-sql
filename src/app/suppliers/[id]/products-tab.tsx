@@ -17,14 +17,14 @@ import { Package, AlertCircle } from 'lucide-react';
 import { SensitiveData } from '@/components/ui/sensitive-data';
 
 interface ProductsTabProps {
-    supplierName: string;
+    supplierId: string;
 }
 
-export function SupplierProductsTab({ supplierName }: ProductsTabProps) {
+export function SupplierProductsTab({ supplierId }: ProductsTabProps) {
     const { data: products, isLoading, error } = useQuery({
-        queryKey: ['supplier-products', supplierName],
-        queryFn: () => getSupplierProductsAction(supplierName),
-        enabled: !!supplierName
+        queryKey: ['supplier-products', supplierId],
+        queryFn: () => getSupplierProductsAction(supplierId),
+        enabled: !!supplierId
     });
 
     if (isLoading) return <div className="p-8 text-center text-muted-foreground animate-pulse">Chargement du catalogue...</div>;
@@ -61,8 +61,8 @@ export function SupplierProductsTab({ supplierName }: ProductsTabProps) {
                                 <TableCell colSpan={5} className="text-center py-8">
                                     <div className="flex flex-col items-center gap-2 text-muted-foreground">
                                         <AlertCircle className="h-8 w-8 opacity-20" />
-                                        <p>Aucun produit trouvé pour ce nom de fournisseur dans le stock.</p>
-                                        <p className="text-xs">Vérifiez que le champ "Fournisseur" dans la fiche produit correspond à "{supplierName}".</p>
+                                        <p>Aucun produit trouvé pour ce fournisseur dans le stock.</p>
+                                        <p className="text-xs">Vérifiez que des produits ont bien été liés à ce fournisseur via les commandes fournisseur.</p>
                                     </div>
                                 </TableCell>
                             </TableRow>

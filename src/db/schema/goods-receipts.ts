@@ -1,6 +1,7 @@
 import { pgTable, text, timestamp, integer, numeric, uuid } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { suppliers, supplierOrders, supplierOrderItems } from './suppliers.schema';
+import { products } from './products';
 
 export const goodsReceipts = pgTable('goods_receipts', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -20,7 +21,7 @@ export const goodsReceiptItems = pgTable('goods_receipt_items', {
     .notNull(),
   orderItemId: integer('order_item_id')
     .references(() => supplierOrderItems.id, { onDelete: 'set null' }), // Relation vers la ligne de commande
-  productId: integer('product_id').notNull(),
+  productId: integer('product_id').references(() => products.id, { onDelete: 'set null' }),
   qtyOrdered: integer('qty_ordered').default(0),
   qtyReceived: integer('qty_received').default(0).notNull(),
   qtyRejected: integer('qty_rejected').default(0),
@@ -43,5 +44,9 @@ export const goodsReceiptItemsRelations = relations(goodsReceiptItems, ({ one })
   orderItem: one(supplierOrderItems, {
     fields: [goodsReceiptItems.orderItemId],
     references: [supplierOrderItems.id],
+  }),
+  product: one(products, {
+    fields: [goodsReceiptItems.productId],
+    references: [products.id],
   }),
 }));

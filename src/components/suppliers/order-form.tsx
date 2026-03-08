@@ -4,35 +4,38 @@ import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { 
-  Form, 
-  FormControl, 
-  FormField, 
-  FormItem, 
-  FormLabel, 
-  FormMessage 
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { createSupplierOrder } from '@/app/actions/supplier-orders-actions';
+import {
+  createSupplierOrder,
+  type CreateSupplierOrderInput,
+} from '@/app/actions/supplier-orders-actions';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 
 const orderSchema = z.object({
   supplierId: z.string(),
-  reference: z.string().min(1, 'Référence requise'),
+  reference: z.string().min(1, 'RÃ©fÃ©rence requise'),
   orderDate: z.string(),
   totalAmount: z.string().refine((val) => !isNaN(Number(val)) && Number(val) > 0, {
-    message: 'Le montant doit être supérieur à zéro',
+    message: 'Le montant doit Ãªtre supÃ©rieur Ã  zÃ©ro',
   }),
   currency: z.enum(['MAD', 'EUR', 'USD']).default('MAD'),
   status: z.enum(['pending', 'received']).default('pending'),
@@ -46,36 +49,54 @@ interface OrderFormProps {
   onSuccess?: () => void;
 }
 
+const getDefaultValues = (supplierId: string): OrderFormValues => ({
+  supplierId,
+  reference: '',
+  orderDate: new Date().toISOString().split('T')[0],
+  totalAmount: '',
+  currency: 'MAD',
+  status: 'pending',
+  notes: '',
+});
+
 export function SupplierOrderForm({ supplierId, onSuccess }: OrderFormProps) {
   const queryClient = useQueryClient();
   const [isPending, setIsPending] = React.useState(false);
 
   const form = useForm<OrderFormValues>({
     resolver: zodResolver(orderSchema),
-    defaultValues: {
-      supplierId,
-      reference: '',
-      orderDate: new Date().toISOString().split('T')[0],
-      totalAmount: '',
-      currency: 'MAD',
-      status: 'pending',
-      notes: '',
-    },
+    defaultValues: getDefaultValues(supplierId),
   });
 
   async function onSubmit(data: OrderFormValues) {
     setIsPending(true);
     try {
-      await createSupplierOrder({
-        ...data,
-        totalAmount: Number(data.totalAmount),
-      });
-      
-      toast.success('Commande ajoutée avec succès');
+      const numericTotal = Number(data.totalAmount);
+      const payload: CreateSupplierOrderInput = {
+        supplierId: data.supplierId,
+        date: data.orderDate,
+        items: [],
+        subTotal: numericTotal,
+        discount: 0,
+        totalAmount: numericTotal,
+        amountPaid: 0,
+        orderReference: data.reference,
+        notes: data.notes || '',
+      };
+
+      const result = await createSupplierOrder(payload);
+
+      if (!result?.success) {
+        const errorMessage = 'error' in result ? result.error : "Erreur lors de l'ajout de la commande";
+        toast.error(errorMessage);
+        return;
+      }
+
+      toast.success('Commande ajoutÃ©e avec succÃ¨s');
       queryClient.invalidateQueries({ queryKey: ['supplier-statement', supplierId] });
       queryClient.invalidateQueries({ queryKey: ['supplier-balance', supplierId] });
       if (onSuccess) onSuccess();
-      form.reset();
+      form.reset(getDefaultValues(supplierId));
     } catch (error: any) {
       toast.error(error.message || "Erreur lors de l'ajout de la commande");
     } finally {
@@ -92,7 +113,7 @@ export function SupplierOrderForm({ supplierId, onSuccess }: OrderFormProps) {
             name="reference"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Référence</FormLabel>
+                <FormLabel>RÃ©fÃ©rence</FormLabel>
                 <FormControl>
                   <Input placeholder="Ex: BC-2024-001" {...field} />
                 </FormControl>
@@ -145,7 +166,7 @@ export function SupplierOrderForm({ supplierId, onSuccess }: OrderFormProps) {
                   </FormControl>
                   <SelectContent>
                     <SelectItem value="MAD">MAD (Dirham)</SelectItem>
-                    <SelectItem value="EUR">EUR (€)</SelectItem>
+                    <SelectItem value="EUR">EUR (â‚¬)</SelectItem>
                     <SelectItem value="USD">USD ($)</SelectItem>
                   </SelectContent>
                 </Select>
@@ -169,7 +190,7 @@ export function SupplierOrderForm({ supplierId, onSuccess }: OrderFormProps) {
                 </FormControl>
                 <SelectContent>
                   <SelectItem value="pending">En attente (Pending)</SelectItem>
-                  <SelectItem value="received">Reçue (Received)</SelectItem>
+                  <SelectItem value="received">ReÃ§ue (Received)</SelectItem>
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -184,7 +205,7 @@ export function SupplierOrderForm({ supplierId, onSuccess }: OrderFormProps) {
             <FormItem>
               <FormLabel>Notes</FormLabel>
               <FormControl>
-                <Textarea placeholder="Détails supplémentaires..." {...field} />
+                <Textarea placeholder="DÃ©tails supplÃ©mentaires..." {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>

@@ -1,49 +1,194 @@
 'use server';
 
 import { db } from '@/db';
-import { 
-  goodsReceipts, 
-  goodsReceiptItems, 
-  products, 
-  supplierOrderItems, 
-  supplierOrders, 
+import {
+  goodsReceipts,
+  goodsReceiptItems,
+  products,
+  supplierOrderItems,
+  supplierOrders,
   supplierCredits,
-  stockMovements 
+  stockMovements,
 } from '@/db/schema';
 import { eq, and, sql, desc, inArray } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { CACHE_TAGS } from '@/lib/cache-tags';
-import { logSuccess } from '@/lib/audit-log';
 
-/**
- * Créer un Bon de Réception (Draft)
- */
-export const createGoodsReceipt = secureAction(async (userId, user, data: any) => {
-  try {
-    const [receipt] = await db.insert(goodsReceipts).values({
+type GoodsReceiptDraftInput = {
+  supplierId: string;
+  deliveryNoteRef?: string;
+  notes?: string;
+};
+
+type GoodsReceiptValidationLine = {
+  orderId?: string;
+  orderItemId?: number | string | null;
+  productId: number;
+  qtyOrdered?: number;
+  qtyReceived?: number;
+  qtyRejected?: number;
+  unitPrice?: number | string;
+};
+
+function revalidateSupplierViews() {
+  revalidatePath('/suppliers', 'layout');
+  revalidatePath('/suppliers/[id]', 'page');
+}
+
+async function createGoodsReceiptRecord(tx: any, userId: string, data: GoodsReceiptDraftInput) {
+  const [receipt] = await tx.insert(goodsReceipts).values({
+    userId,
+    supplierId: data.supplierId,
+    deliveryNoteRef: data.deliveryNoteRef || null,
+    notes: data.notes || null,
+    status: 'draft',
+    createdAt: new Date(),
+  }).returning();
+
+  return receipt;
+}
+
+async function validateGoodsReceiptWithTx(
+  tx: any,
+  userId: string,
+  { receiptId, lines }: { receiptId: string; lines: GoodsReceiptValidationLine[] }
+) {
+  const receipt = await tx.query.goodsReceipts.findFirst({
+    where: and(eq(goodsReceipts.id, receiptId), eq(goodsReceipts.userId, userId)),
+  });
+
+  if (!receipt) throw new Error('Bon de reception introuvable');
+  if (receipt.status === 'validated') throw new Error('Bon de reception deja valide');
+
+  await tx.insert(goodsReceiptItems).values(
+    lines.map((line) => ({
+      receiptId,
+      orderItemId: line.orderItemId || null,
+      productId: line.productId,
+      qtyOrdered: line.qtyOrdered || 0,
+      qtyReceived: line.qtyReceived || 0,
+      qtyRejected: line.qtyRejected || 0,
+      unitPrice: line.unitPrice?.toString() || '0',
+    }))
+  );
+
+  for (const line of lines) {
+    if ((line.qtyReceived || 0) > 0) {
+      await tx.update(products)
+        .set({
+          quantiteStock: sql`${products.quantiteStock} + ${line.qtyReceived || 0}`,
+          updatedAt: new Date().toISOString(),
+        })
+        .where(eq(products.id, line.productId));
+
+      await tx.insert(stockMovements).values({
+        userId,
+        productId: line.productId,
+        quantite: line.qtyReceived || 0,
+        type: 'Achat',
+        notes: `Reception BR #${receipt.deliveryNoteRef || receiptId.slice(0, 8)}`,
+        createdAt: new Date(),
+      });
+    }
+
+    if (line.orderItemId) {
+      await tx.update(supplierOrderItems)
+        .set({
+          qtyReceived: sql`COALESCE(${supplierOrderItems.qtyReceived}, 0) + ${line.qtyReceived || 0}`,
+        })
+        .where(eq(supplierOrderItems.id, Number(line.orderItemId)));
+    }
+  }
+
+  const orderIds = [...new Set(lines.map((line) => line.orderId).filter(Boolean))] as string[];
+  for (const orderId of orderIds) {
+    const allItems = await tx.select().from(supplierOrderItems).where(eq(supplierOrderItems.orderId, orderId));
+    const orderItemIds = allItems.map((item: any) => item.id);
+
+    const rejectedRows = orderItemIds.length > 0
+      ? await tx
+          .select({
+            orderItemId: goodsReceiptItems.orderItemId,
+            totalRejected: sql<number>`COALESCE(SUM(${goodsReceiptItems.qtyRejected}), 0)`,
+          })
+          .from(goodsReceiptItems)
+          .where(inArray(goodsReceiptItems.orderItemId, orderItemIds))
+          .groupBy(goodsReceiptItems.orderItemId)
+      : [];
+
+    const rejectedByItem = new Map<number, number>(
+      rejectedRows.map((row: any) => [Number(row.orderItemId), Number(row.totalRejected || 0)])
+    );
+
+    const allComplete = allItems.every((item: any) => {
+      const qtyReceived = Number(item.qtyReceived || 0);
+      const qtyRejected = rejectedByItem.get(Number(item.id)) || 0;
+      return qtyReceived + qtyRejected >= Number(item.quantity || 0);
+    });
+    const anyReceived = allItems.some((item: any) => Number(item.qtyReceived || 0) > 0);
+
+    await tx.update(supplierOrders)
+      .set({
+        statut: allComplete ? 'RECU' : (anyReceived ? 'PARTIEL' : 'EN_COURS'),
+        deliveryStatus: allComplete ? 'FULL' : (anyReceived ? 'PARTIAL' : 'PENDING'),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(supplierOrders.id, orderId), eq(supplierOrders.userId, userId)));
+  }
+
+  const rejectedLines = lines.filter((line) => (line.qtyRejected || 0) > 0);
+  let creditVal = 0;
+  if (rejectedLines.length > 0) {
+    const creditAmount = rejectedLines.reduce(
+      (sum, line) => sum + ((line.qtyRejected || 0) * Number(line.unitPrice || 0)),
+      0
+    );
+    creditVal = creditAmount;
+
+    await tx.insert(supplierCredits).values({
       userId,
-      supplierId: data.supplierId,
-      deliveryNoteRef: data.deliveryNoteRef || null,
-      notes: data.notes || null,
-      status: 'draft',
+      supplierId: receipt.supplierId,
+      amount: creditAmount.toString(),
+      remainingAmount: creditAmount.toString(),
+      status: 'open',
+      sourceType: 'return',
+      reference: `RET-${receipt.deliveryNoteRef || receiptId.slice(0, 8)}`,
+      notes: `Rejet lors reception BL: ${receipt.deliveryNoteRef || ''}`,
+      relatedReceiptId: receiptId,
       createdAt: new Date(),
-    }).returning();
+    });
+  }
 
-    revalidatePath('/dashboard/suppliers');
+  await tx.update(goodsReceipts)
+    .set({
+      status: 'validated',
+      validatedAt: new Date(),
+    })
+    .where(eq(goodsReceipts.id, receiptId));
+
+  return {
+    success: true,
+    message: 'Reception validee',
+    creditGenerated: creditVal,
+    itemsCount: lines.reduce((sum, line) => sum + (line.qtyReceived || 0), 0),
+  };
+}
+
+export const createGoodsReceipt = secureAction(async (userId, user, data: GoodsReceiptDraftInput) => {
+  try {
+    const receipt = await createGoodsReceiptRecord(db, userId, data);
+    revalidateSupplierViews();
     return { success: true, receipt };
   } catch (error: any) {
-    console.error("Error creating goods receipt:", error);
+    console.error('Error creating goods receipt:', error);
     return { success: false, error: error.message };
   }
 });
 
-/**
- * Ajouter des lignes à un Bon de Réception
- */
-export const addGoodsReceiptItems = secureAction(async (userId, user, { receiptId, items }: { receiptId: string, items: any[] }) => {
+export const addGoodsReceiptItems = secureAction(async (userId, user, { receiptId, items }: { receiptId: string; items: any[] }) => {
   try {
-    const itemsToInsert = items.map(item => ({
+    const itemsToInsert = items.map((item) => ({
       receiptId,
       orderItemId: item.orderItemId || null,
       productId: item.productId,
@@ -60,147 +205,29 @@ export const addGoodsReceiptItems = secureAction(async (userId, user, { receiptI
   }
 });
 
-/**
- * Valider un Bon de Réception (Transaction Atomique)
- * - Insère les lignes
- * - Met à jour le stock
- * - Met à jour les quantités reçues sur les BC
- * - Recalcule le statut des BC
- * - Génère les avoirs pour les rejets
- */
-export const validateGoodsReceiptAction = secureAction(async (userId, user, { 
-  receiptId, 
-  lines 
-}: { 
-  receiptId: string, 
-  lines: any[] 
-}) => {
+export const validateGoodsReceiptAction = secureAction(async (
+  userId,
+  user,
+  { receiptId, lines }: { receiptId: string; lines: GoodsReceiptValidationLine[] }
+) => {
   try {
-    return await db.transaction(async (tx) => {
-      // 1. Récupérer le BR
-      const receipt = await tx.query.goodsReceipts.findFirst({
-        where: and(eq(goodsReceipts.id, receiptId), eq(goodsReceipts.userId, userId))
-      });
+    const result = await db.transaction((tx) => validateGoodsReceiptWithTx(tx, userId, { receiptId, lines }));
 
-      if (!receipt) throw new Error("Bon de réception introuvable");
-      if (receipt.status === 'validated') throw new Error("Bon de réception déjà validé");
+    try {
+      // @ts-ignore
+      revalidateTag(CACHE_TAGS.supplierOrders);
+      // @ts-ignore
+      revalidateTag(CACHE_TAGS.suppliers);
+    } catch (e) {}
 
-      // 2. Insérer les lignes goods_receipt_items
-      await tx.insert(goodsReceiptItems).values(
-        lines.map(l => ({
-          receiptId,
-          orderItemId: l.orderItemId || null,
-          productId: l.productId,
-          qtyOrdered: l.qtyOrdered || 0,
-          qtyReceived: l.qtyReceived || 0,
-          qtyRejected: l.qtyRejected || 0,
-          unitPrice: l.unitPrice?.toString() || '0',
-        }))
-      );
-
-      // 3. Traitement par ligne
-      for (const line of lines) {
-        // A. Mise à jour du stock (si reçu > 0)
-        if (line.qtyReceived > 0) {
-          await tx.update(products)
-            .set({ 
-              quantiteStock: sql`${products.quantiteStock} + ${line.qtyReceived}`,
-              updatedAt: new Date().toISOString()
-            })
-            .where(eq(products.id, line.productId));
-
-          // Historique mouvement de stock
-          await tx.insert(stockMovements).values({
-            userId,
-            productId: line.productId,
-            quantite: line.qtyReceived,
-            type: 'Achat',
-            notes: `Réception BR #${receipt.deliveryNoteRef || receiptId.slice(0, 8)}`,
-            createdAt: new Date(),
-          });
-        }
-
-        // B. Mise à jour de la ligne de commande (si liée)
-        if (line.orderItemId) {
-          await tx.update(supplierOrderItems)
-            .set({ 
-              qtyReceived: sql`COALESCE(${supplierOrderItems.qtyReceived}, 0) + ${line.qtyReceived}` 
-            })
-            .where(eq(supplierOrderItems.id, line.orderItemId));
-        }
-      }
-
-      // 4. Recalculer le statut de chaque commande concernée
-      const orderIds = [...new Set(lines.filter(l => l.orderId).map(l => l.orderId))];
-      for (const orderId of orderIds) {
-        if (!orderId) continue;
-        const allItems = await tx.select().from(supplierOrderItems).where(eq(supplierOrderItems.orderId, orderId));
-        const allComplete = allItems.every(i => Number(i.qtyReceived || 0) >= Number(i.quantity));
-        const anyReceived = allItems.some(i => Number(i.qtyReceived || 0) > 0);
-        
-        await tx.update(supplierOrders)
-          .set({ 
-            statut: allComplete ? 'REÇU' : (anyReceived ? 'PARTIEL' : 'EN_COURS'),
-            deliveryStatus: allComplete ? 'FULL' : (anyReceived ? 'PARTIAL' : 'PENDING'),
-            updatedAt: new Date()
-          })
-          .where(and(eq(supplierOrders.id, orderId), eq(supplierOrders.userId, userId)));
-      }
-
-      // 5. Générer avoirs pour les rejets
-      const rejectedLines = lines.filter(l => (l.qtyRejected || 0) > 0);
-      let creditVal = 0;
-      if (rejectedLines.length > 0) {
-        const creditAmount = rejectedLines.reduce((sum, l) => sum + (l.qtyRejected * (l.unitPrice || 0)), 0);
-        creditVal = creditAmount;
-        
-        await tx.insert(supplierCredits).values({
-          userId,
-          supplierId: receipt.supplierId,
-          amount: creditAmount.toString(),
-          remainingAmount: creditAmount.toString(),
-          status: 'open',
-          sourceType: 'return',
-          reference: `RET-${receipt.deliveryNoteRef || receiptId.slice(0, 8)}`,
-          notes: `Rejet lors réception BL: ${receipt.deliveryNoteRef || ''}`,
-          relatedReceiptId: receiptId,
-          createdAt: new Date(),
-        });
-      }
-
-      // 6. Valider le BR
-      await tx.update(goodsReceipts)
-        .set({ 
-          status: 'validated', 
-          validatedAt: new Date() 
-        })
-        .where(eq(goodsReceipts.id, receiptId));
-
-      try {
-          // @ts-ignore
-          revalidateTag(CACHE_TAGS.supplierOrders);
-          // @ts-ignore
-          revalidateTag(CACHE_TAGS.suppliers);
-      } catch (e) {}
-      
-      revalidatePath('/dashboard/suppliers');
-      
-      return { 
-        success: true, 
-        message: "Réception validée", 
-        creditGenerated: creditVal,
-        itemsCount: lines.reduce((s, l) => s + (l.qtyReceived || 0), 0)
-      };
-    });
+    revalidateSupplierViews();
+    return result;
   } catch (error: any) {
-    console.error("Validation error:", error);
+    console.error('Validation error:', error);
     return { success: false, error: error.message };
   }
 });
 
-/**
- * Liste des BR par fournisseur
- */
 export const getGoodsReceiptsBySupplier = secureAction(async (userId, user, supplierId: string) => {
   try {
     const results = await db.query.goodsReceipts.findMany({
@@ -214,9 +241,6 @@ export const getGoodsReceiptsBySupplier = secureAction(async (userId, user, supp
   }
 });
 
-/**
- * Récupérer les commandes ouvertes (PENDING/PARTIAL) avec leurs lignes
- */
 export const getOpenOrdersWithItems = secureAction(async (userId, user, supplierId: string) => {
   try {
     const results = await db.query.supplierOrders.findMany({
@@ -227,60 +251,66 @@ export const getOpenOrdersWithItems = secureAction(async (userId, user, supplier
       ),
       with: {
         // @ts-ignore
-        items: true
+        items: true,
       },
-      orderBy: [desc(supplierOrders.createdAt)]
+      orderBy: [desc(supplierOrders.createdAt)],
     });
 
-    // Support items both from JSON and from relation table
     const formatted = results.map((order: any) => {
-        const items = order.items || [];
-        return {
-            ...order,
-            items: items.map((item: any) => ({
-                id: item.id,
-                productId: item.productId,
-                label: item.label || item.nomProduit,
-                quantity: Number(item.quantity || 0),
-                qtyReceived: Number(item.qtyReceived || 0),
-                unitPrice: Number(item.unitPrice || 0)
-            }))
-        };
+      const items = order.items || [];
+      return {
+        ...order,
+        items: items.map((item: any) => ({
+          id: item.id,
+          productId: item.productId,
+          label: item.label || item.nomProduit,
+          quantity: Number(item.quantity || 0),
+          qtyReceived: Number(item.qtyReceived || 0),
+          unitPrice: Number(item.unitPrice || 0),
+        })),
+      };
     });
 
     return { success: true, orders: formatted };
   } catch (error: any) {
-    console.error("Error fetching open orders:", error);
+    console.error('Error fetching open orders:', error);
     return { success: false, error: error.message };
   }
 });
 
-/**
- * Traitement complet d'une réception groupée
- */
-export const submitBulkReception = secureAction(async (userId, user, data: { 
-  supplierId: string, 
-  deliveryNoteRef: string, 
-  notes?: string,
-  items: any[] 
-}) => {
+export const submitBulkReception = secureAction(async (
+  userId,
+  user,
+  data: { supplierId: string; deliveryNoteRef: string; notes?: string; items: GoodsReceiptValidationLine[] }
+) => {
   try {
-    // 1. Créer le BR (Draft)
-    const receiptRes = await createGoodsReceipt(data);
-    if (!receiptRes.success || !receiptRes.receipt) return receiptRes;
-    const receiptId = receiptRes.receipt.id;
+    const result = await db.transaction(async (tx) => {
+      const receipt = await createGoodsReceiptRecord(tx, userId, data);
+      const validation = await validateGoodsReceiptWithTx(tx, userId, {
+        receiptId: receipt.id,
+        lines: data.items,
+      });
 
-    // 2. Valider le BR (Stock + Commandes + Avoirs) 
-    // On passe directement les lignes à la validation qui se charge de l'insertion et du traitement
-    const validateRes = await validateGoodsReceiptAction({ receiptId, lines: data.items });
-    
-    if (validateRes.success) {
-      return { ...validateRes, receiptId };
-    }
-    
-    return validateRes;
+      return {
+        ...validation,
+        receiptId: receipt.id,
+      };
+    });
+
+    try {
+      // @ts-ignore
+      revalidateTag(CACHE_TAGS.supplierOrders);
+      // @ts-ignore
+      revalidateTag(CACHE_TAGS.suppliers);
+    } catch (e) {}
+
+    revalidateSupplierViews();
+    return result;
   } catch (error: any) {
-    console.error("Bulk reception error:", error);
-    return { success: false, error: error.message };
+    console.error('Bulk reception error:', error);
+    return {
+      success: false,
+      error: error?.message || "La reception groupee a echoue. Aucune donnee n'a ete enregistree.",
+    };
   }
 });

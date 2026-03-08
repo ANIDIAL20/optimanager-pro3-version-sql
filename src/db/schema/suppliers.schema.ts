@@ -1,5 +1,6 @@
 import { pgTable, pgView, serial, text, varchar, timestamp, numeric, integer, index, check, uuid, boolean, json, jsonb } from 'drizzle-orm/pg-core';
 import { sql, relations } from 'drizzle-orm';
+import { products } from './products';
 
 // 1. SUPPLIERS
 export const suppliers = pgTable('suppliers', {
@@ -28,7 +29,7 @@ export const suppliers = pgTable('suppliers', {
   rating: text('rating'),
   isActive: boolean('is_active').default(true).notNull(),
   defaultTaxMode: text('default_tax_mode'),
-  // ✅ Étape 1 — Contact columns (migrated from serialized notes JSON)
+  // âœ… Ã‰tape 1 â€” Contact columns (migrated from serialized notes JSON)
   contactName:  varchar('contact_name',  { length: 255 }),
   contactPhone: varchar('contact_phone', { length: 50  }),
   contactEmail: varchar('contact_email', { length: 255 }),
@@ -39,8 +40,8 @@ export const suppliers = pgTable('suppliers', {
   activeIdx: index('idx_suppliers_active').on(table.isActive),
 }));
 
-// ✅ Étape 2 — supplier_balance_view (Drizzle declaration)
-// Calcule automatiquement le solde réel depuis les commandes et paiements.
+// âœ… Ã‰tape 2 â€” supplier_balance_view (Drizzle declaration)
+// Calcule automatiquement le solde rÃ©el depuis les commandes et paiements.
 // Utiliser supplierBalanceView.soldeReel au lieu de suppliers.currentBalance (@deprecated).
 export const supplierBalanceView = pgView('supplier_balance_view', {
   supplierId:     uuid('supplier_id'),
@@ -57,7 +58,7 @@ export const supplierOrders = pgTable('supplier_orders', {
   supplierId: uuid('supplier_id').references(() => suppliers.id, { onDelete: 'restrict' }),
   firebaseId: text('firebase_id'),
   fournisseur: text('fournisseur'),
-  /** @deprecated Utiliser supplierOrderItems — sera supprimé en v2.x */
+  /** @deprecated Utiliser supplierOrderItems â€” sera supprimÃ© en v2.x */
   items: json('items'),
   montantTotal: numeric('montant_total', { precision: 15, scale: 2 }),
   statut: text('statut').default('pending'),
@@ -89,14 +90,14 @@ export const supplierOrders = pgTable('supplier_orders', {
   supplierDateIdx: index('idx_orders_supplier_date').on(table.supplierId, table.orderDate, table.deletedAt),
 }));
 
-// ✅ Étape 5 — Table relationnelle pour remplacer items JSONB
+// âœ… Ã‰tape 5 â€” Table relationnelle pour remplacer items JSONB
 // IMPORTANT: orderId est `integer` ici car supplierOrders.id est encore `serial` (int). 
-// Le script de l'Étape 6 migrera cette FK en `uuid` !
+// Le script de l'Ã‰tape 6 migrera cette FK en `uuid` !
 export const supplierOrderItems = pgTable('supplier_order_items', {
   id:        serial('id').primaryKey(),       // (internal item id remains serial)
   orderId:   uuid('order_id').notNull()
              .references(() => supplierOrders.id, { onDelete: 'cascade' }),
-  productId: integer('product_id'), // References products.id (serial/int)
+  productId: integer('product_id').references(() => products.id, { onDelete: 'set null' }),
   reference: varchar('reference', { length: 100 }),
   label:     varchar('label',     { length: 255 }).notNull(),
   quantity:  integer('quantity').notNull(),
@@ -146,6 +147,17 @@ export const supplierOrderPayments = pgTable('supplier_order_payments', {
 // ========================================
 
 // Relations moved to main schema.ts to avoid circularity with lensOrders
+
+export const supplierOrderItemsRelations = relations(supplierOrderItems, ({ one }) => ({
+  order: one(supplierOrders, {
+    fields: [supplierOrderItems.orderId],
+    references: [supplierOrders.id],
+  }),
+  product: one(products, {
+    fields: [supplierOrderItems.productId],
+    references: [products.id],
+  }),
+}));
 
 export const supplierOrdersRelations = relations(supplierOrders, ({ one, many }) => ({
   supplier: one(suppliers, {

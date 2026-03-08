@@ -6,26 +6,44 @@ import * as schemaDir from './schema/index';
 
 const schema = { ...schemaFile, ...schemaDir };
 
-// ✅ Essential for Transactions support in Node.js environment
+// Essential for Transactions support in Node.js environment
 neonConfig.webSocketConstructor = (ws as any).default || ws;
 
-// ✅ Client-side guard: do not evaluate database in browser
+// Client-side guard: do not evaluate database in browser
 const isBrowser = typeof window !== 'undefined';
 
+function trySetIpv4First() {
+  if (isBrowser) return;
+
+  try {
+    const dns = eval('require')('dns') as {
+      setDefaultResultOrder?: (order: 'ipv4first' | 'verbatim') => void;
+    };
+    dns.setDefaultResultOrder?.('ipv4first');
+  } catch {
+    // Some runtimes/bundlers do not expose native dns modules here.
+  }
+}
+
+if (!isBrowser) {
+  // Defensive default in case NODE_OPTIONS is not set in runtime.
+  trySetIpv4First();
+}
+
 if (!isBrowser && !process.env.DATABASE_URL) {
-  throw new Error("❌ DATABASE_URL mafih walou! T2akked anna .env.local fih lien d Neon.");
+  throw new Error("DATABASE_URL mafih walou! T2akked anna .env.local fih lien d Neon.");
 }
 
 function getDatabaseUrl(): string {
   const url = process.env.DATABASE_URL;
   if (!url) {
-    throw new Error("❌ DATABASE_URL mafih walou! T2akked anna .env.local fih lien d Neon.");
+    throw new Error("DATABASE_URL mafih walou! T2akked anna .env.local fih lien d Neon.");
   }
   return url;
 }
 
 function createDbConnection() {
-  console.log("🔌 [DB] Creating new database connection pool...");
+  console.log('[DB] Creating new database connection pool...');
   const pool = new Pool({
     connectionString: getDatabaseUrl(),
   });
@@ -36,25 +54,25 @@ function createDbConnection() {
   });
 }
 
-// ✅ In PRODUCTION: use a singleton to avoid creating too many connections.
-// ✅ In DEVELOPMENT: use a module-level (not globalThis) singleton so that
-//    Turbopack hot-reload always gets a fresh Pool instance, preventing
-//    stale prepared-statement errors after schema migrations.
+// In PRODUCTION: use a singleton to avoid creating too many connections.
+// In DEVELOPMENT: use a module-level (not globalThis) singleton so that
+// Turbopack hot-reload always gets a fresh Pool instance, preventing
+// stale prepared-statement errors after schema migrations.
 declare global {
   var __db_prod: ReturnType<typeof createDbConnection> | undefined;
 }
 
-// Module-level dev instance — cleared on every Turbopack full-reload
+// Module-level dev instance - cleared on every Turbopack full-reload
 let _devInstance: ReturnType<typeof createDbConnection> | null = null;
 
 export const db = new Proxy(
   {},
   {
     get(_target, prop) {
-      console.log(`📡 [DB Proxy] Accessing property: ${String(prop)}`);
+      console.log(`[DB Proxy] Accessing property: ${String(prop)}`);
 
       if (isBrowser) {
-        console.error("❌ [DB Proxy] No database instance available!");
+        console.error('[DB Proxy] No database instance available!');
         return undefined;
       }
 
@@ -67,7 +85,7 @@ export const db = new Proxy(
         }
         instance = globalThis.__db_prod;
       } else {
-        // Development: module-level singleton — fresh after each Turbopack reload
+        // Development: module-level singleton - fresh after each Turbopack reload
         if (!_devInstance) {
           _devInstance = createDbConnection();
         }

@@ -14,10 +14,10 @@ import { CACHE_TAGS } from '@/lib/cache-tags';
  */
 export const getSuppliersList = secureActionWithResponse(async (userId, user) => {
   return await measurePerformance(`getSuppliersList-${userId}`, async () => {
-    console.log('⚡ [v3] Fetching suppliers list for user:', userId);
+    console.log('âš¡ [v3] Fetching suppliers list for user:', userId);
 
     try {
-      // ✅ Étape 2 — JOIN avec la view pour obtenir le solde réel calculé
+      // âœ… Ã‰tape 2 â€” JOIN avec la view pour obtenir le solde rÃ©el calculÃ©
       const results = await db
         .select()
         .from(suppliers)
@@ -53,7 +53,7 @@ export const getSuppliersList = secureActionWithResponse(async (userId, user) =>
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         
-        // ✅ Étape 1 — Reading from dedicated columns
+        // âœ… Ã‰tape 1 â€” Reading from dedicated columns
         contactName:  row.contactName  || '',
         contactPhone: row.contactPhone || '',
 
@@ -67,7 +67,7 @@ export const getSuppliersList = secureActionWithResponse(async (userId, user) =>
         contactTelephone: row.contactPhone || '',
         contactEmail:     row.contactEmail || '',
         defaultTaxMode: row.defaultTaxMode || 'HT',
-        // ✅ Étape 2 — solde_reel from view (fallback removed)
+        // âœ… Ã‰tape 2 â€” solde_reel from view (fallback removed)
         currentBalance: Number(view?.soldeReel ?? 0),
         totalAchats:   Number(view?.totalAchats ?? 0),
         totalPaiements: Number(view?.totalPaiements ?? 0),
@@ -76,12 +76,12 @@ export const getSuppliersList = secureActionWithResponse(async (userId, user) =>
       return mappedItems;
     } catch (error: any) {
       console.error('[getSuppliersList] CRITICAL ERROR:', error);
-      throw new Error(`Erreur récupération fournisseurs: ${error.message}`);
+      throw new Error(`Erreur rÃ©cupÃ©ration fournisseurs: ${error.message}`);
     }
   }, { userId });
 });
 
-// ✅ Étape 4 — Paginated + filtered supplier list (server-side)
+// âœ… Ã‰tape 4 â€” Paginated + filtered supplier list (server-side)
 export interface GetSuppliersParams {
   search?:   string;
   category?: string;
@@ -97,7 +97,7 @@ export const getSuppliersListPaginated = secureAction(async (userId, user, param
     return await querySuppliersListPaginated(userId, params);
   } catch (error: any) {
     console.error('[getSuppliersListPaginated] ERROR:', error);
-    throw new Error(`Erreur récupération fournisseurs: ${error.message}`);
+    throw new Error(`Erreur rÃ©cupÃ©ration fournisseurs: ${error.message}`);
   }
 });
 
@@ -106,9 +106,9 @@ export const getSuppliersListPaginated = secureAction(async (userId, user, param
  */
 export const getSupplier = secureAction(async (userId, user, id: string) => {
   try {
-    console.log(`🔍 [getSupplier] Fetching supplier ${id}`);
+    console.log(`ðŸ” [getSupplier] Fetching supplier ${id}`);
     
-    // ✅ Étape 2 — JOIN avec la view pour le solde réel
+    // âœ… Ã‰tape 2 â€” JOIN avec la view pour le solde rÃ©el
     const results = await db
       .select()
       .from(suppliers)
@@ -123,7 +123,7 @@ export const getSupplier = secureAction(async (userId, user, id: string) => {
       .limit(1);
 
     if (!results.length) {
-      console.warn(`⚠️ [getSupplier] No supplier found with ID ${id}`);
+      console.warn(`âš ï¸ [getSupplier] No supplier found with ID ${id}`);
       return null;
     }
 
@@ -161,14 +161,14 @@ export const getSupplier = secureAction(async (userId, user, id: string) => {
         contactNom:       row.contactName  || '',
         contactTelephone: row.contactPhone || '',
         defaultTaxMode: row.defaultTaxMode || 'HT',
-        // ✅ Étape 2 — solde_reel from view
+        // âœ… Ã‰tape 2 â€” solde_reel from view
         currentBalance: Number(view?.soldeReel ?? 0),
         totalAchats:    Number(view?.totalAchats ?? 0),
         totalPaiements: Number(view?.totalPaiements ?? 0),
     };
 
   } catch (error: any) {
-    console.error('💥 [getSupplier] CRITICAL ERROR:', error);
+    console.error('ðŸ’¥ [getSupplier] CRITICAL ERROR:', error);
     return null;
   }
 });
@@ -177,12 +177,12 @@ export const getSupplier = secureAction(async (userId, user, id: string) => {
  * Create a new supplier
  */
 export const createSupplier = secureAction(async (userId, user, data: any) => {
-  console.log('📝 Creating supplier with data:', JSON.stringify(data, null, 2));
+  console.log('ðŸ“ Creating supplier with data:', JSON.stringify(data, null, 2));
 
-  // 🛡️ CHECK QUOTAS
+  // ðŸ›¡ï¸ CHECK QUOTAS
   const usage = await getClientUsageStats(userId);
   if (usage.suppliers.count >= usage.suppliers.limit) {
-       throw new Error(`Vous avez atteint la limite de fournisseurs pour votre plan (${usage.suppliers.limit}). Veuillez mettre à niveau.`);
+       throw new Error(`Vous avez atteint la limite de fournisseurs pour votre plan (${usage.suppliers.limit}). Veuillez mettre Ã  niveau.`);
   }
 
   const notesPayload = data.notes || null;
@@ -209,14 +209,14 @@ export const createSupplier = secureAction(async (userId, user, data: any) => {
         notes: notesPayload,
         status: data.status || 'Actif',
         defaultTaxMode: data.defaultTaxMode || 'HT',
-        // ✅ Étape 1 — Writing directly to dedicated columns
+        // âœ… Ã‰tape 1 â€” Writing directly to dedicated columns
         contactName:  data.contactNom       || null,
         contactPhone: data.contactTelephone || null,
         contactEmail: data.contactEmail     || null,
       } as any)
       .returning();
 
-    // Invalide uniquement le cache du bon utilisateur (performant) + invalide le tag global en sécurité.
+    // Invalide uniquement le cache du bon utilisateur (performant) + invalide le tag global en sÃ©curitÃ©.
     // @ts-ignore
     revalidateTag(`${CACHE_TAGS.suppliers}-${userId}`);
     // @ts-ignore
@@ -224,8 +224,8 @@ export const createSupplier = secureAction(async (userId, user, data: any) => {
     revalidatePath('/suppliers');
     return created;
   } catch (error: any) {
-    console.error('❌ Error creating supplier:', error);
-    throw new Error(`Erreur lors de la création: ${error.message}`);
+    console.error('âŒ Error creating supplier:', error);
+    throw new Error(`Erreur lors de la crÃ©ation: ${error.message}`);
   }
 });
 
@@ -233,7 +233,7 @@ export const createSupplier = secureAction(async (userId, user, data: any) => {
  * Update a supplier
  */
 export const updateSupplier = secureAction(async (userId, user, id: string, data: any) => {
-  console.log('📝 [updateSupplier] Processing update for:', id);
+  console.log('ðŸ“ [updateSupplier] Processing update for:', id);
 
   const dbPayload: any = {};
 
@@ -258,7 +258,7 @@ export const updateSupplier = secureAction(async (userId, user, id: string, data
   }
 
   if (data.contactNom !== undefined || data.contactTelephone !== undefined || data.contactEmail !== undefined) {
-    // ✅ Étape 1 — Write directly to dedicated columns
+    // âœ… Ã‰tape 1 â€” Write directly to dedicated columns
     if (data.contactNom       !== undefined) dbPayload.contactName  = data.contactNom       || null;
     if (data.contactTelephone !== undefined) dbPayload.contactPhone = data.contactTelephone || null;
     if (data.contactEmail     !== undefined) dbPayload.contactEmail = data.contactEmail     || null;
@@ -280,11 +280,12 @@ export const updateSupplier = secureAction(async (userId, user, id: string, data
     revalidateTag(`${CACHE_TAGS.suppliers}-${userId}`);
     // @ts-ignore
     revalidateTag(CACHE_TAGS.suppliers);
-    revalidatePath('/dashboard/fournisseurs');
+    revalidatePath('/suppliers', 'layout');
+    revalidatePath('/suppliers/[id]', 'page');
     return updated;
   } catch (err: any) {
-     console.error("❌ DB Update Error:", err);
-     throw new Error("Erreur mise à jour fournisseur: " + err.message);
+     console.error("âŒ DB Update Error:", err);
+     throw new Error("Erreur mise Ã  jour fournisseur: " + err.message);
   }
 });
 
@@ -306,6 +307,7 @@ export const deleteSupplier = secureAction(async (userId, user, id: string) => {
   revalidateTag(`${CACHE_TAGS.suppliers}-${userId}`);
   // @ts-ignore
   revalidateTag(CACHE_TAGS.suppliers);
-  revalidatePath('/dashboard/fournisseurs');
+  revalidatePath('/suppliers', 'layout');
+    revalidatePath('/suppliers/[id]', 'page');
   return { success: true };
 });

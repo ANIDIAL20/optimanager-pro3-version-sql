@@ -1,39 +1,39 @@
 'use client';
 
 import React from 'react';
-import { 
-  MoreHorizontal, 
-  Eye, 
-  Pencil, 
-  Trash2, 
-  Printer, 
+import {
+  MoreHorizontal,
+  Eye,
+  Pencil,
+  Trash2,
+  Printer,
   Copy,
-  Info
+  Info,
 } from 'lucide-react';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuLabel, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { 
-  AlertDialog, 
-  AlertDialogAction, 
-  AlertDialogCancel, 
-  AlertDialogContent, 
-  AlertDialogDescription, 
-  AlertDialogFooter, 
-  AlertDialogHeader, 
-  AlertDialogTitle 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { deleteSupplierOrder } from '@/app/actions/supplier-orders-actions';
@@ -46,7 +46,7 @@ import { printInPlace } from '@/lib/print-in-place';
 
 interface TransactionActionsProps {
   transaction: {
-    id: string; // e.g. "order-1" or "payment-5"
+    id: string;
     type: 'ACHAT' | 'PAIEMENT';
     reference: string;
     amount: number;
@@ -60,8 +60,8 @@ export function TransactionActions({ transaction }: TransactionActionsProps) {
   const queryClient = useQueryClient();
   const [showDeleteAlert, setShowDeleteAlert] = React.useState(false);
   const [showDetails, setShowDetails] = React.useState(false);
-  
-  const id = transaction.id.split('-').slice(1).join('-'); // Re-join if UUID contains hyphens
+
+  const id = transaction.id.split('-').slice(1).join('-');
   const isAdmin = session?.user?.role === 'ADMIN';
 
   const handleDelete = async () => {
@@ -71,7 +71,7 @@ export function TransactionActions({ transaction }: TransactionActionsProps) {
       } else {
         await deleteSupplierPayment(id);
       }
-      toast.success('Suppression réussie');
+      toast.success('Suppression reussie');
       queryClient.invalidateQueries({ queryKey: ['supplier-statement', transaction.supplierId] });
       queryClient.invalidateQueries({ queryKey: ['supplier-balance', transaction.supplierId] });
     } catch (error: any) {
@@ -81,7 +81,7 @@ export function TransactionActions({ transaction }: TransactionActionsProps) {
 
   const copyReference = () => {
     navigator.clipboard.writeText(transaction.reference);
-    toast.info('Référence copiée');
+    toast.info('Reference copiee');
   };
 
   return (
@@ -95,21 +95,20 @@ export function TransactionActions({ transaction }: TransactionActionsProps) {
         <DropdownMenuContent align="end">
           <DropdownMenuLabel>Actions</DropdownMenuLabel>
           <DropdownMenuItem onClick={() => setShowDetails(true)}>
-            <Eye className="mr-2 h-4 w-4" /> Voir détails
+            <Eye className="mr-2 h-4 w-4" /> Voir details
           </DropdownMenuItem>
           <DropdownMenuItem onClick={copyReference}>
-            <Copy className="mr-2 h-4 w-4" /> Copier référence
+            <Copy className="mr-2 h-4 w-4" /> Copier reference
           </DropdownMenuItem>
-          
+
           <DropdownMenuSeparator />
-          
+
           <DropdownMenuItem
             className="text-blue-600"
             onClick={() => {
               if (transaction.type === 'ACHAT') {
                 printInPlace(`/print/bon-commande/${id}`);
               } else {
-                // Payments don't have their own print page yet
                 printInPlace(`/print/bon-commande/${id}`);
               }
             }}
@@ -119,28 +118,27 @@ export function TransactionActions({ transaction }: TransactionActionsProps) {
 
           {isAdmin && (
             <>
-              <DropdownMenuItem onClick={() => toast.info('Modification bientôt disponible')}>
+              <DropdownMenuItem onClick={() => toast.info('Modification bientot disponible')}>
                 <Pencil className="mr-2 h-4 w-4" /> Modifier
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem 
-                className="text-red-600 focus:text-red-600" 
+              <DropdownMenuItem
+                className="text-red-600 focus:text-red-600"
                 onClick={() => setShowDeleteAlert(true)}
               >
-                <Trash2 className="mr-2 h-4 w-4" /> Supprimer (Soft Delete)
+                <Trash2 className="mr-2 h-4 w-4" /> Supprimer definitivement
               </DropdownMenuItem>
             </>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* 🗑️ Delete Confirmation */}
       <AlertDialog open={showDeleteAlert} onOpenChange={setShowDeleteAlert}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Êtes-vous sûr de vouloir supprimer ?</AlertDialogTitle>
+            <AlertDialogTitle>Etes-vous sur de vouloir supprimer ?</AlertDialogTitle>
             <AlertDialogDescription>
-              Cette transaction sera déplacée vers les archives (Soft Delete). Vous pourrez toujours la consulter via les journaux d'audit.
+              Cette suppression est definitive et irreversible.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -152,18 +150,17 @@ export function TransactionActions({ transaction }: TransactionActionsProps) {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ℹ️ Details Modal */}
       <Dialog open={showDetails} onOpenChange={setShowDetails}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Info className="h-5 w-5 text-blue-500" />
-              Détails de la {transaction.type === 'ACHAT' ? 'Commande' : 'Transaction'}
+              Details de la {transaction.type === 'ACHAT' ? 'Commande' : 'Transaction'}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 pt-4">
             <div className="flex justify-between border-b pb-2">
-              <span className="text-muted-foreground">Référence:</span>
+              <span className="text-muted-foreground">Reference:</span>
               <span className="font-mono font-bold">{transaction.reference}</span>
             </div>
             <div className="flex justify-between border-b pb-2">
@@ -174,9 +171,9 @@ export function TransactionActions({ transaction }: TransactionActionsProps) {
               <span className="text-muted-foreground">Montant:</span>
               <span className="text-lg font-bold">{transaction.amount.toLocaleString()} MAD</span>
             </div>
-            
+
             <div className="mt-6 p-3 bg-muted rounded-md text-xs text-muted-foreground">
-              <p>Les données d'audit sont disponibles dans les registres système pour l'Admin.</p>
+              <p>Les donnees d'audit sont disponibles dans les registres systeme pour l'Admin.</p>
               <p className="mt-1 italic">ID de l'enregistrement: {transaction.id}</p>
             </div>
           </div>
