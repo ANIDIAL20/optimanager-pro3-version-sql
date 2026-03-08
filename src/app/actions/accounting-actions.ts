@@ -7,8 +7,8 @@ import { secureAction } from '@/lib/secure-action';
 import { getDateRange } from '@/lib/date-utils';
 import type { SaleRow, DateRange, AccountingMetrics } from '@/types/accounting';
 
-// Re-export shared types for backwards compat
-export type { SaleRow, DateRange, AccountingMetrics };
+// Shared types are imported from @/types/accounting
+// No longer re-exporting them here to avoid Turbopack build errors with "use server"
 
 // ==========================================
 // Helpers
