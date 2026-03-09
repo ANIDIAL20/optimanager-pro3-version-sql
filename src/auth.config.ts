@@ -28,3 +28,5 @@ export const authConfig = {
     // jwt and session should be in auth.ts ONLY
   },
 } satisfies NextAuthConfig;
+
+export default authConfig;
