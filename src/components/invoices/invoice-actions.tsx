@@ -19,6 +19,8 @@ import type { Sale, Client } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { PrintPreviewDialog } from '@/components/printing/print-preview-dialog';
 import { printInPlace } from '@/lib/print-in-place';
+import { generateDocumentFilename } from '@/lib/pdf-filenames';
+import { downloadPdfFromApi } from '@/lib/download-pdf';
 
 // Shop settings type (matching InvoicePDF)
 interface ShopSettings {
@@ -52,8 +54,26 @@ export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsPro
     };
 
     // PDF download — direct API route with attachment header
-    const handleDownload = () => {
-        window.open(`/api/factures/${sale.id}/pdf`, '_blank');
+    const handleDownload = async () => {
+        try {
+            const url = `/api/factures/${sale.id}/pdf`;
+            const clientName = `${client.prenom || ''} ${client.nom || ''}`.trim() || 'Client';
+            const reference = sale.saleNumber || String(sale.id);
+
+            await downloadPdfFromApi(
+                url,
+                generateDocumentFilename('Facture', reference, clientName)
+            );
+            
+            toast({ title: "Téléchargement terminé" });
+        } catch (error) {
+            console.error("Download error:", error);
+            toast({ 
+                variant: 'destructive', 
+                title: 'Erreur', 
+                description: 'Le téléchargement a échoué.' 
+            });
+        }
     };
 
     // Aperçu design actuel — same URL, no autoprint

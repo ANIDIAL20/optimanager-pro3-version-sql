@@ -1,0 +1,16 @@
+
+> nextn@0.1.0 dev
+> cross-env NODE_OPTIONS='--dns-result-order=ipv4first' next dev
+
+⚠ Port 3000 is in use by process 18056, using available port 3001 instead.
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3001
+- Network:       http://192.168.155.20:3001
+- Environments: .env.local
+- Experiments (use with caution):
+  · serverActions
+
+✓ Starting...
+⨯ Unable to acquire lock at C:\Users\ousay\optimanager-pro3\.next\dev\lock, is another instance of next dev running?
+  Suggestion: If you intended to restart next dev, terminate the other process, and then try again.
+[?25h

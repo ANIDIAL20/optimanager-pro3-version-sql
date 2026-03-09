@@ -5,9 +5,12 @@ import { eq, and } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 import { generateDocumentPDFStream } from '@/lib/pdf-generator';
-import { buildPdfFileName } from '@/lib/pdf-filenames';
+import { generateDocumentFilename } from '@/lib/pdf-filenames';
+import { buildPdfHeaders } from '@/lib/pdf-response';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(
   req: Request,
@@ -115,16 +118,14 @@ export async function GET(
     });
 
     // Dynamic Naming for PDF
-    const filename = buildPdfFileName({
-        type: "facture",
-        reference: sale.saleNumber || String(sale.id),
-    });
+    const safeFilename = generateDocumentFilename(
+        "Facture",
+        sale.saleNumber || String(sale.id),
+        sale.clientName || sale.client?.fullName || 'Client'
+    );
 
     return new NextResponse(readable, {
-        headers: {
-            'Content-Type': 'application/pdf',
-            'Content-Disposition': `attachment; filename="${filename}"`,
-        },
+        headers: buildPdfHeaders(safeFilename),
     });
 
   } catch (error: any) {

@@ -11,6 +11,8 @@ import { Logo } from '@/components/logo';
 import { SensitiveData } from '@/components/ui/sensitive-data';
 import { formatCurrencyToWords } from '@/lib/format-number-to-words';
 import { printInPlace } from '@/lib/print-in-place';
+import { generateDocumentFilename } from '@/lib/pdf-filenames';
+import { downloadPdfFromApi } from '@/lib/download-pdf';
 
 interface SaleWithDetails extends Sale {
   details: OrderDetail[];
@@ -29,8 +31,20 @@ export function Invoice({ sale, client }: InvoiceProps) {
     printInPlace(`/print/facture/${sale.id}`);
   };
 
-  const handleDownloadPdf = () => {
-    window.open(`/print/facture/${sale.id}?autoprint=1`, '_blank', "noopener,noreferrer");
+  const handleDownloadPdf = async () => {
+    try {
+      const url = `/api/factures/${sale.id}/pdf`;
+      const clientName = `${client.prenom || ''} ${client.nom || ''}`.trim() || 'Client';
+      const reference = sale.saleNumber || String(sale.id);
+
+      await downloadPdfFromApi(
+        url,
+        generateDocumentFilename('Facture', reference, clientName)
+      );
+    } catch (error) {
+      console.error("Download error:", error);
+      toast({ variant: 'destructive', title: 'Erreur', description: 'Le téléchargement a échoué.' });
+    }
   };
 
   const handlePreview = () => {

@@ -1,6 +1,5 @@
-// SECURED: uses authGuard + tenant filter (2026-03-01)
 import { db } from '@/db';
-import { devis, shopProfiles } from '@/db/schema';
+import { supplierOrders, shopProfiles } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
@@ -17,34 +16,29 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // ✅ UPDATED
-    const forceLatest = new URL(req.url).searchParams.get('latest') === 'true';
-
     const session = await auth();
     if (!session?.user?.id) {
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
     const { id } = await params;
-    const documentId = parseInt(id);
+    const orderId = parseInt(id);
     
-    if (isNaN(documentId)) {
+    if (isNaN(orderId)) {
         return new NextResponse('Invalid ID', { status: 400 });
     }
 
-    // 1. Fetch Quote (Devis)
-    const quote = await db.query.devis.findFirst({
-        where: and(eq(devis.id, documentId), eq(devis.userId, session.user.id)),
+    const order = await db.query.supplierOrders.findFirst({
+        where: and(eq(supplierOrders.id, orderId), eq(supplierOrders.userId, session.user.id)),
         with: {
-            client: true 
+            supplier: true
         }
     });
 
-    if (!quote) {
-        return new NextResponse('Devis not found', { status: 404 });
+    if (!order) {
+        return new NextResponse('Order not found', { status: 404 });
     }
 
-    // 2. Fetch Shop Profile
     const profile = await db.query.shopProfiles.findFirst({
         where: eq(shopProfiles.userId, session.user.id)
     });
@@ -53,36 +47,28 @@ export async function GET(
         return new NextResponse('Shop Profile not found', { status: 404 });
     }
 
-    // 3. Prepare Data
-    const clientData = quote.client || {
-        fullName: quote.clientName,
-        phone: quote.clientPhone
-    };
-
     const templateData = {
-        document: quote,
-        client: clientData,
-        settings: profile, // Static shop info
-        // documentSettings will be resolved by generator
+        document: {
+            ...order,
+            documentNumber: order.orderNumber || String(order.id),
+            date: order.createdAt,
+            items: order.items || [],
+            totalTTC: Number(order.montantTotal || 0),
+            totalHT: Number(order.montantTotal || 0) / 1.2, // Rough estimate
+        },
+        client: {
+            fullName: order.supplier?.nom || order.fournisseur || 'Fournisseur',
+            phone: order.supplier?.phone || order.supplierPhone,
+        },
+        settings: profile,
     };
 
-    // 4. Generate Stream
-    let stream: NodeJS.ReadableStream;
-    try {
-        stream = await generateDocumentPDFStream({
-            type: 'devis',
-            data: templateData,
-            shopId: profile.id, // Use profile.id as shopId
-            snapshot: quote.documentSettingsSnapshot,
-            forceLatest,
-        });
-    } catch (error) {
-        console.error("[PDF ERROR]", error);
-        throw error;
-    }
+    const stream = await generateDocumentPDFStream({
+        type: 'bc', // Bon de Commande
+        data: templateData,
+        shopId: profile.id,
+    });
     
-    // 5. Return Response
-    // Convert Node stream to Web ReadableStream
     const readable = new ReadableStream({
         start(controller) {
           stream.on('data', (chunk) => controller.enqueue(chunk));
@@ -91,11 +77,10 @@ export async function GET(
         },
     });
 
-    // Dynamic Naming for PDF
     const safeFilename = generateDocumentFilename(
-        "Devis",
-        `DEV-${quote.id}`,
-        quote.clientName || quote.client?.fullName || 'Client'
+        "Commande",
+        order.orderNumber || String(order.id),
+        order.supplier?.nom || order.fournisseur || 'Fournisseur'
     );
 
     return new NextResponse(readable, {
@@ -103,7 +88,7 @@ export async function GET(
     });
 
   } catch (error: any) {
-    console.error('[PDF ERROR]', error);
+    console.error('PDF Generation Error:', error);
     return new NextResponse(error.message, { status: 500 });
   }
 }

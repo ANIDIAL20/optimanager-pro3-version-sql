@@ -1,83 +1,59 @@
-'use client';
-
-import * as React from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { BrandLoader } from '@/components/ui/loader-brand';
-import { getDocumentConfig } from '@/app/actions/shop-actions';
-import { PrintDocumentTemplate } from '@/components/printing/print-document-template';
-import { AutoPrint } from '@/components/printing/auto-print';
-import { useToast } from '@/hooks/use-toast';
-import { bonCommandeAdapter } from '@/lib/documents/adapters';
-import type { StandardDocumentData } from '@/types/document';
-import type { DocumentTemplateConfig } from '@/types/document-template';
+/**
+ * /print/bon-commande/[id] — Server Component
+ * Standardized to match Facture/Devis/Recu for SSR Title & Template consistency.
+ */
+import { notFound } from 'next/navigation';
+import { getSupplierOrderPrintData } from '@/app/actions/supplier-orders-actions';
+import { getDocumentConfigForPrint } from '@/app/actions/shop-actions';
 import { DEFAULT_TEMPLATE_CONFIG } from '@/types/document-template';
-import { usePrintTitle } from '@/hooks/use-print-title';
-import { buildPdfFileName } from '@/lib/pdf-filenames';
-
-// Dynamic import keeps the server action out of the client bundle
-async function getBonCommandeData(id: string) {
-  const { getSupplierOrderPrintData } = await import('@/app/actions/supplier-orders-actions');
-  return getSupplierOrderPrintData(id);
-}
+import { bonCommandeAdapter } from '@/lib/documents/adapters';
+import { PrintShell } from '@/components/printing/print-shell';
+import { generateDocumentFilename } from '@/lib/pdf-filenames';
+import type { Metadata } from 'next';
 
 interface BonCommandePrintPageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ auto?: string; autoprint?: string; preview?: string }>;
 }
 
-export default function BonCommandePrintPage({ params }: BonCommandePrintPageProps) {
-  const { id } = React.use(params);
-  const router = useRouter();
-  const { toast } = useToast();
-
-  const searchParams = useSearchParams();
-  const shouldAutoPrint = searchParams.get('auto') === 'true' || searchParams.get('autoprint') === 'true';
-  const isPreview = !!searchParams.get('preview');
-
-  const [data, setData] = React.useState<StandardDocumentData | null>(null);
-  const [docConfig, setDocConfig] = React.useState<DocumentTemplateConfig | undefined>(undefined);
-  const [isLoading, setIsLoading] = React.useState(true);
-
-  React.useEffect(() => {
-    if (!id) return;
-    Promise.all([
-      getBonCommandeData(id),
-      getDocumentConfig(),
-    ]).then(([result, cfg]) => {
-      setDocConfig(cfg);
-      if (result.success && result.data) {
-        setData(bonCommandeAdapter.toStandardDocument(result.data));
-      } else {
-        toast({ variant: 'destructive', title: 'Erreur', description: (result as any).error ?? 'Commande introuvable' });
-        router.push('/dashboard/achats');
-      }
-      setIsLoading(false);
-    });
-  }, [id, router, toast]);
-
-  usePrintTitle(
-    data ? buildPdfFileName({ type: 'bon_commande', reference: data.documentNumber }) : null
-  );
-
-  // Auto-print — handled by <AutoPrint /> rendered below
-
-  if (isLoading) {
-    return (
-      <div className="fixed inset-0 z-[100] bg-white flex items-center justify-center">
-        <BrandLoader size="md" className="text-gray-400" />
-      </div>
-    );
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const result = await getSupplierOrderPrintData(id);
+  
+  if (!result.success || !result.data) {
+    return { title: 'Bon de Commande - OptiManager Pro' };
   }
-  if (!data) return null;
+
+  const data = bonCommandeAdapter.toStandardDocument(result.data);
+  const filename = generateDocumentFilename('Commande', data.documentNumber, data.fournisseur?.nom || 'Fournisseur');
+
+  return {
+    title: filename,
+  };
+}
+
+export default async function BonCommandePrintPage({
+  params,
+  searchParams,
+}: BonCommandePrintPageProps) {
+  const { id } = await params;
+  const sp = await searchParams;
+
+  const [result, docConfig] = await Promise.all([
+    getSupplierOrderPrintData(id),
+    getDocumentConfigForPrint(),
+  ]);
+
+  if (!result.success || !result.data) notFound();
+
+  const data = bonCommandeAdapter.toStandardDocument(result.data);
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 print:bg-white print:py-0">
-      {shouldAutoPrint && !isLoading && <AutoPrint />}
-      <PrintDocumentTemplate
-        data={data}
-        config={docConfig ?? DEFAULT_TEMPLATE_CONFIG}
-        showToolbar={!isPreview}
-        onBack={() => router.back()}
-      />
-    </div>
+    <PrintShell
+      data={data}
+      config={docConfig ?? DEFAULT_TEMPLATE_CONFIG}
+      autoprint={sp.auto === 'true' || sp.autoprint === 'true'}
+      isPreview={!!sp.preview}
+    />
   );
 }

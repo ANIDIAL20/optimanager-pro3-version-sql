@@ -21,7 +21,7 @@ import { AutoPrint } from '@/components/printing/auto-print';
 import type { StandardDocumentData } from '@/types/document';
 import type { DocumentTemplateConfig } from '@/types/document-template';
 import { usePrintTitle } from '@/hooks/use-print-title';
-import { buildPdfFileName } from '@/lib/pdf-filenames';
+import { generateDocumentFilename, DocumentType } from '@/lib/pdf-filenames';
 
 interface PrintShellProps {
   data: StandardDocumentData;
@@ -41,14 +41,18 @@ export function PrintShell({
   const router = useRouter();
 
   // Unified filename generation for all documents using PrintShell
+  const docType: DocumentType = 
+    data.type === 'REÇU' ? 'Recu' : 
+    data.type === 'DEVIS' ? 'Devis' : 
+    data.type === 'FACTURE' ? 'Facture' : 
+    data.type === 'BON DE COMMANDE' ? 'Commande' : 'Devis';
+
   usePrintTitle(
-    buildPdfFileName({
-        type: data.type === 'REÇU' ? 'recu' : 
-              data.type === 'DEVIS' ? 'devis' : 
-              data.type === 'FACTURE' ? 'facture' : 
-              data.type === 'BON DE COMMANDE' ? 'bon_commande' : 'devis' as any,
-        reference: data.documentNumber
-    })
+    generateDocumentFilename(
+        docType,
+        data.documentNumber,
+        data.client?.nom || data.fournisseur?.nom || 'Client'
+    )
   );
 
   return (

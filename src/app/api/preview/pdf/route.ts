@@ -3,11 +3,14 @@ import React from 'react';
 import { pdf } from '@react-pdf/renderer';
 import { PdfDocumentTemplate } from '@/components/documents/pdf-document-template';
 import { auth } from '@/auth';
+import { buildPdfHeaders } from '@/lib/pdf-response';
 
 // SECURED: uses authGuard + tenant filter (2026-03-01)
 
 // Check if we are running in Node environment
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function POST(req: Request) {
     try {
@@ -42,12 +45,7 @@ export async function POST(req: Request) {
         const buffer = await instance.toBuffer(); // Node-safe output
 
         return new Response(buffer, {
-            headers: {
-                'Content-Type': 'application/pdf',
-                'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0',
-            },
+            headers: buildPdfHeaders('document-preview.pdf', 'inline'),
         });
     } catch (err: any) {
         console.error("PDF Generation Error (Detailed):", err);

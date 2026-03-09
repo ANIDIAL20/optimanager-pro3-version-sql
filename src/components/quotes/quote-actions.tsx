@@ -19,6 +19,8 @@ import type { Client } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { PrintPreviewDialog } from '@/components/printing/print-preview-dialog';
 import { printInPlace } from '@/lib/print-in-place';
+import { generateDocumentFilename } from '@/lib/pdf-filenames';
+import { downloadPdfFromApi } from '@/lib/download-pdf';
 
 interface ShopSettings {
     shopName: string;
@@ -51,8 +53,26 @@ export function QuoteActions({ devis, shopSettings, client }: QuoteActionsProps)
     };
 
     // PDF download — direct API route with attachment header
-    const handleDownload = () => {
-        window.open(`/api/devis/${devis.id}/pdf`, '_blank');
+    const handleDownload = async () => {
+        try {
+            const url = `/api/devis/${devis.id}/pdf`;
+            const clientName = devis.clientName || 'Client';
+            const reference = `DEV-${devis.id}`;
+
+            await downloadPdfFromApi(
+                url,
+                generateDocumentFilename('Devis', reference, clientName)
+            );
+            
+            toast({ title: "Téléchargement terminé" });
+        } catch (error) {
+            console.error("Download error:", error);
+            toast({ 
+                variant: 'destructive', 
+                title: 'Erreur', 
+                description: 'Le téléchargement a échoué.' 
+            });
+        }
     };
 
     const handleShare = async () => {

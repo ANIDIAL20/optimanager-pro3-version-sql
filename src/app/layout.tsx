@@ -19,7 +19,10 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import QueryProvider from "@/providers/query-provider";
 
 export const metadata: Metadata = {
-  title: "OptiManager Pro",
+  title: {
+    default: "OptiManager Pro",
+    template: "%s | OptiManager Pro",
+  },
   description: "Advanced Optician Management System",
   icons: {
     icon: "/logo-icon.png",

@@ -11,10 +11,28 @@ import { getDocumentConfigForPrint } from '@/app/actions/shop-actions';
 import { DEFAULT_TEMPLATE_CONFIG } from '@/types/document-template';
 import { recuAdapter } from '@/lib/documents/adapters';
 import { PrintShell } from '@/components/printing/print-shell';
+import { generateDocumentFilename } from '@/lib/pdf-filenames';
+import type { Metadata } from 'next';
 
 interface RecuPrintPageProps {
   params: Promise<{ id: string }>;
   searchParams: Promise<{ auto?: string; autoprint?: string; preview?: string }>;
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const result = await getPrintData(id, 'recu');
+  
+  if (!result.success || !result.data) {
+    return { title: 'Reçu - OptiManager Pro' };
+  }
+
+  const data = recuAdapter.toStandardDocument(result.data);
+  const filename = generateDocumentFilename('Recu', data.documentNumber, data.client?.nom || 'Client');
+
+  return {
+    title: filename,
+  };
 }
 
 export default async function RecuPrintPage({

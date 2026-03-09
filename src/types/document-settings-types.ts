@@ -8,7 +8,7 @@ export type FontFamily = (typeof SUPPORTED_FONTS)[number];
 export type Layout = (typeof SUPPORTED_LAYOUTS)[number];
 export type Theme = (typeof SUPPORTED_THEMES)[number];
 export type Language = (typeof SUPPORTED_LANGS)[number];
-export type DocType = 'facture' | 'devis' | 'bc' | 'bl';
+export type DocType = 'facture' | 'devis' | 'bc' | 'bl' | 'recu';
 
 export interface DocTypeOverride {
   primaryColor?: string;

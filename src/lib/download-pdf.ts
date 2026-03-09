@@ -1,0 +1,63 @@
+"use client";
+
+function extractFileName(
+  disposition: string | null,
+  fallback: string
+): string {
+  if (!disposition) return fallback;
+
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;\n]+)/i);
+  if (utf8Match) {
+    return decodeURIComponent(utf8Match[1]);
+  }
+
+  const asciiMatch = disposition.match(/filename="?([^";\n]+)"?/i);
+  if (asciiMatch) {
+    return asciiMatch[1].trim();
+  }
+
+  return fallback;
+}
+
+export async function downloadPdfFromApi(
+  url: string,
+  fallbackFilename: string
+) {
+  const requestUrl = new URL(url, window.location.origin);
+  requestUrl.searchParams.set("latest", "true");
+  requestUrl.searchParams.set("_", Date.now().toString());
+
+  const response = await fetch(requestUrl.toString(), {
+    cache: "no-store",
+    headers: {
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("Download failed");
+  }
+
+  const disposition = response.headers.get("Content-Disposition");
+  console.log("[download-pdf] Content-Disposition:", disposition);
+  console.log("[download-pdf] All headers:", [...response.headers.entries()]);
+
+  const blob = await response.blob();
+  const objectUrl = window.URL.createObjectURL(blob);
+  const downloadName = extractFileName(disposition, fallbackFilename);
+
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = downloadName;
+  link.style.display = "none";
+
+  document.body.appendChild(link);
+
+  try {
+    link.click();
+  } finally {
+    window.URL.revokeObjectURL(objectUrl);
+    document.body.removeChild(link);
+  }
+}

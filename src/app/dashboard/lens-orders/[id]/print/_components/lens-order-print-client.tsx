@@ -13,7 +13,7 @@ import { PrintDocumentTemplate } from '@/components/printing/print-document-temp
 import { AutoPrint } from '@/components/printing/auto-print';
 import type { StandardDocumentData } from '@/types/document';
 import { usePrintTitle } from '@/hooks/use-print-title';
-import { buildPdfFileName } from '@/lib/pdf-filenames';
+import { generateDocumentFilename } from '@/lib/pdf-filenames';
 
 // ────────────────────────────────────────────────────────────
 // Types (exported so document-settings-form.tsx can use them)
@@ -147,10 +147,11 @@ function LensOrderPrintInner({ data, config, showToolbar = true }: Props) {
 
   // Synchronous document.title out-racing AutoPrint (with cleanup)
   usePrintTitle(
-    buildPdfFileName({
-        type: 'bon_commande',
-        reference: `BCL-${String(order.id).padStart(4, '0')}`
-    })
+    generateDocumentFilename(
+        'Commande',
+        `BCL-${String(order.id).padStart(4, '0')}`,
+        order.client?.fullName || 'Client'
+    )
   );
 
 

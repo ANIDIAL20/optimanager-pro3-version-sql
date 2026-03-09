@@ -5,6 +5,8 @@ import { Printer, FileDown, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { printInPlace } from '@/lib/print-in-place';
+import { generateDocumentFilename } from '@/lib/pdf-filenames';
+import { downloadPdfFromApi } from '@/lib/download-pdf';
 
 export type PrintDocType = 'facture' | 'devis' | 'bon-commande' | 'recu';
 export type PrintVariant = 'print' | 'pdf' | 'share';
@@ -24,6 +26,11 @@ export interface PrintButtonProps {
   className?: string;
   /** Button size */
   size?: 'default' | 'sm' | 'lg' | 'icon';
+  /** Optional metadata for 'bulletproof' filename generation */
+  reference?: string;
+  clientName?: string;
+  /** Force the API route type for fetch (e.g. 'factures', 'devis') */
+  apiRouteType?: 'factures' | 'devis';
 }
 
 export function PrintButton({
@@ -34,6 +41,9 @@ export function PrintButton({
   autoprint = false,
   className,
   size = 'default',
+  apiRouteType,
+  reference,
+  clientName,
 }: PrintButtonProps) {
   const { toast } = useToast();
 
@@ -44,9 +54,42 @@ export function PrintButton({
     return `/print/${type}/${id}${qs ? `?${qs}` : ''}`;
   };
 
-  const handleClick = () => {
+  const handleDownload = async () => {
+    try {
+      const apiPath = apiRouteType || (type === 'facture' ? 'factures' : type);
+      const url = `/api/${apiPath}/${id}/pdf`;
+
+      const docTypeLabel =
+        type === 'facture' ? 'Facture' :
+        type === 'devis' ? 'Devis' :
+        type === 'bon-commande' ? 'Commande' : 'Recu';
+
+      await downloadPdfFromApi(
+        url,
+        generateDocumentFilename(
+          docTypeLabel,
+          reference || String(id),
+          clientName || 'Client'
+        )
+      );
+
+      toast({ title: "Téléchargement terminé" });
+    } catch (error) {
+      console.error("Download error:", error);
+      toast({ 
+        variant: 'destructive', 
+        title: 'Erreur', 
+        description: 'Le téléchargement a échoué.' 
+      });
+    }
+  };
+
+  const handleClick = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
     if (variant === 'share') {
       const url = `${window.location.origin}/print/${type}/${id}`;
+      // ... same share logic
       if (navigator.share) {
         navigator.share({ url }).catch(() => {
           navigator.clipboard.writeText(url);
@@ -60,8 +103,13 @@ export function PrintButton({
       }
       return;
     }
+    
+    if (variant === 'pdf') {
+      await handleDownload();
+      return;
+    }
+    
     const url = buildUrl();
-
     if (variant === 'print') {
       printInPlace(url);
     } else {
@@ -83,6 +131,7 @@ export function PrintButton({
 
   return (
     <Button
+      type="button"
       variant="outline"
       size={size}
       onClick={handleClick}

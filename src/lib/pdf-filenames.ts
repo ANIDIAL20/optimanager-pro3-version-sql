@@ -1,24 +1,27 @@
 
-type PdfDocumentType = "devis" | "facture" | "bon_commande" | "recu";
+export type DocumentType = 'Facture' | 'Devis' | 'Commande' | 'Recu';
 
-export function buildPdfFileName(options: {
-  type: PdfDocumentType;
-  reference: string;       // e.g. DEVIS-2026-0001, FAC-2026-0003, LENS-80-6025
-  date?: Date;             // optional, if needed
-}): string {
-  const { type, reference } = options;
-
-  const base =
-    type === "devis"         ? "DEVIS"   :
-    type === "facture"       ? "FACTURE" :
-    type === "bon_commande"  ? "BC"      :
-    type === "recu"          ? "RECU"    :
-                               "DOC";
-
-  // Sanitize reference for filesystem (no spaces, slashes, etc.)
-  const safeRef = reference
-    .replace(/\s+/g, "-")
-    .replace(/[^A-Za-z0-9._-]/g, "");
-
-  return `${base}-${safeRef}.pdf`;
+/**
+ * Standardizes the PDF filename generation logic across the application.
+ * Format: [Type_Document]_[Reference]_[Client_Name].pdf
+ */
+export function generateDocumentFilename(
+  type: string, 
+  reference: string, 
+  clientName: string = "Client"
+): string {
+  const cleanName = clientName
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "_")
+    .replace(/_+/g, "_") // remove double underscores
+    .replace(/^_|_$/g, ""); // remove trailing underscores
+  
+  // Clean reference to ensure no illegal filename characters
+  const cleanRef = reference.replace(/[^a-zA-Z0-9-]/g, "_");
+  
+  return `${type}_${cleanRef}_${cleanName}.pdf`;
 }
+
+// Keep the DocumentType export for type safety elsewhere
+export type { DocumentType as DocTypeType };

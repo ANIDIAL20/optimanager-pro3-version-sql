@@ -3,6 +3,7 @@ import { Page, Text, View, Document, StyleSheet, Image } from '@react-pdf/render
 import { format, isValid } from 'date-fns';
 import { formatCurrencyToWords } from '@/lib/format-number-to-words';
 import { formatOpticalValue } from '@/lib/format-optical';
+import { generateDocumentFilename } from '@/lib/pdf-filenames';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocType, type DocumentSettings, type DocumentSettingsBase } from '@/types/document-settings-types';
 
 // Helper for formatting currency
@@ -30,7 +31,7 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
   // Robust check/fallback
   if (!data) {
     return (
-        <Document>
+        <Document title="OptiManager Pro">
             <Page size="A4" style={{ padding: 40 }}>
                 <Text>Données du document manquantes.</Text>
             </Page>
@@ -188,6 +189,7 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
     devis: { fr: 'DEVIS', ar: 'DEVIS', en: 'QUOTE' },
     bc: { fr: 'BON DE COMMANDE', ar: 'BON DE COMMANDE', en: 'PURCHASE ORDER' },
     bl: { fr: 'BON DE LIVRAISON', ar: 'BON DE LIVRAISON', en: 'DELIVERY NOTE' },
+    recu: { fr: 'REÇU', ar: 'REÇU', en: 'RECEIPT' },
   };
 
   const titleLang = (language === 'ar' || language === 'en') ? language : 'fr';
@@ -215,8 +217,50 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
       try { return isValid(new Date(date)) ? format(new Date(date), 'dd/MM/yyyy') : '-'; } catch { return '-'; }
   };
 
+  const safePdfTitle = useMemo(() => {
+    try {
+      const typeLabels: Record<DocType, string> = {
+        facture: 'Facture',
+        devis: 'Devis',
+        bc: 'Commande',
+        bl: 'Bon_Livraison',
+        recu: 'Recu',
+      };
+
+      const reference =
+        docType === 'devis'
+          ? doc?.documentNumber || (doc?.id ? `DEV-${doc.id}` : 'Document')
+          : doc?.saleNumber ||
+            doc?.documentNumber ||
+            doc?.orderNumber ||
+            doc?.id ||
+            'Document';
+
+      const partyName =
+        client?.fullName ||
+        client?.nom ||
+        client?.name ||
+        doc?.clientName ||
+        doc?.supplierName ||
+        doc?.fournisseur ||
+        settings?.storeName ||
+        'Client';
+
+      return (
+        generateDocumentFilename(
+          typeLabels[docType] || 'Document',
+          String(reference ?? 'Document'),
+          String(partyName ?? 'Client')
+        ) ?? 'OptiManager Pro'
+      );
+    } catch (error) {
+      console.error('[PDF ERROR]', error);
+      return 'OptiManager Pro';
+    }
+  }, [client, doc, docType, settings]);
+
   return (
-    <Document>
+    <Document title={safePdfTitle ?? 'OptiManager Pro'}>
       <Page size="A4" style={styles.page}>
 
         {showWatermark && (
