@@ -12,7 +12,7 @@ import type { StandardDocumentData } from '@/types/document';
 import type { DocumentTemplateConfig } from '@/types/document-template';
 import { DEFAULT_TEMPLATE_CONFIG } from '@/types/document-template';
 import { usePrintTitle } from '@/hooks/use-print-title';
-import { generatePdfFilename } from '@/lib/utils/filename';
+import { buildPdfFileName } from '@/lib/pdf-filenames';
 
 // Dynamic import keeps the server action out of the client bundle
 async function getBonCommandeData(id: string) {
@@ -55,7 +55,7 @@ export default function BonCommandePrintPage({ params }: BonCommandePrintPagePro
   }, [id, router, toast]);
 
   usePrintTitle(
-    data ? generatePdfFilename('Commande_Labo', data.documentNumber, data.fournisseur?.nom || data.client?.nom) : null
+    data ? buildPdfFileName({ type: 'bon_commande', reference: data.documentNumber }) : null
   );
 
   // Auto-print — handled by <AutoPrint /> rendered below

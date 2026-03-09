@@ -11,7 +11,7 @@
  */
 
 import { db } from '@/db';
-import { supplierBalanceView, suppliers } from '@/db/schema';
+import { suppliers } from '@/db/schema';
 import { eq, and, ilike, desc, sql } from 'drizzle-orm';
 
 export interface GetSuppliersParams {
@@ -21,6 +21,7 @@ export interface GetSuppliersParams {
   limit?: number;
 }
 
+// Intercepts transient Neon WebSocket closures that occur in Next.js DEV mode or low-signal envs
 async function withReadRetry<T>(operation: () => Promise<T>, maxAttempts = 3): Promise<T> {
   let lastError: unknown;
 
@@ -29,6 +30,7 @@ async function withReadRetry<T>(operation: () => Promise<T>, maxAttempts = 3): P
       return await operation();
     } catch (error) {
       lastError = error;
+      console.warn(`[Neon retry] Attempt ${attempt} failed:`, error instanceof Error ? error.message : String(error));
 
       if (attempt === maxAttempts) {
         break;
@@ -40,6 +42,7 @@ async function withReadRetry<T>(operation: () => Promise<T>, maxAttempts = 3): P
 
   throw lastError;
 }
+
 
 export async function querySuppliersListPaginated(
   userId: string,
@@ -74,24 +77,16 @@ export async function querySuppliersListPaginated(
         category: suppliers.category,
         paymentTerms: suppliers.paymentTerms,
         paymentMethod: suppliers.paymentMethod,
+        defaultTaxMode: suppliers.defaultTaxMode,
         status: suppliers.status,
         createdAt: suppliers.createdAt,
         contactName: suppliers.contactName,
         contactPhone: suppliers.contactPhone,
         contactEmail: suppliers.contactEmail,
-        currentBalance: supplierBalanceView.soldeReel,
-        totalAchats: supplierBalanceView.totalAchats,
-        totalPaiements: supplierBalanceView.totalPaiements,
+        currentBalance: suppliers.currentBalance,
         totalCount: sql<number>`count(*) over()`,
       })
       .from(suppliers)
-      .leftJoin(
-        supplierBalanceView,
-        and(
-          eq(supplierBalanceView.supplierId, suppliers.id),
-          eq(supplierBalanceView.userId, suppliers.userId)
-        )
-      )
       .where(whereClause)
       .orderBy(desc(suppliers.createdAt))
       .limit(limit)
@@ -110,8 +105,8 @@ export async function querySuppliersListPaginated(
     city: row.city || '',
     ice: row.ice || '',
     category: row.category || '',
-    paymentTerms: row.paymentTerms || '',
     paymentMethod: row.paymentMethod || '',
+    defaultTaxMode: row.defaultTaxMode || 'TTC',
     status: row.status || 'Actif',
     createdAt: row.createdAt,
     contactName: row.contactName || '',
@@ -121,8 +116,8 @@ export async function querySuppliersListPaginated(
     telephone: row.phone || '',
     typeProduits: (row.category || '').split(', ').filter(Boolean),
     currentBalance: Number(row.currentBalance ?? 0),
-    totalAchats: Number(row.totalAchats ?? 0),
-    totalPaiements: Number(row.totalPaiements ?? 0),
+    totalAchats: 0,
+    totalPaiements: 0,
   }));
 
   return {

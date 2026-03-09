@@ -51,9 +51,9 @@ export function InvoiceActions({ sale, client, shopSettings }: InvoiceActionsPro
         printInPlace(`/print/facture/${sale.id}`);
     };
 
-    // PDF download — open print page with autoprint=true so browser saves it
+    // PDF download — direct API route with attachment header
     const handleDownload = () => {
-        window.open(`/print/facture/${sale.id}?autoprint=1`, '_blank', "noopener,noreferrer");
+        window.open(`/api/factures/${sale.id}/pdf`, '_blank');
     };
 
     // Aperçu design actuel — same URL, no autoprint

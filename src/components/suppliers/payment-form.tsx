@@ -258,11 +258,16 @@ export function SupplierPaymentForm({ supplierId, onSuccess }: PaymentFormProps)
                   <p className="font-bold">{Number(selectedOrder.totalAmount).toLocaleString()} MAD</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground mb-0.5">Deja verse</p>
+                  <p className="text-muted-foreground mb-0.5">Déjà versé</p>
                   <p className="font-bold text-green-600">{Number(selectedOrder.amountPaid).toLocaleString()} MAD</p>
+                  {Number(selectedOrder.totalCreditsApplied) > 0 && (
+                    <p className="text-[9px] text-indigo-600 font-medium whitespace-nowrap">
+                      (dont {Number(selectedOrder.totalCreditsApplied).toLocaleString()} MAD d'avoirs)
+                    </p>
+                  )}
                 </div>
                 <div>
-                  <p className="text-muted-foreground mb-0.5">Reste a payer</p>
+                  <p className="text-muted-foreground mb-0.5">Reste à payer</p>
                   <p className="font-bold text-red-600">{Number(selectedOrder.remainingAmount).toLocaleString()} MAD</p>
                 </div>
               </div>

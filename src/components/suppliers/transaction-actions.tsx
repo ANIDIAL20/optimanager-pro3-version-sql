@@ -38,6 +38,7 @@ import {
 import { toast } from 'sonner';
 import { deleteSupplierOrder } from '@/app/actions/supplier-orders-actions';
 import { deleteSupplierPayment } from '@/app/actions/supplier-payments-actions';
+import { deleteSupplierCredit } from '@/app/actions/supplier-credits-actions';
 import { useSession } from 'next-auth/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -47,7 +48,7 @@ import { printInPlace } from '@/lib/print-in-place';
 interface TransactionActionsProps {
   transaction: {
     id: string;
-    type: 'ACHAT' | 'PAIEMENT';
+    type: 'ACHAT' | 'PAIEMENT' | 'AVOIR';
     reference: string;
     amount: number;
     date: Date;
@@ -68,8 +69,10 @@ export function TransactionActions({ transaction }: TransactionActionsProps) {
     try {
       if (transaction.type === 'ACHAT') {
         await deleteSupplierOrder(id);
-      } else {
+      } else if (transaction.type === 'PAIEMENT') {
         await deleteSupplierPayment(id);
+      } else if (transaction.type === 'AVOIR') {
+        await deleteSupplierCredit(id);
       }
       toast.success('Suppression reussie');
       queryClient.invalidateQueries({ queryKey: ['supplier-statement', transaction.supplierId] });
@@ -108,8 +111,10 @@ export function TransactionActions({ transaction }: TransactionActionsProps) {
             onClick={() => {
               if (transaction.type === 'ACHAT') {
                 printInPlace(`/print/bon-commande/${id}`);
+              } else if (transaction.type === 'PAIEMENT') {
+                printInPlace(`/print/recu-paiement/${id}`);
               } else {
-                printInPlace(`/print/bon-commande/${id}`);
+                toast.info('Impression d\'avoir bientôt disponible');
               }
             }}
           >
@@ -155,7 +160,7 @@ export function TransactionActions({ transaction }: TransactionActionsProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Info className="h-5 w-5 text-blue-500" />
-              Details de la {transaction.type === 'ACHAT' ? 'Commande' : 'Transaction'}
+              Details de la {transaction.type === 'ACHAT' ? 'Commande' : transaction.type === 'PAIEMENT' ? 'Transaction' : 'Avoir'}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 pt-4">

@@ -1,10 +1,9 @@
-// @ts-nocheck
 'use server';
 
 import { auth } from '@/auth';
 import { db } from '@/db';
-import { supplierOrders, supplierOrderItems } from '@/db/schema/index';
-import { eq, and, desc, isNull, inArray } from 'drizzle-orm';
+import { supplierOrders, supplierOrderItems, lensOrders } from '@/db/schema/index';
+import { eq, and, desc, isNull, inArray, sql } from 'drizzle-orm';
 import { createAction } from '@/lib/middleware/compose';
 import { authenticate } from '@/lib/middleware/auth.middleware';
 import { getSupplierBalance, getSupplierProducts } from '@/lib/utils/supplier-utils';
@@ -58,12 +57,25 @@ export const getSupplierStatement = createAction(
 
     try {
       if (!userId) {
-        throw new Error('Non autorise');
+        throw new Error('Non autorisé');
       }
 
       const [ordersRaw, paymentsRaw, balance] = await Promise.all([
-        db.select()
+        db.select({
+          id: supplierOrders.id,
+          userId: supplierOrders.userId,
+          supplierId: supplierOrders.supplierId,
+          orderReference: supplierOrders.orderReference,
+          orderNumber: supplierOrders.orderNumber,
+          paymentStatus: supplierOrders.paymentStatus,
+          createdAt: supplierOrders.createdAt,
+          orderDate: supplierOrders.orderDate,
+          montantTotal: sql<string>`COALESCE(NULLIF(${supplierOrders.montantTotal}, '0'), ${lensOrders.totalPrice}, '0')`,
+          amountPaid: supplierOrders.amountPaid,
+          remainingAmount: sql<string>`COALESCE(NULLIF(${supplierOrders.remainingAmount}, '0'), ${lensOrders.totalPrice}, '0')`,
+        })
           .from(supplierOrders)
+          .leftJoin(lensOrders, eq(supplierOrders.id, lensOrders.supplierOrderId))
           .where(
             and(
               eq(supplierOrders.userId, userId),
@@ -147,7 +159,7 @@ export const getSupplierStatement = createAction(
       } satisfies SupplierStatementResult;
     } catch (error) {
       console.error('Error in getSupplierStatement:', error);
-      throw new Error('Erreur lors de la recuperation du releve unifie.');
+      throw new Error('Erreur lors de la récupération du relevé unifié.');
     }
   }
 );

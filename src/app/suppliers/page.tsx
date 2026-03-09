@@ -30,17 +30,17 @@ export default async function SuppliersPage({
   const category = (awaitedParams.category !== 'all' && awaitedParams.category) ? awaitedParams.category : undefined;
   const page = parseInt(awaitedParams.page || '1', 10) || 1;
 
-  // Fetch paginated data for the current page
-  // ✅ Direct call — auth() works normally in Server Components (no unstable_cache)
-  const result = await getSuppliersListPaginated({
-    search,
-    category,
-    page,
-    limit: 20
-  });
+  // Fetch data in parallel
+  const [result, globalData] = await Promise.all([
+    getSuppliersListPaginated({
+        search,
+        category,
+        page,
+        limit: 20
+    }),
+    getGlobalSupplierBalances()
+  ]);
 
-  // Fetch global metrics
-  const globalData = await getGlobalSupplierBalances();
   let globalStats = { total_purchases: 0, total_debt: 0 };
   
   if (globalData?.success && globalData?.data) {

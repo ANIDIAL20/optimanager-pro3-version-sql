@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import React from 'react';
@@ -28,7 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useSupplierStatement } from '@/hooks/use-supplier-statement';
 import { cn } from '@/lib/utils';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { TransactionActions } from '@/components/suppliers/transaction-actions';
 import type {
@@ -127,7 +126,7 @@ export function SupplierStatement({ supplierId, credits = [] }: StatementProps) 
   );
 
   const exportPDF = () => {
-    const doc = jsPDF();
+    const doc = new jsPDF();
     doc.text(`Releve Fournisseur - ID: ${supplierId}`, 14, 15);
 
     const tableData = transactions.map((t) => [
@@ -156,8 +155,8 @@ export function SupplierStatement({ supplierId, credits = [] }: StatementProps) 
     doc.save(`Releve_${supplierId}_${safeSupplierName}.pdf`);
   };
 
-  if (isLoading) return <div className="p-8 text-center text-muted-foreground animate-pulse">Chargement des donnees...</div>;
-  if (error) return <div className="p-8 text-center text-red-500">Une erreur est survenue lors du chargement des donnees.</div>;
+  if (isLoading) return <div className="p-8 text-center text-muted-foreground animate-pulse">Chargement des données...</div>;
+  if (error) return <div className="p-8 text-center text-red-500">Une erreur est survenue lors du chargement des données.</div>;
 
   return (
     <div className="space-y-6">
@@ -165,7 +164,7 @@ export function SupplierStatement({ supplierId, credits = [] }: StatementProps) 
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-lg flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Releve de Compte Detaille
+            Relevé de Compte Détaillé
           </CardTitle>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={exportPDF}>
@@ -191,7 +190,7 @@ export function SupplierStatement({ supplierId, credits = [] }: StatementProps) 
             <TableBody>
               {paginatedTransactions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Aucune transaction trouvee.</TableCell>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Aucune transaction trouvée.</TableCell>
                 </TableRow>
               ) : (
                 paginatedTransactions.map((t) => (
@@ -226,8 +225,8 @@ export function SupplierStatement({ supplierId, credits = [] }: StatementProps) 
                             t.paymentStatus === 'paid' ? 'default' :
                             t.paymentStatus === 'partial' ? 'secondary' : 'destructive'
                           }>
-                            {t.paymentStatus === 'paid' ? 'Solde' :
-                             t.paymentStatus === 'partial' ? 'Partiel' : 'Impaye'}
+                             {t.paymentStatus === 'paid' ? 'Soldée' :
+                              t.paymentStatus === 'partial' ? 'Partiel' : 'Impayé'}
                           </Badge>
                         ) : (
                           t.type === 'AVOIR' ? (
@@ -236,12 +235,12 @@ export function SupplierStatement({ supplierId, credits = [] }: StatementProps) 
                               t.status === 'partial' ? 'bg-amber-100 text-amber-700' :
                               'bg-green-100 text-green-700'
                             )}>
-                              {t.status === 'open' ? 'Ouvert' : t.status === 'partial' ? 'Partiel' : 'Cloture'}
+                              {t.status === 'open' ? 'Ouvert' : t.status === 'partial' ? 'Partiel' : 'Clôturé'}
                             </Badge>
                           ) : (
                             t.type === 'PAIEMENT' ? (
                               <Badge variant="outline" className={cn(t.isAllocated ? 'border-emerald-200 text-emerald-700 bg-emerald-50' : 'border-amber-200 text-amber-700 bg-amber-50')}>
-                                {t.isAllocated ? 'Paiement alloue' : 'Paiement global'}
+                                {t.isAllocated ? 'Paiement alloué' : 'Paiement global'}
                               </Badge>
                             ) : null
                           )

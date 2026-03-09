@@ -6,8 +6,8 @@
 'use server';
 
 import { db } from '@/db';
-import { supplierPayments, supplierOrders, supplierOrderPayments, suppliers } from '@/db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { supplierPayments, supplierOrders, supplierOrderPayments, suppliers, supplierCredits } from '@/db/schema';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { revalidatePath } from 'next/cache';
 import { getSupplierAvailableCredit as getSupplierAvailableCreditFromCredits } from './supplier-credits-actions';
@@ -205,15 +205,38 @@ export const createSupplierPayment = secureAction(async (userId, user, data: Cre
         }
       }
 
+      // ✅ Balance sync: reduce supplier debt by the payment amount
+      await tx.update(suppliers)
+        .set({
+          currentBalance: sql`GREATEST(0, ${suppliers.currentBalance} - ${data.amount.toString()})`,
+        })
+        .where(and(eq(suppliers.id, data.supplierId), eq(suppliers.userId, userId)));
+
       revalidateSupplierViews();
 
       const unallocatedAmount = Math.max(0, Number(data.amount || 0) - allocatedAmount);
+
+      // ✅ Step 4: Auto-insert surplus as a real supplier_credit record
+      if (unallocatedAmount > 0) {
+        await tx.insert(supplierCredits).values({
+          userId,
+          supplierId: data.supplierId,
+          amount: unallocatedAmount.toString(),
+          remainingAmount: unallocatedAmount.toString(),
+          status: 'open',
+          sourceType: 'overpayment',
+          notes: `Avoir auto - excès paiement ${paymentNumber}`,
+          relatedOrderId: (data.allocations?.[0]?.orderId || data.orderIds?.[0]) ?? null,
+          createdAt: new Date(),
+        });
+      }
 
       return {
         success: true,
         message: 'Paiement enregistre',
         isAllocated: allocatedAmount > 0,
-        unallocatedAmount,
+        unallocatedAmount: 0, // Surplus is now a formal credit record
+        creditCreated: unallocatedAmount > 0,
       };
     });
   } catch (error: any) {
@@ -228,6 +251,14 @@ export const deleteSupplierPayment = secureAction(async (userId, user, paymentId
       const allocations = await tx.query.supplierOrderPayments.findMany({
         where: and(eq(supplierOrderPayments.paymentId, paymentId), eq(supplierOrderPayments.userId, userId)),
       });
+
+      // Fetch the payment amount before deletion to reverse balance
+      const [paymentRecord] = await tx.query.supplierPayments.findMany({
+        where: and(eq(supplierPayments.id, paymentId), eq(supplierPayments.userId, userId)),
+        limit: 1,
+      });
+      const paymentAmount = paymentRecord ? Number(paymentRecord.amount) : 0;
+      const paymentSupplierId = paymentRecord?.supplierId;
 
       for (const alloc of allocations) {
         const order = await tx.query.supplierOrders.findFirst({
@@ -256,6 +287,15 @@ export const deleteSupplierPayment = secureAction(async (userId, user, paymentId
 
       await tx.delete(supplierPayments)
         .where(and(eq(supplierPayments.id, paymentId), eq(supplierPayments.userId, userId)));
+
+      // ✅ Balance sync: reverse the payment — add the amount back to supplier balance
+      if (paymentSupplierId && paymentAmount > 0) {
+        await tx.update(suppliers)
+          .set({
+            currentBalance: sql`${suppliers.currentBalance} + ${paymentAmount.toString()}`,
+          })
+          .where(and(eq(suppliers.id, paymentSupplierId), eq(suppliers.userId, userId)));
+      }
     });
 
     revalidateSupplierViews();

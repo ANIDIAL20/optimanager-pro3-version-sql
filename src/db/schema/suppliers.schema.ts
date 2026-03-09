@@ -1,4 +1,4 @@
-import { pgTable, pgView, serial, text, varchar, timestamp, numeric, integer, index, check, uuid, boolean, json, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, pgView, serial, text, varchar, timestamp, numeric, integer, index, uuid, boolean, jsonb } from 'drizzle-orm/pg-core';
 import { sql, relations } from 'drizzle-orm';
 import { products } from './products';
 
@@ -24,8 +24,8 @@ export const suppliers = pgTable('suppliers', {
   status: text('status'),
   contactPerson: text('contact_person'),
   creditLimit: numeric('credit_limit', { precision: 15, scale: 2 }),
-  // current_balance removed (replaced by supplier_balance_view)
-  // note: credit_balance is calculated on-the-fly from supplier_credits (calculated via SQL agg)
+  // ✅ Real-time balance — updated atomically in every order/payment transaction
+  currentBalance: numeric('current_balance', { precision: 15, scale: 2 }).default('0').notNull(),
   rating: text('rating'),
   isActive: boolean('is_active').default(true).notNull(),
   defaultTaxMode: text('default_tax_mode'),
@@ -58,8 +58,6 @@ export const supplierOrders = pgTable('supplier_orders', {
   supplierId: uuid('supplier_id').references(() => suppliers.id, { onDelete: 'restrict' }),
   firebaseId: text('firebase_id'),
   fournisseur: text('fournisseur'),
-  /** @deprecated Utiliser supplierOrderItems â€” sera supprimÃ© en v2.x */
-  items: json('items'),
   montantTotal: numeric('montant_total', { precision: 15, scale: 2 }),
   statut: text('statut').default('pending'),
   orderDate: timestamp('date_commande').defaultNow(),
@@ -90,9 +88,7 @@ export const supplierOrders = pgTable('supplier_orders', {
   supplierDateIdx: index('idx_orders_supplier_date').on(table.supplierId, table.orderDate, table.deletedAt),
 }));
 
-// âœ… Ã‰tape 5 â€” Table relationnelle pour remplacer items JSONB
-// IMPORTANT: orderId est `integer` ici car supplierOrders.id est encore `serial` (int). 
-// Le script de l'Ã‰tape 6 migrera cette FK en `uuid` !
+// ✅ Relational items table — replaces deprecated JSON items column
 export const supplierOrderItems = pgTable('supplier_order_items', {
   id:        serial('id').primaryKey(),       // (internal item id remains serial)
   orderId:   uuid('order_id').notNull()

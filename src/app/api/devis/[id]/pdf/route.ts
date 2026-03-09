@@ -5,7 +5,7 @@ import { eq, and } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 import { generateDocumentPDFStream } from '@/lib/pdf-generator';
-import { generatePdfFilename } from '@/lib/utils/filename';
+import { buildPdfFileName } from '@/lib/pdf-filenames';
 
 export const runtime = 'nodejs';
 
@@ -83,16 +83,15 @@ export async function GET(
     });
 
     // Dynamic Naming for PDF
-    const filename = generatePdfFilename(
-        'Devis',
-        `DEV-${quote.id}`,
-        clientData.fullName || ''
-    );
+    const filename = buildPdfFileName({
+        type: "devis",
+        reference: `DEV-${quote.id}`,
+    });
 
     return new NextResponse(readable, {
         headers: {
             'Content-Type': 'application/pdf',
-            'Content-Disposition': `inline; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+            'Content-Disposition': `attachment; filename="${filename}"`,
         },
     });
 

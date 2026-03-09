@@ -1,8 +1,7 @@
 import { auth } from '@/auth';
 import { db } from '@/db';
 import { and, eq, getTableColumns, isNull } from 'drizzle-orm';
-import { suppliers, supplierOrderItems } from '@/db/schema/suppliers.schema';
-import { supplierOrders } from '@/db/schema/supplier-orders.schema';
+import { suppliers, supplierOrderItems, supplierOrders } from '@/db/schema/suppliers.schema';
 import { products } from '@/db/schema';
 import { calculateSupplierBalance } from '@/lib/supplier-balance';
 
@@ -15,7 +14,7 @@ export async function getSupplierBalance(supplierId: string) {
     const userId = session?.user?.id;
 
     if (!userId) {
-      throw new Error('Non autorise');
+      throw new Error('Non autorisé');
     }
 
     return await calculateSupplierBalance(supplierId, userId);
@@ -34,7 +33,7 @@ export async function getSupplierProducts(supplierId: string) {
     const userId = session?.user?.id;
 
     if (!userId) {
-      throw new Error('Non autorise');
+      throw new Error('Non autorisé');
     }
 
     return await db
@@ -60,7 +59,10 @@ export async function getSupplierProducts(supplierId: string) {
  */
 export async function validatePaymentAmount(supplierId: string, amount: number) {
   const { balance } = await getSupplierBalance(supplierId);
-  return amount <= balance;
+  if (amount > balance) {
+    return { valid: false, message: 'Montant supérieur au solde de la dette' };
+  }
+  return { valid: true, message: 'Montant valide' };
 }
 
 /**
@@ -70,7 +72,7 @@ export function formatSupplierOrder(order: any) {
   return {
     ...order,
     totalAmountFormatted: new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'MAD' }).format(order.montantTotal),
-    statusLabel: order.statut === 'RECU' ? 'Recu' : 'En attente',
+    statusLabel: order.statut === 'RECU' ? 'Reçu' : 'En attente',
   };
 }
 
@@ -78,9 +80,18 @@ export function formatSupplierOrder(order: any) {
  * Get Supplier Info for order forms
  */
 export async function getSupplierInfo(supplierId: string) {
+    const session = await auth();
+    const userId = session?.user?.id;
+    if (!userId) return null;
+
     const result = await db.select()
         .from(suppliers)
-        .where(eq(suppliers.id, supplierId))
+        .where(
+            and(
+                eq(suppliers.id, supplierId),
+                eq(suppliers.userId, userId)
+            )
+        )
         .limit(1);
     return result[0];
 }

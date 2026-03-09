@@ -39,8 +39,8 @@ export function SupplierProductsTab({ supplierId }: ProductsTabProps) {
         <Card>
             <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-lg flex items-center gap-2">
-                    <Package className="h-5 w-5 text-blue-500" />
-                    Produits en Stock (Catalogue)
+                    <Package className="h-5 w-5 text-indigo-500" />
+                    Catalogue des Produits (Stock)
                 </CardTitle>
                 <Badge variant="outline">{products?.length || 0} références</Badge>
             </CardHeader>
@@ -59,10 +59,12 @@ export function SupplierProductsTab({ supplierId }: ProductsTabProps) {
                         {!products || products.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={5} className="text-center py-8">
-                                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                                        <AlertCircle className="h-8 w-8 opacity-20" />
-                                        <p>Aucun produit trouvé pour ce fournisseur dans le stock.</p>
-                                        <p className="text-xs">Vérifiez que des produits ont bien été liés à ce fournisseur via les commandes fournisseur.</p>
+                                    <div className="flex flex-col items-center gap-2 text-slate-400">
+                                        <Package className="h-10 w-10 opacity-20 mb-2" />
+                                        <p className="font-semibold text-slate-600">Aucun produit référencé</p>
+                                        <p className="text-xs max-w-sm mx-auto">
+                                            Les produits apparaissent ici dès qu'ils sont liés à ce fournisseur dans vos bons de commande ou réceptions de marchandises.
+                                        </p>
                                     </div>
                                 </TableCell>
                             </TableRow>

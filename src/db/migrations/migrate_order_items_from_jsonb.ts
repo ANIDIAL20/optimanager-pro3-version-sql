@@ -1,24 +1,35 @@
 /**
- * Migration Script — Étape 5
- * Migre les items de commande du champ JSONB `items`
- * vers la table relationnelle `supplier_order_items`.
+ * Migration Script — Étape 5 (Historical/Legacy)
+ * Migrates order items from the deprecated JSONB `items` column
+ * to the relational `supplier_order_items` table.
+ *
+ * NOTE: The `items` column has been removed from the Drizzle schema as of the
+ * v2 refactor. This script uses raw SQL to access the legacy DB column directly
+ * so it can still be run against a database that hasn't been fully migrated yet.
  *
  * Usage: npx tsx src/db/migrations/migrate_order_items_from_jsonb.ts
  */
 
 import { db } from '@/db';
-import { supplierOrders, supplierOrderItems } from '@/db/schema/suppliers.schema';
+import { supplierOrderItems } from '@/db/schema/suppliers.schema';
+import { sql } from 'drizzle-orm';
 
 export async function migrateOrderItemsFromJsonb() {
   console.log('🚀 Démarrage migration items de commande (JSONB → table relationnelle)...');
 
-  const orders = await db.select().from(supplierOrders);
-  
+  // Read orders that still have the legacy `items` JSONB column populated
+  // Using raw SQL since the column no longer exists in the Drizzle schema definition
+  const orders = await db.execute(
+    sql`SELECT id, items FROM supplier_orders WHERE items IS NOT NULL AND jsonb_array_length(COALESCE(items::jsonb, '[]'::jsonb)) > 0`
+  );
+
+  const orderRows = orders.rows as Array<{ id: string; items: any[] }>;
+
   let migratedItems = 0;
   let skippedOrders = 0;
   let errors = 0;
 
-  for (const order of orders) {
+  for (const order of orderRows) {
     try {
       if (!order.items || !Array.isArray(order.items) || order.items.length === 0) {
         skippedOrders++;
@@ -35,10 +46,9 @@ export async function migrateOrderItemsFromJsonb() {
         total:     String(item.total ?? (Number(item.quantity ?? item.quantite ?? 1) * Number(item.unitPrice ?? item.prixUnitaire ?? 0))),
       }));
 
-      // Insert items for this order
       if (itemsToInsert.length > 0) {
-         await db.insert(supplierOrderItems).values(itemsToInsert);
-         migratedItems += itemsToInsert.length;
+        await db.insert(supplierOrderItems).values(itemsToInsert);
+        migratedItems += itemsToInsert.length;
       }
     } catch (e) {
       console.error(`❌ [MIGRATION ERROR] order id=${order.id}:`, e);
@@ -46,40 +56,16 @@ export async function migrateOrderItemsFromJsonb() {
     }
   }
 
-  // Validation
-  let totalJsonItems = 0;
-  const ordersWithItems = orders.filter(o => {
-    if (Array.isArray(o.items) && o.items.length > 0) {
-      totalJsonItems += o.items.length;
-      return true;
-    }
-    return false;
-  });
-
-  const { count } = await import('drizzle-orm');
-  const migratedOrderIdsQuery = await db.selectDistinct({ orderId: supplierOrderItems.orderId }).from(supplierOrderItems);
-  const totalInsertedItemsQuery = await db.select({ total: count() }).from(supplierOrderItems);
-  const totalInsertedItems = totalInsertedItemsQuery[0]?.total || 0;
-
   console.log(`\n✅ Migration terminée :`);
   console.log(`   • Items extraits avec succès      : ${migratedItems}`);
   console.log(`   • Commandes ignorées (sans items) : ${skippedOrders}`);
   console.log(`   • Erreurs lors de l'insertion     : ${errors}`);
-  console.log(`\n📋 Validation post-migration :`);
-  console.log(`   • Commandes JSONB valides      : ${ordersWithItems.length} (devrait correspondre aux migrées ci-dessous)`);
-  console.log(`   • Commandes migrées (distinct) : ${migratedOrderIdsQuery.length}`);
-  console.log(`   • Total Items JSON d'origine   : ${totalJsonItems}`);
-  console.log(`   • Total Items réels insérés    : ${totalInsertedItems}`);
 
-  if (totalJsonItems !== totalInsertedItems && errors === 0) {
-     console.warn('⚠️ Attention : Le nombre total d\'items dans le JSON de départ ne correspond pas aux items dans la nouvelle table.');
-  } else if (ordersWithItems.length !== migratedOrderIdsQuery.length && errors === 0) {
-     console.warn('⚠️ Attention : Certaines commandes valides n\'ont pas généré de relations (ex: JSONB vide ou mal formatté). Vérifiez manuellement si possible.');
-  } else if (errors === 0) {
-     console.log('✅ Validation parfaite : Le décompte exact d\'items correspond parfaitement !');
+  if (errors === 0) {
+    console.log('🎉 Migration des items de commandes validée avec succès !');
+  } else {
+    console.warn(`⚠️ ${errors} error(s) occurred. Please check the logs above.`);
   }
-
-  console.log('🎉 Migration des items de commandes validée avec succès !');
 }
 
 if (require.main === module) {

@@ -50,9 +50,9 @@ export function QuoteActions({ devis, shopSettings, client }: QuoteActionsProps)
         printInPlace(`/print/devis/${devis.id}`);
     };
 
-    // PDF download — open with autoprint so browser can save
+    // PDF download — direct API route with attachment header
     const handleDownload = () => {
-        window.open(`/print/devis/${devis.id}?autoprint=1`, '_blank', "noopener,noreferrer");
+        window.open(`/api/devis/${devis.id}/pdf`, '_blank');
     };
 
     const handleShare = async () => {

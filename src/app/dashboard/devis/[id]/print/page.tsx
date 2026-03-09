@@ -10,7 +10,7 @@ import { BrandLoader } from '@/components/ui/loader-brand';
 import type { StandardDocumentData } from '@/types/document';
 import type { DocumentTemplateConfig } from '@/types/document-template';
 import { usePrintTitle } from '@/hooks/use-print-title';
-import { generatePdfFilename } from '@/lib/utils/filename';
+import { buildPdfFileName } from '@/lib/pdf-filenames';
 
 interface DevisPrintPageProps {
   params: Promise<{ id: string }>;
@@ -103,7 +103,7 @@ export default function DevisPrintPage({ params }: DevisPrintPageProps) {
   }, [isLoading, data, shouldAutoPrint]);
 
   usePrintTitle(
-    data ? generatePdfFilename('Devis', data.documentNumber, data.client?.nom) : null
+    data ? buildPdfFileName({ type: 'devis', reference: data.documentNumber }) : null
   );
 
   if (isLoading) {

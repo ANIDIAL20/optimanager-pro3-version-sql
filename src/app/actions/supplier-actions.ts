@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from '@/db';
-import { suppliers, supplierBalanceView } from '@/db/schema';
+import { suppliers } from '@/db/schema';
 import { eq, and, desc, sql, like } from 'drizzle-orm';
 import { secureAction, secureActionWithResponse } from '@/lib/secure-action';
 import { revalidatePath, revalidateTag } from 'next/cache';
@@ -21,17 +21,10 @@ export const getSuppliersList = secureActionWithResponse(async (userId, user) =>
       const results = await db
         .select()
         .from(suppliers)
-        .leftJoin(
-          supplierBalanceView,
-          and(
-            eq(supplierBalanceView.supplierId, suppliers.id),
-            eq(supplierBalanceView.userId, suppliers.userId)
-          )
-        )
         .where(eq(suppliers.userId, userId))
         .orderBy(desc(suppliers.createdAt));
       
-      const mappedItems = results.map(({ suppliers: row, supplier_balance_view: view }) => ({
+      const mappedItems = results.map((row) => ({
         id: row.id,
         userId: row.userId,
         name: row.name || '',
@@ -48,7 +41,7 @@ export const getSuppliersList = secureActionWithResponse(async (userId, user) =>
         paymentMethod: row.paymentMethod || '',
         bank: row.bank || '',
         rib: row.rib || '',
-        notes: (row.notes || '').replace(/\[CONTACT_DATA_JSON:[\s\S]*?\]/, '').trim(),
+        notes: row.notes || '',
         status: row.status || 'Actif',
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
@@ -67,10 +60,10 @@ export const getSuppliersList = secureActionWithResponse(async (userId, user) =>
         contactTelephone: row.contactPhone || '',
         contactEmail:     row.contactEmail || '',
         defaultTaxMode: row.defaultTaxMode || 'HT',
-        // âœ… Ã‰tape 2 â€” solde_reel from view (fallback removed)
-        currentBalance: Number(view?.soldeReel ?? 0),
-        totalAchats:   Number(view?.totalAchats ?? 0),
-        totalPaiements: Number(view?.totalPaiements ?? 0),
+        // ✅ currentBalance is now a direct column — updated in every transaction
+        currentBalance: Number(row.currentBalance ?? 0),
+        totalAchats:   0,
+        totalPaiements: 0,
       }));
 
       return mappedItems;
@@ -112,13 +105,6 @@ export const getSupplier = secureAction(async (userId, user, id: string) => {
     const results = await db
       .select()
       .from(suppliers)
-      .leftJoin(
-        supplierBalanceView,
-        and(
-          eq(supplierBalanceView.supplierId, suppliers.id),
-          eq(supplierBalanceView.userId, suppliers.userId)
-        )
-      )
       .where(and(eq(suppliers.id, id), eq(suppliers.userId, userId)))
       .limit(1);
 
@@ -127,7 +113,7 @@ export const getSupplier = secureAction(async (userId, user, id: string) => {
       return null;
     }
 
-    const { suppliers: row, supplier_balance_view: view } = results[0];
+    const row = results[0];
 
     return {
         id: row.id,
@@ -146,7 +132,7 @@ export const getSupplier = secureAction(async (userId, user, id: string) => {
         paymentMethod: row.paymentMethod || '',
         bank: row.bank || '',
         rib: row.rib || '',
-        notes: (row.notes || '').replace(/\[CONTACT_DATA_JSON:[\s\S]*?\]/, '').trim(),
+        notes: row.notes || '',
         status: row.status || 'Actif',
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
@@ -161,10 +147,10 @@ export const getSupplier = secureAction(async (userId, user, id: string) => {
         contactNom:       row.contactName  || '',
         contactTelephone: row.contactPhone || '',
         defaultTaxMode: row.defaultTaxMode || 'HT',
-        // âœ… Ã‰tape 2 â€” solde_reel from view
-        currentBalance: Number(view?.soldeReel ?? 0),
-        totalAchats:    Number(view?.totalAchats ?? 0),
-        totalPaiements: Number(view?.totalPaiements ?? 0),
+        // ✅ currentBalance is now a direct column
+        currentBalance: Number(row.currentBalance ?? 0),
+        totalAchats:    0,
+        totalPaiements: 0,
     };
 
   } catch (error: any) {
@@ -293,21 +279,38 @@ export const updateSupplier = secureAction(async (userId, user, id: string, data
  * Delete a supplier
  */
 export const deleteSupplier = secureAction(async (userId, user, id: string) => {
-  await db
-    .delete(suppliers)
-    .where(
-      and(
-        eq(suppliers.id, id),
-        eq(suppliers.userId, userId)
-      )
-    );
+  try {
+    await db
+      .delete(suppliers)
+      .where(
+        and(
+          eq(suppliers.id, id),
+          eq(suppliers.userId, userId)
+        )
+      );
 
-  // Invalide uniquement le cache du bon utilisateur + global
-  // @ts-ignore
-  revalidateTag(`${CACHE_TAGS.suppliers}-${userId}`);
-  // @ts-ignore
-  revalidateTag(CACHE_TAGS.suppliers);
-  revalidatePath('/suppliers', 'layout');
+    // Invalide uniquement le cache du bon utilisateur + global
+    // @ts-ignore
+    revalidateTag(`${CACHE_TAGS.suppliers}-${userId}`);
+    // @ts-ignore
+    revalidateTag(CACHE_TAGS.suppliers);
+    revalidatePath('/suppliers', 'layout');
     revalidatePath('/suppliers/[id]', 'page');
-  return { success: true };
+    
+    return { success: true };
+  } catch (error: any) {
+    const isConstraintError = 
+        error.code === '23503' || 
+        (error.message && error.message.includes('foreign key constraint')) ||
+        (error.message && error.message.includes('violates foreign key'));
+        
+    if (isConstraintError) {
+      return { 
+        success: false, 
+        error: "Impossible de supprimer ce fournisseur car il possède des commandes, paiements ou avoirs associés. Veuillez d'abord supprimer son historique." 
+      };
+    }
+    console.error("Error deleting supplier:", error);
+    return { success: false, error: "Erreur lors de la suppression." };
+  }
 });

@@ -1,21 +1,28 @@
-import dotenv from 'dotenv';
-dotenv.config({ path: '.env.local' });
 
-async function run() {
-  const { db } = await import('./src/db');
-  const { sql } = await import('drizzle-orm');
+const dotenv = require('dotenv');
+const path = require('path');
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
+const { getDevis } = require('./src/app/actions/devis-actions');
+
+// Mock secureAction behavior by setting up appropriate environment or bypassing it
+// Actually getDevis is wrapped in secureAction which uses auth()
+// Calling it directly might trigger an auth failure if not in a request context
+
+async function main() {
   try {
-    const res = await db.execute(sql`
-      SELECT column_name, data_type 
-      FROM information_schema.columns 
-      WHERE table_name = 'suppliers'
-      ORDER BY ordinal_position
-    `);
-    res.rows.forEach(r => console.log(`${r.column_name}: ${r.data_type}`));
-  } catch (e: any) {
-    console.error('❌ Error:', e.message);
+    console.log('--- CALLING getDevis() ---');
+    // We need to mock auth() used inside secureAction or wait...
+    // secureAction calls auth() from @/auth
+    
+    const result = await getDevis();
+    console.log('Result:', JSON.stringify(result, null, 2));
+    process.exit(0);
+  } catch (err) {
+    console.error('--- FAILURE ---');
+    console.error(err);
+    process.exit(1);
   }
 }
 
-run().then(() => process.exit(0));
+main();

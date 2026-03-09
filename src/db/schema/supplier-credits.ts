@@ -24,13 +24,34 @@ export const supplierCredits = pgTable('supplier_credits', {
   statusIdx: index('idx_supplier_credits_status').on(table.status),
 }));
 
-export const supplierCreditsRelations = relations(supplierCredits, ({ one }) => ({
+export const supplierCreditAllocations = pgTable('supplier_credit_allocations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: text('user_id').notNull(),
+  creditId: uuid('credit_id').notNull().references(() => supplierCredits.id, { onDelete: 'cascade' }),
+  orderId: uuid('order_id').notNull().references(() => supplierOrders.id, { onDelete: 'cascade' }),
+  amount: numeric('amount', { precision: 15, scale: 2 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const supplierCreditsRelations = relations(supplierCredits, ({ one, many }) => ({
   supplier: one(suppliers, {
     fields: [supplierCredits.supplierId],
     references: [suppliers.id],
   }),
   order: one(supplierOrders, {
     fields: [supplierCredits.relatedOrderId],
+    references: [supplierOrders.id],
+  }),
+  allocations: many(supplierCreditAllocations),
+}));
+
+export const supplierCreditAllocationsRelations = relations(supplierCreditAllocations, ({ one }) => ({
+  credit: one(supplierCredits, {
+    fields: [supplierCreditAllocations.creditId],
+    references: [supplierCredits.id],
+  }),
+  order: one(supplierOrders, {
+    fields: [supplierCreditAllocations.orderId],
     references: [supplierOrders.id],
   }),
 }));

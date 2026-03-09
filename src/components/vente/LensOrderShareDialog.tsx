@@ -10,28 +10,57 @@ import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { printInPlace } from "@/lib/print-in-place";
 
-/** Utility to generate order text mirroring what's in /lens-orders/[id]/print */
+/** 
+ * Utility to generate a professional order text (Redaction).
+ * Mirroring technical standards for laboratory orders.
+ */
 const generateOrderText = (order: any) => {
     const clientName = order.client?.fullName || 'Client Anonyme';
+    
+    // Formatting helper for optical powers (e.g. +0.25, -1.00)
+    const f = (v: any) => {
+        if (v === null || v === undefined || v === '') return '0.00';
+        const num = parseFloat(v);
+        if (isNaN(num)) return v;
+        return num >= 0 ? `+${num.toFixed(2)}` : num.toFixed(2);
+    };
+
     const lines = [
-        '📋 COMMANDE DE VERRES (LABO)',
+        '📋 COMMANDE LABORATOIRE',
+        '━━━━━━━━━━━━━━━━━━━━',
+        `👤 CLIENT: ${clientName.toUpperCase()}`,
+        `📅 DATE: ${order.orderDate ? format(new Date(order.orderDate), 'dd/MM/yyyy') : format(new Date(), 'dd/MM/yyyy')}`,
+        `🏢 LABO: ${order.supplierName || 'Externe'}`,
         '━━━━━━━━━━━━━━━━━━━━',
         '',
-        `📅 Date: ${order.orderDate ? format(new Date(order.orderDate), 'dd/MM/yyyy') : '-'}`,
-        `👤 Client: ${clientName}`,
+        '🔍 SPÉCIFICATIONS TECHNIQUES:',
+        `• Type: ${order.orderType || 'Unifocal'}`,
+        `• Verre: ${order.lensType || 'N/A'}`,
+        order.indice ? `• Indice: ${order.indice}` : '',
+        order.matiere ? `• Matière: ${order.matiere}` : '',
+        order.treatment ? `• Traitement: ${order.treatment}` : '',
         '',
-        '🔍 DÉTAILS:',
-        `• Type de verre: ${order.lensType || 'N/A'}`,
-        `• Géométrie: ${order.orderType || 'N/A'}`,
-        `• Traitement: ${order.treatment || 'Aucun'}`,
-        order.sphereR || order.cylindreR ? `• OD: Sph ${order.sphereR || '-'} Cyl ${order.cylindreR || '-'} Axe ${order.axeR || '-'} Add ${order.additionR || '-'}` : '',
-        order.sphereL || order.cylindreL ? `• OG: Sph ${order.sphereL || '-'} Cyl ${order.cylindreL || '-'} Axe ${order.axeL || '-'} Add ${order.additionL || '-'}` : '',
+        '✨ PUISSANCES MESURÉES:',
+        '👁️ ŒIL DROIT (OD):',
+        `   Sph ${f(order.sphereR)} Cyl ${f(order.cylindreR)} Axe ${order.axeR || '0'}°`,
+        order.additionR && order.additionR !== '0' ? `   ADDITION: ${order.additionR}` : '',
+        (order.ecartPupillaireR || order.hauteurR) ? `   EP: ${order.ecartPupillaireR || '-'} / H: ${order.hauteurR || '-'}` : '',
+        order.diameterR ? `   Ø Diamètre: ${order.diameterR}` : '',
         '',
-        order.notes ? `📝 Notes: ${order.notes}` : '',
+        '👁️ ŒIL GAUCHE (OG):',
+        `   Sph ${f(order.sphereL)} Cyl ${f(order.cylindreL)} Axe ${order.axeL || '0'}°`,
+        order.additionL && order.additionL !== '0' ? `   ADDITION: ${order.additionL}` : '',
+        (order.ecartPupillaireL || order.hauteurL) ? `   EP: ${order.ecartPupillaireL || '-'} / H: ${order.hauteurL || '-'}` : '',
+        order.diameterL ? `   Ø Diamètre: ${order.diameterL}` : '',
+        '',
+        order.notes ? `📝 NOTES COMPLÉMENTAIRES:\n${order.notes}` : '',
         '',
         '━━━━━━━━━━━━━━━━━━━━',
+        'Généré via OptiManager Pro',
     ];
-    return lines.filter((l) => l !== '').join('\n');
+
+    // Filter out empty strings from optional fields
+    return lines.filter(line => line !== '').join('\n');
 };
 
 /**
@@ -124,10 +153,25 @@ export function LensOrderShareDialog({
                             <p className="text-sm">Recherche des commandes reliées...</p>
                         </div>
                     ) : (orders === null || orders.length === 0) ? (
-                        <div className="flex flex-col items-center justify-center p-6 text-orange-600 gap-3 bg-orange-50 rounded-lg">
-                            <RefreshCcw className="h-6 w-6" />
-                            <p className="text-sm font-medium text-center">Aucun "Bon de Labo" associé trouvé pour cette vente.</p>
-                            <p className="text-xs text-orange-500 opacity-80 text-center">Ajoutez un verre avec type de verre via la caisse pour lier une commande.</p>
+                        <div className="flex flex-col items-center justify-center p-8 text-slate-500 gap-4 bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-200">
+                            <div className="h-16 w-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
+                                <RefreshCcw className="h-8 w-8" />
+                            </div>
+                            <div className="text-center space-y-1">
+                                <p className="text-base font-bold text-slate-800">Aucun "Bon de Labo" trouvé</p>
+                                <p className="text-sm text-slate-500 max-w-[240px]">
+                                    Cette vente n&apos;est liée à aucune commande de verres spécifique.
+                                </p>
+                            </div>
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="mt-2 h-9 rounded-full border-slate-300 font-semibold"
+                                onClick={fetchOrders}
+                            >
+                                <RefreshCcw className="mr-2 h-3.5 w-3.5" />
+                                Actualiser
+                            </Button>
                         </div>
                     ) : (
                         <>

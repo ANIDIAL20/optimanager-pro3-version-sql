@@ -7,8 +7,8 @@
 
 
 import { db } from '@/db';
-import { supplierOrders, suppliers, supplierPayments, supplierOrderPayments, products, stockMovements, supplierOrderItems, reminders } from '@/db/schema';
-import { eq, and, or, desc, sql, sum, count, isNull } from 'drizzle-orm';
+import { supplierOrders, suppliers, supplierPayments, supplierOrderPayments, products, stockMovements, supplierOrderItems, reminders, supplierCreditAllocations, supplierCredits } from '@/db/schema';
+import { eq, and, or, desc, sql, sum, count, isNull, inArray } from 'drizzle-orm';
 import { getSuppliersList as getSuppliers } from '@/app/actions/supplier-actions';
 import type { Supplier } from '@/lib/types';
 import { secureAction } from '@/lib/secure-action';
@@ -26,12 +26,14 @@ export type SupplierOrder = {
     supplierName: string;
     supplierPhone?: string | null;
     totalAmount: number;
-    amountPaid: number;
-    resteAPayer: number;
+    amountPaid: number;      // Total payments + credits
+    totalPaidForOrder: number; // Only payments
+    totalCreditsApplied: number; // Only credits
+    resteToPay: number;      // Actual remaining
+    resteAPayer: number;     // Legacy support
     status: string | null;
     deliveryStatus: string | null;
     createdAt: Date | null;
-    items?: any;
 };
 
 export type CreateSupplierOrderItemInput = {
@@ -61,30 +63,59 @@ export type CreateSupplierOrderInput = {
  */
 export const getSupplierOrders = secureAction(async (userId, user, supplierId?: string) => {
     try {
-        const results = await db.query.supplierOrders.findMany({
-            where: supplierId 
-                ? and(eq(supplierOrders.userId, userId), eq(supplierOrders.supplierId, supplierId))
-                : eq(supplierOrders.userId, userId),
-            orderBy: [desc(supplierOrders.createdAt)],
-        });
+        const results = await db.select({
+            id: supplierOrders.id,
+            userId: supplierOrders.userId,
+            supplierId: supplierOrders.supplierId,
+            orderReference: supplierOrders.orderReference,
+            orderNumber: supplierOrders.orderNumber,
+            fournisseur: supplierOrders.fournisseur,
+            supplierPhone: supplierOrders.supplierPhone,
+            montantTotal: supplierOrders.montantTotal,
+            totalPayments: sql<string>`(
+                SELECT COALESCE(SUM(amount), 0) FROM ${supplierOrderPayments} 
+                WHERE order_id = "supplier_orders"."id" AND user_id = ${userId}
+            )`,
+            totalCredits: sql<string>`(
+                SELECT COALESCE(SUM(amount), 0) FROM ${supplierCreditAllocations} 
+                WHERE order_id = "supplier_orders"."id" AND user_id = ${userId}
+            )`,
+            statut: supplierOrders.statut,
+            deliveryStatus: supplierOrders.deliveryStatus,
+            createdAt: supplierOrders.createdAt,
+        })
+        .from(supplierOrders)
+        .where(supplierId 
+            ? and(eq(supplierOrders.userId, userId), eq(supplierOrders.supplierId, supplierId))
+            : eq(supplierOrders.userId, userId))
+        .orderBy(desc(supplierOrders.createdAt));
 
         // Map to UI friendly format
-        const formattedOrders: SupplierOrder[] = results.map((order: any) => ({
-            id: order.id,
-            userId: order.userId,
-            supplierId: order.supplierId,
-            orderReference: order.orderReference,
-            orderNumber: order.orderNumber,
-            supplierName: order.fournisseur,
-            supplierPhone: order.supplierPhone,
-            totalAmount: Number(order.montantTotal),
-            amountPaid: Number(order.amountPaid),
-            resteAPayer: Number(order.remainingAmount),
-            status: order.statut,
-            deliveryStatus: order.deliveryStatus,
-            createdAt: order.createdAt,
-            items: order.items
-        }));
+        const formattedOrders: SupplierOrder[] = results.map((order: any) => {
+            const total = Number(order.montantTotal);
+            const payments = Number(order.totalPayments);
+            const credits = Number(order.totalCredits);
+            const reste = Math.max(0, total - payments - credits);
+
+            return {
+                id: order.id,
+                userId: order.userId,
+                supplierId: order.supplierId,
+                orderReference: order.orderReference,
+                orderNumber: order.orderNumber,
+                supplierName: order.fournisseur,
+                supplierPhone: order.supplierPhone,
+                totalAmount: total,
+                totalPaidForOrder: payments,
+                totalCreditsApplied: credits,
+                amountPaid: payments + credits,
+                resteToPay: reste,
+                resteAPayer: reste,
+                status: order.statut,
+                deliveryStatus: order.deliveryStatus,
+                createdAt: order.createdAt,
+            };
+        });
 
         return { success: true, orders: formattedOrders };
     } catch (error: any) {
@@ -183,23 +214,14 @@ export const createSupplierOrder = secureAction(async (userId, user, data: Creat
                 await tx.insert(supplierOrderItems).values(itemsToInsert);
             }
 
-            // Update Supplier Balance if needed? 
-            // Request says "current_balance" on supplier.
-            // If we mark it as "Credit" purchase, we should increase debt.
-            // Logic: Total Amount increases supplier balance (we owe them).
+            // ✅ Balance sync: increase supplier's debt by (total - amountPaid)
             if (supplier) {
-                // If 'paid' < 'total', the difference is debt.
-                // Actually usually the whole Invoice amount is added to balance, and Payments reduce it.
-                // But here we might just track "Reste Ã  payer".
-                // Let's simpler:
-                /* 
+                const debtAdded = data.totalAmount - paid;
                 await tx.update(suppliers)
-                  .set({ 
-                      currentBalance: sql`${suppliers.currentBalance} + ${data.totalAmount}`
-                  }) 
-                  .where(eq(suppliers.id, supplier.id));
-                */
-               // Leave out for now to avoid double logic with payments until fully tested.
+                    .set({
+                        currentBalance: sql`${suppliers.currentBalance} + ${debtAdded.toString()}`,
+                    })
+                    .where(eq(suppliers.id, supplier.id));
             }
 
             await logSuccess(userId, 'CREATE', 'supplier_orders', String(orderId), { supplier: supplier ? (supplier as any).name : data.supplierName, total: data.totalAmount }, null);
@@ -250,54 +272,67 @@ async function updateOrderReceptionCore(userId: string, user: any, orderId: stri
                  }
              }
 
-             // 3. Update Stock
-             if (data.status === 'REÃ‡U') {
-                 // âœ… Ã‰tape 5 â€” Lire depuis la table relationnelle
+             // 3. Update Stock (Batched)
+             if (data.status === 'REÇU' || data.status === 'RECU') {
+                 // Étape 5 — Lire depuis la table relationnelle
                  const items = await tx.select()
                      .from(supplierOrderItems)
                      .where(eq(supplierOrderItems.orderId, id));
+
+                 const refs = items.map((i: any) => i.reference).filter(Boolean);
                  
-                 for (const item of items) {
-                      if (!item.reference) continue;
+                 if (refs.length > 0) {
+                     // Batch lookup products
+                     const matchedProducts = await tx.select()
+                         .from(products)
+                         .where(and(inArray(products.reference, refs), eq(products.userId, userId)))
+                         .for('update');
+                         
+                     const productMap = new Map(matchedProducts.map((p: any) => [p.reference, p]));
+                     const movementsToInsert = [];
 
-                      const productResult = await tx.select()
-                          .from(products)
-                          .where(and(eq(products.reference, item.reference), eq(products.userId, userId)))
-                          .for('update');
-                      const product = productResult[0];
-                      
-                      if (product) {
-                           const qty = Number(item.quantity) || 0;
-                           
-                           await tx.update(products)
-                               .set({
-                                   quantiteStock: sql`${products.quantiteStock} + ${qty}`,
-                                   version: sql`${products.version} + 1`,
-                                   updatedAt: new Date().toISOString()
-                               })
-                               .where(eq(products.id, product.id));
+                     for (const item of items) {
+                         const product: any = productMap.get(item.reference);
+                         if (product) {
+                             const qty = Number(item.quantity) || 0;
+                             
+                             // Update stock for this product
+                             await tx.update(products)
+                                 .set({
+                                     quantiteStock: sql`${products.quantiteStock} + ${qty}`,
+                                     version: sql`${products.version} + 1`,
+                                     updatedAt: new Date().toISOString()
+                                 })
+                                 .where(eq(products.id, product.id));
 
-                           await tx.insert(stockMovements).values({
-                               userId,
-                               productId: product.id,
-                               quantite: qty,
-                               type: 'Achat',
-                               notes: `RÃ©ception BC #${order.orderReference || id}`,
-                               createdAt: new Date(),
-                           });
+                             // Prepare movement
+                             movementsToInsert.push({
+                                 userId,
+                                 productId: product.id,
+                                 quantite: qty,
+                                 type: 'Achat',
+                                 notes: `Réception BC #${order.orderReference || id}`,
+                                 createdAt: new Date(),
+                             });
 
-                          // Audit log product
-                          await logAudit({
-                              userId,
-                              entityType: 'product',
-                              entityId: product.id.toString(),
-                              action: 'UPDATE_STOCK_INBOUND',
-                              oldValue: { stock: product.quantiteStock, version: product.version },
-                              newValue: { stock: (product.quantiteStock || 0) + qty, version: (product.version || 0) + 1 },
-                              metadata: { orderId: id.toString() },
-                              success: true
-                          });
-                      }
+                             // Audit log
+                             await logAudit({
+                                 userId,
+                                 entityType: 'product',
+                                 entityId: product.id.toString(),
+                                 action: 'UPDATE_STOCK_INBOUND',
+                                 oldValue: { stock: product.quantiteStock, version: product.version },
+                                 newValue: { stock: (product.quantiteStock || 0) + qty, version: (product.version || 0) + 1 },
+                                 metadata: { orderId: id.toString() },
+                                 success: true
+                             });
+                         }
+                     }
+
+                     // Batch insert movements
+                     if (movementsToInsert.length > 0) {
+                         await tx.insert(stockMovements).values(movementsToInsert);
+                     }
                  }
              }
 
@@ -351,51 +386,63 @@ export const confirmOrderReception = secureAction(async (userId, user, orderId: 
  */
 export const deleteSupplierOrder = secureAction(async (userId, user, orderId: string) => {
     try {
-        await db.delete(supplierOrders)
-            .where(and(eq(supplierOrders.id, orderId), eq(supplierOrders.userId, userId)));
-            
+        await db.transaction(async (tx: any) => {
+            // Fetch order to know how much balance to reverse
+            const [order] = await tx.select()
+                .from(supplierOrders)
+                .where(and(eq(supplierOrders.id, orderId), eq(supplierOrders.userId, userId)));
+
+            if (order && order.supplierId) {
+                // Reverse the outstanding debt (total - amountPaid) from supplier balance
+                const debtRemoved = Number(order.montantTotal) - Number(order.amountPaid);
+                if (debtRemoved > 0) {
+                    await tx.update(suppliers)
+                        .set({
+                            currentBalance: sql`GREATEST(0, ${suppliers.currentBalance} - ${debtRemoved.toString()})`,
+                        })
+                        .where(and(eq(suppliers.id, order.supplierId), eq(suppliers.userId, userId)));
+                }
+            }
+
+            await tx.delete(supplierOrders)
+                .where(and(eq(supplierOrders.id, orderId), eq(supplierOrders.userId, userId)));
+        });
+
         revalidatePath('/suppliers', 'layout');
             revalidatePath('/suppliers/[id]', 'page');
-        // âœ… Ã‰tape 3 â€” Cache invalidation
+        // ✅ Cache invalidation
         // @ts-ignore
         revalidateTag(CACHE_TAGS.supplierOrders);
         // @ts-ignore
         revalidateTag(`${CACHE_TAGS.suppliers}-${userId}`);
         // @ts-ignore
         revalidateTag(CACHE_TAGS.suppliers);
-        return { success: true, message: 'Commande supprimÃ©e' };
+        return { success: true, message: 'Commande supprimée' };
     } catch (error: any) {
         return { success: false, error: error.message };
     }
 });
 
-/**
- * 4. Supplier Dashboard Stats (Requirement 4)
- */
+import { calculateSupplierBalance } from '@/lib/supplier-balance';
+
 export const getSupplierStats = secureAction(async (userId, user, supplierId: string) => {
     try {
-        const result = await db.select({
-            total_ordered: sum(supplierOrders.montantTotal),
-            total_paid: sum(supplierOrders.amountPaid),
-            total_debt: sum(supplierOrders.remainingAmount),
-            orders_count: count()
-        })
-        .from(supplierOrders)
-        .where(and(eq(supplierOrders.userId, userId), eq(supplierOrders.supplierId, supplierId)));
+        const balance = await calculateSupplierBalance(supplierId, userId);
         
-        const stats = result[0] || { total_ordered: 0, total_paid: 0, total_debt: 0, orders_count: 0 };
-        
-        // Convert strings to numbers
-        const mutableStats = stats as Record<string, unknown>;
-        Object.keys(mutableStats).forEach(key => {
-            if (key !== 'orders_count') {
-                mutableStats[key] = Number(mutableStats[key] || 0);
-            }
-        });
+        const countResult = await db.select({ value: count() })
+            .from(supplierOrders)
+            .where(and(eq(supplierOrders.userId, userId), eq(supplierOrders.supplierId, supplierId)));
 
+        const stats = {
+            total_ordered: balance.totalOrders,
+            total_paid: balance.totalPayments + balance.totalAppliedCredits,
+            total_debt: balance.balance,
+            orders_count: countResult[0]?.value || 0
+        };
+        
         return { success: true, stats };
     } catch (error: any) {
-        console.error("ðŸ’¥ Error fetching supplier stats:", error);
+        console.error("💥 Error fetching supplier stats:", error);
         return { success: false, error: error.message };
     }
 });
@@ -405,24 +452,32 @@ export const getSupplierStats = secureAction(async (userId, user, supplierId: st
  */
 export const getGlobalSupplierBalances = secureAction(async (userId) => {
     try {
-        const result = await db.select({
-            total_purchases: sum(supplierOrders.montantTotal),
-            total_debt: sum(supplierOrders.remainingAmount)
-        })
-        .from(supplierOrders)
-        .where(eq(supplierOrders.userId, userId));
+        const [orderRes, paymentRes, creditRes] = await Promise.all([
+            db.select({ total: sql<number>`COALESCE(SUM(${supplierOrders.montantTotal}), 0)` })
+              .from(supplierOrders)
+              .where(and(eq(supplierOrders.userId, userId), isNull(supplierOrders.deletedAt))),
+            db.select({ total: sql<number>`COALESCE(SUM(${supplierPayments.amount}), 0)` })
+              .from(supplierPayments)
+              .where(and(eq(supplierPayments.userId, userId), isNull(supplierPayments.deletedAt))),
+            db.select({ total: sql<number>`COALESCE(SUM(${supplierCredits.amount} - ${supplierCredits.remainingAmount}), 0)` })
+              .from(supplierCredits)
+              .where(eq(supplierCredits.userId, userId))
+        ]);
         
-        const data = result[0] || { total_purchases: 0, total_debt: 0 };
+        const totalPurchases = Number(orderRes[0]?.total || 0);
+        const totalPayments = Number(paymentRes[0]?.total || 0);
+        const totalCredits = Number(creditRes[0]?.total || 0);
+        const globalDebt = Math.max(0, totalPurchases - totalPayments - totalCredits);
 
         return { 
             success: true, 
             data: {
-                total_purchases: Number(data.total_purchases || 0),
-                total_debt: Number(data.total_debt || 0)
+                total_purchases: totalPurchases,
+                total_debt: globalDebt
             }
         };
     } catch (error: any) {
-        console.error("ðŸ’¥ Error fetching global supplier balances:", error);
+        console.error("💥 Error fetching global supplier balances:", error);
         return { success: false, error: error.message };
     }
 });
@@ -503,13 +558,22 @@ export const getBonCommandePreviewData = secureAction(async (userId) => {
  */
 export const getOrdersForPaymentSelect = secureAction(async (userId, user, supplierId: string) => {
     try {
+        // Query orders with aggregated payments and credits
         const results = await db.select({
             id: supplierOrders.id,
             reference: sql<string>`COALESCE(${supplierOrders.orderReference}, ${supplierOrders.orderNumber}, 'BC-' || ${supplierOrders.id}::text)`,
             orderDate: supplierOrders.orderDate,
             totalAmount: supplierOrders.montantTotal,
-            amountPaid: supplierOrders.amountPaid,
-            remainingAmount: supplierOrders.remainingAmount,
+            // Subquery for total payments allocated to this order
+            totalPayments: sql<string>`(
+                SELECT COALESCE(SUM(amount), 0) FROM ${supplierOrderPayments} 
+                WHERE order_id = "supplier_orders"."id" AND user_id = ${userId}
+            )`,
+            // Subquery for total credits allocated to this order
+            totalCredits: sql<string>`(
+                SELECT COALESCE(SUM(amount), 0) FROM ${supplierCreditAllocations} 
+                WHERE order_id = "supplier_orders"."id" AND user_id = ${userId}
+            )`,
             paymentStatus: supplierOrders.paymentStatus,
         })
         .from(supplierOrders)
@@ -522,17 +586,27 @@ export const getOrdersForPaymentSelect = secureAction(async (userId, user, suppl
         )
         .orderBy(desc(supplierOrders.orderDate));
 
-        return results.map(row => ({
-            id: row.id,
-            reference: row.reference,
-            orderDate: row.orderDate,
-            totalAmount: Number(row.totalAmount),
-            amountPaid: Number(row.amountPaid),
-            remainingAmount: Number(row.remainingAmount),
-            paymentStatus: row.paymentStatus
-        }));
+        return results.map(row => {
+            const total = Number(row.totalAmount);
+            const payments = Number(row.totalPayments);
+            const credits = Number(row.totalCredits);
+            const reste = Math.max(0, total - payments - credits);
+
+            return {
+                id: row.id,
+                reference: row.reference,
+                orderDate: row.orderDate,
+                totalAmount: total,
+                totalPaidForOrder: payments,
+                totalCreditsApplied: credits,
+                amountPaid: payments + credits,
+                remainingAmount: reste, // Consistent with frontend expectation
+                resteToPay: reste,
+                paymentStatus: row.paymentStatus
+            };
+        });
     } catch (error: any) {
-        console.error("ðŸ’¥ Error fetching orders for selection:", error);
+        console.error("💥 Error fetching orders for selection:", error);
         return [];
     }
 });

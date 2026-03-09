@@ -384,6 +384,16 @@ export const createLensOrder = secureAction(async (userId, user, rawInput: LensO
 
         const clientName = clientExists.fullName || 'Client Inconnu';
         
+        // ✅ Sync Supplier Order Price if it was created
+        if (supplierOrderId) {
+            await tx.update(supplierOrders)
+                .set({
+                    montantTotal: created.totalPrice,
+                    remainingAmount: (Number(created.totalPrice) - Number(created.amountPaid || 0)).toString()
+                })
+                .where(eq(supplierOrders.id, supplierOrderId));
+        }
+        
         // 🚀 Atomicité stricte: Notification sauvegardée dans la même transaction
         // Si l'une des deux opérations échoue, TOUT est annulé.
         await createNotification(tx, {

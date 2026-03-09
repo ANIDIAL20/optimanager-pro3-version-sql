@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from '@/db';
-import { supplierCredits, supplierOrders } from '@/db/schema';
+import { supplierCredits, supplierOrders, supplierCreditAllocations } from '@/db/schema';
 import { eq, and, desc, sql, ne } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { revalidatePath } from 'next/cache';
@@ -101,6 +101,15 @@ export const applyCreditToOrder = secureAction(async (userId, user, { creditId, 
           updatedAt: new Date()
         })
         .where(eq(supplierOrders.id, orderId));
+      
+      // ✅ Record the credit allocation
+      await tx.insert(supplierCreditAllocations).values({
+        userId,
+        creditId,
+        orderId,
+        amount: amount.toString(),
+        createdAt: new Date(),
+      });
 
       revalidateSupplierViews();
 
@@ -109,5 +118,25 @@ export const applyCreditToOrder = secureAction(async (userId, user, { creditId, 
   } catch (error: any) {
     console.error('Error applying credit:', error);
     return { success: false, error: error.message };
+  }
+});
+
+/**
+ * Delete a supplier credit
+ */
+export const deleteSupplierCredit = secureAction(async (userId, user, creditId: string) => {
+  try {
+    await db
+      .delete(supplierCredits)
+      .where(and(
+        eq(supplierCredits.id, creditId),
+        eq(supplierCredits.userId, userId)
+      ));
+
+    revalidateSupplierViews();
+    return { success: true, message: 'Avoir supprimé avec succès' };
+  } catch (error: any) {
+    console.error('Error deleting credit:', error);
+    return { success: false, error: 'Erreur lors de la suppression de l\'avoir: ' + error.message };
   }
 });

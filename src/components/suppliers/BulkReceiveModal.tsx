@@ -397,7 +397,7 @@ export function BulkReceiveModal({ initialSupplierId }: BulkReceiveModalProps = 
                                                     className="h-8 text-xs"
                                                     onFocus={async () => {
                                                         const res = await getProducts();
-                                                        if (res.success) setCatalogProducts(res.data);
+                                                        if (res.success) setCatalogProducts(res.data || []);
                                                     }}
                                                 />
                                             </div>

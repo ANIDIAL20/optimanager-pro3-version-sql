@@ -70,13 +70,13 @@ export function SupplierOrdersTable({ orders }: SupplierOrdersTableProps) {
 
                 <div className="mt-4 bg-white rounded-xl border shadow-sm overflow-hidden">
                     <TabsContent value="all" className="m-0">
-                        <DataTable columns={columns} data={filteredOrders} searchKey="supplierName" />
+                        <DataTable columns={columns} data={filteredOrders} />
                     </TabsContent>
                     <TabsContent value="pending" className="m-0">
-                        <DataTable columns={columns} data={filteredOrders} searchKey="supplierName" />
+                        <DataTable columns={columns} data={filteredOrders} />
                     </TabsContent>
                     <TabsContent value="unpaid" className="m-0">
-                        <DataTable columns={columns} data={filteredOrders} searchKey="supplierName" />
+                        <DataTable columns={columns} data={filteredOrders} />
                     </TabsContent>
                 </div>
             </Tabs>

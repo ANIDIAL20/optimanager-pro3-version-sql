@@ -10,7 +10,7 @@ import { BrandLoader } from '@/components/ui/loader-brand';
 import type { StandardDocumentData } from '@/types/document';
 import type { DocumentTemplateConfig } from '@/types/document-template';
 import { usePrintTitle } from '@/hooks/use-print-title';
-import { generatePdfFilename } from '@/lib/utils/filename';
+import { buildPdfFileName } from '@/lib/pdf-filenames';
 
 interface InvoicePageProps {
   params: Promise<{ id: string }>;
@@ -97,7 +97,7 @@ export default function InvoicePage({ params }: InvoicePageProps) {
   }, [id, router, toast]);
 
   usePrintTitle(
-    data ? generatePdfFilename('Facture', data.documentNumber, data.client?.nom) : null
+    data ? buildPdfFileName({ type: 'facture', reference: data.documentNumber }) : null
   );
 
   if (isLoading) {

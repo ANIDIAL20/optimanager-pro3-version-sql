@@ -178,7 +178,7 @@ export function SupplierForm({ supplier }: SupplierFormProps) {
         paymentTerms: data.delaiPaiement, // Map delaiPaiement -> paymentTerms
         paymentMethod: data.modePaiement, // Map modePaiement -> paymentMethod
         typeProduits: data.typeProduits, // Will be joined in action
-        notes: data.notes + (data.raisonSociale ? `\nRaison Sociale: ${data.raisonSociale}` : ''),
+        notes: data.notes || '',
         status: data.statut,
         // contact info mapped to notes/misc or ignored for now as schema is flat
         contactNom: data.contactNom,
