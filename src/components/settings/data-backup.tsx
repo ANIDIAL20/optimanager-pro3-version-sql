@@ -51,9 +51,16 @@ export function DataBackup() {
     const handleDownload = async () => {
         try {
             setIsDownloading(true);
-            const base64Data = await exportUserData();
+            const result = await exportUserData();
             
-            // Convert Base64 to Blob
+            if (!result.success) {
+                toast.error('Erreur', { description: result.error || "Impossible d'exporter les données." });
+                return;
+            }
+
+            const base64Data = result.data as string;
+            
+            // Convert Base64 back to binary data for the Blob
             const binaryString = window.atob(base64Data);
             const bytes = new Uint8Array(binaryString.length);
             for (let i = 0; i < binaryString.length; i++) {
@@ -96,29 +103,35 @@ export function DataBackup() {
             
             const result = await restoreUserData(formData);
             
-            if (result.success) {
-                const v = (result as any).validation;
-                const bv = (result as any).backupVersion ?? '1.x';
-                toast.success(`Restauration réussie — v${bv}`, {
-                    description: v
-                        ? [
-                            `👥 Clients : ${v.clients.restored}/${v.clients.expected}`,
-                            `📦 Produits : ${v.products.restored}/${v.products.expected}`,
-                            `💰 Ventes : ${v.sales.restored}/${v.sales.expected}`,
-                            `🏪 Fournisseurs : ${v.suppliers.restored}/${v.suppliers.expected}`,
-                            `📋 Ordonnances : ${v.prescriptions.restored}/${v.prescriptions.expected}`,
-                          ].join('\n')
-                        : 'Vos données ont été restaurées avec succès.',
-                    duration: 8000,
+            if (!result.success) {
+                toast.error('Échec de la restauration', {
+                    description: result.error || "La restauration a échoué du côté serveur.",
                 });
-                setShowConfirmRestore(false);
-                setRestoreFile(null);
-                loadStats();
-                window.location.reload();
+                return;
             }
+
+            const v = (result as any).validation;
+            const bv = (result as any).backupVersion ?? '1.x';
+            toast.success(`Restauration réussie — v${bv}`, {
+                description: v
+                    ? [
+                        `👥 Clients : ${v.clients.restored}/${v.clients.expected}`,
+                        `📦 Produits : ${v.products.restored}/${v.products.expected}`,
+                        `💰 Ventes : ${v.sales.restored}/${v.sales.expected}`,
+                        `🏪 Fournisseurs : ${v.suppliers.restored}/${v.suppliers.expected}`,
+                        `📋 Ordonnances : ${v.prescriptions.restored}/${v.prescriptions.expected}`,
+                      ].join('\n')
+                    : 'Vos données ont été restaurées avec succès.',
+                duration: 8000,
+            });
+            setShowConfirmRestore(false);
+            setRestoreFile(null);
+            loadStats();
+            window.location.reload();
         } catch (error: any) {
-            toast.error('Échec de la restauration', {
-                description: error.message || "Une erreur inconnue est survenue.",
+            console.error('RESTORE TRIGGER ERROR:', error);
+            toast.error('Erreur Critique', {
+                description: "Échec inattendu lors de la restauration.",
             });
         } finally {
             setIsRestoring(false);
@@ -131,7 +144,14 @@ export function DataBackup() {
         
         try {
             setIsResetting(true);
-            await resetUserAccount();
+            const result = await resetUserAccount();
+            
+            if (!result.success) {
+                toast.error('Échec de la réinitialisation', {
+                    description: result.error || "Impossible d'effacer les données.",
+                });
+                return;
+            }
             
             toast.success('Compte réinitialisé', {
                 description: "Toutes les données ont été effacées avec succès.",
@@ -141,8 +161,9 @@ export function DataBackup() {
             loadStats();
             window.location.reload();
         } catch (error: any) {
-            toast.error('Échec de la réinitialisation', {
-                description: error.message,
+            console.error('RESET TRIGGER ERROR:', error);
+            toast.error('Erreur Critique', {
+                description: "Un problème inattendu a empêché le reset.",
             });
         } finally {
             setIsResetting(false);

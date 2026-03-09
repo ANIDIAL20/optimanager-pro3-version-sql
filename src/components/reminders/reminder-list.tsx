@@ -71,9 +71,9 @@ export function ReminderList() {
       const res = await getReminders(filters);
       
       if (pageNum === 1) {
-        setReminders(res.data);
+        setReminders((res.data || []) as any[]);
       } else {
-        setReminders(prev => [...prev, ...res.data]);
+        setReminders(prev => [...prev, ...((res.data || []) as any[])]);
       }
       setHasMore(res.hasMore);
       setPage(pageNum);

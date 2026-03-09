@@ -22,16 +22,17 @@ export async function GET(
     }
 
     const { id } = await params;
-    const orderId = parseInt(id);
+    const orderId = id;
     
-    if (isNaN(orderId)) {
+    if (!orderId) {
         return new NextResponse('Invalid ID', { status: 400 });
     }
 
     const order = await db.query.supplierOrders.findFirst({
         where: and(eq(supplierOrders.id, orderId), eq(supplierOrders.userId, session.user.id)),
         with: {
-            supplier: true
+            supplier: true,
+            items: true
         }
     });
 
@@ -57,7 +58,7 @@ export async function GET(
             totalHT: Number(order.montantTotal || 0) / 1.2, // Rough estimate
         },
         client: {
-            fullName: order.supplier?.nom || order.fournisseur || 'Fournisseur',
+            fullName: order.supplier?.name || order.fournisseur || 'Fournisseur',
             phone: order.supplier?.phone || order.supplierPhone,
         },
         settings: profile,
@@ -79,7 +80,7 @@ export async function GET(
 
     const safeFilename = buildBonCommandeFilename(
         order.orderNumber || String(order.id),
-        order.supplier?.nom || order.fournisseur || 'Fournisseur'
+        order.supplier?.name || order.fournisseur || 'Fournisseur'
     );
 
     return new NextResponse(readable, {
