@@ -1,12 +1,27 @@
-export type DocType = 'Facture' | 'Devis' | 'Recu' | 'Commande';
 
-export function generateDocumentFilename(type: DocType, reference: string, clientName: string = 'Client'): string {
-  if (!reference) reference = 'DOC';
-  
+export type DocumentType = 'Facture' | 'Devis' | 'Commande' | 'Recu';
+
+/**
+ * Standardizes the PDF filename generation logic across the application.
+ * Format: [Type_Document]_[Reference]_[Client_Name].pdf
+ */
+export function generateDocumentFilename(
+  type: string, 
+  reference: string, 
+  clientName: string = "Client"
+): string {
   const cleanName = clientName
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Remove accents
-    .replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, "_") // Keep alphanumeric + Arabic, replace rest with _
-    .replace(/_+/g, "_").replace(/^_|_$/g, ""); // Clean up underscores
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "_")
+    .replace(/_+/g, "_") // remove double underscores
+    .replace(/^_|_$/g, ""); // remove trailing underscores
   
-  return `${type}_${reference}_${cleanName}.pdf`;
+  // Clean reference to ensure no illegal filename characters
+  const cleanRef = reference.replace(/[^a-zA-Z0-9-]/g, "_");
+  
+  return `${type}_${cleanRef}_${cleanName}.pdf`;
 }
+
+// Keep the DocumentType export for type safety elsewhere
+export type { DocumentType as DocTypeType };
