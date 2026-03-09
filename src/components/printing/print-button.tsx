@@ -46,6 +46,7 @@ export function PrintButton({
   clientName,
 }: PrintButtonProps) {
   const { toast } = useToast();
+  const [isLoading, setIsLoading] = React.useState(false);
 
   const buildUrl = () => {
     const params = new URLSearchParams();
@@ -54,25 +55,28 @@ export function PrintButton({
     return `/print/${type}/${id}${qs ? `?${qs}` : ''}`;
   };
 
+  const getApiUrl = () => {
+    const apiPath = apiRouteType || (type === 'facture' ? 'factures' : type);
+    return `/api/${apiPath}/${id}/pdf`;
+  };
+
+  const docTypeLabel =
+    type === 'facture' ? 'Facture' :
+    type === 'devis' ? 'Devis' :
+    type === 'bon-commande' ? 'Commande' : 'Recu';
+
   const handleDownload = async () => {
+    setIsLoading(true);
     try {
-      const apiPath = apiRouteType || (type === 'facture' ? 'factures' : type);
-      const url = `/api/${apiPath}/${id}/pdf`;
-
-      const docTypeLabel =
-        type === 'facture' ? 'Facture' :
-        type === 'devis' ? 'Devis' :
-        type === 'bon-commande' ? 'Commande' : 'Recu';
-
+      const url = getApiUrl();
       await downloadPdfFromApi(
         url,
         generateDocumentFilename(
-          docTypeLabel,
+          docTypeLabel as any,
           reference || String(id),
           clientName || 'Client'
         )
       );
-
       toast({ title: "Téléchargement terminé" });
     } catch (error) {
       console.error("Download error:", error);
@@ -81,6 +85,52 @@ export function PrintButton({
         title: 'Erreur', 
         description: 'Le téléchargement a échoué.' 
       });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleShare = async () => {
+    const apiUrl = getApiUrl();
+    
+    // 1. Try native file sharing first (Mobile/WhatsApp/etc)
+    if (navigator.share) {
+      setIsLoading(true);
+      try {
+        const res = await fetch(apiUrl);
+        if (!res.ok) throw new Error("Erreur lors de la récupération du PDF");
+        
+        const blob = await res.blob();
+        const filename = generateDocumentFilename(docTypeLabel as any, reference || String(id), clientName || 'Client');
+        const file = new File([blob], filename, { type: 'application/pdf' });
+        
+        // Use navigator.canShare to check if files are support (Safari/Chrome Mobile)
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: `${docTypeLabel} ${reference || id}`,
+            files: [file]
+          });
+          return;
+        }
+      } catch (error) {
+        console.error("Native share error:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    // 2. Fallback to Link sharing
+    const url = `${window.location.origin}/print/${type}/${id}`;
+    if (navigator.share) {
+      navigator.share({ url, title: `${docTypeLabel} ${reference || id}` }).catch(() => {
+        navigator.clipboard.writeText(url);
+        toast({ title: 'Lien copié', description: url });
+      });
+    } else {
+      navigator.clipboard
+        .writeText(url)
+        .then(() => toast({ title: 'Lien copié', description: 'Lien vers le document copié.' }))
+        .catch(() => toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de copier.' }));
     }
   };
 
@@ -88,19 +138,7 @@ export function PrintButton({
     event.preventDefault();
     event.stopPropagation();
     if (variant === 'share') {
-      const url = `${window.location.origin}/print/${type}/${id}`;
-      // ... same share logic
-      if (navigator.share) {
-        navigator.share({ url }).catch(() => {
-          navigator.clipboard.writeText(url);
-          toast({ title: 'Lien copié', description: url });
-        });
-      } else {
-        navigator.clipboard
-          .writeText(url)
-          .then(() => toast({ title: 'Lien copié', description: 'Lien vers le document copié.' }))
-          .catch(() => toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de copier.' }));
-      }
+      await handleShare();
       return;
     }
     
@@ -134,11 +172,16 @@ export function PrintButton({
       type="button"
       variant="outline"
       size={size}
+      disabled={isLoading}
       onClick={handleClick}
-      className={`flex items-center gap-2 ${className ?? ''}`}
+      className={`flex items-center gap-2 ${className ?? ''} ${isLoading ? 'opacity-70' : ''}`}
     >
-      {icons[variant]}
-      {label ?? defaultLabels[variant]}
+      {isLoading ? (
+          <div className="h-4 w-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      ) : (
+          icons[variant]
+      )}
+      {label ?? (isLoading ? 'Chargement...' : defaultLabels[variant])}
     </Button>
   );
 }

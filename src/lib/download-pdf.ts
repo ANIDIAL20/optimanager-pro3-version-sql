@@ -36,7 +36,9 @@ export async function downloadPdfFromApi(
   });
 
   if (!response.ok) {
-    throw new Error("Download failed");
+    const errorText = await response.text().catch(() => "No error body");
+    console.error(`❌ PDF API Failed: ${response.status} ${response.statusText}`, errorText);
+    throw new Error(`Download failed: ${response.status} - ${errorText}`);
   }
 
   const disposition = response.headers.get("Content-Disposition");
