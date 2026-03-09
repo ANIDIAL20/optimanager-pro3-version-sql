@@ -1,5 +1,7 @@
 import NextAuth from "next-auth";
-import { auth } from '@/auth';
+import { authConfig } from "./auth.config";
+
+const { auth } = NextAuth(authConfig);
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from './lib/ratelimit';
 

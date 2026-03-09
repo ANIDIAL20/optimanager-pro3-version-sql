@@ -7,6 +7,7 @@ import { authConfig } from "./auth.config";
 import { users, accounts, sessions, verificationTokens } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import { RoleSchema } from "./lib/validations/auth";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -14,15 +15,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: "/login",
     error: "/login",
   },
-  // IMPORTANT: We use JWT sessions, not database sessions
-  // DrizzleAdapter is commented out because it forces database sessions
-  // which conflicts with our JWT strategy in authConfig
-  // adapter: DrizzleAdapter(db, {
-  //   usersTable: users,
-  //   accountsTable: accounts,
-  //   sessionsTable: sessions,
-  //   verificationTokensTable: verificationTokens,
-  // }),
   session: {
     strategy: "jwt", // Explicitly enforce JWT sessions
   },
@@ -135,63 +127,42 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
-  debug: true, // 🔍 Enable extensive debugging
+  debug: true,
   callbacks: {
-    ...authConfig.callbacks,
-    async jwt({ token, user, trigger, session }) {
-      // console.log("🎫 JWT Callback Triggered", { email: token.email, sub: token.sub });
-
-      // 1. Initial Sign In (Google or Credentials)
+    async jwt({ token, user, trigger }) {
       if (user) {
-        token.id = user.id; // Initial, might be Google ID or DB ID
-        token.email = user.email;
+        const validatedRole = RoleSchema.safeParse(user.role);
+        token.role = validatedRole.success ? validatedRole.data : "USER";
+        token.id = user.id;
       }
-
-      // 2. PERFORMANCE FIX: Only sync with DB when necessary
-      // Query DB ONLY on sign-in, not on every navigation
-      const shouldSync = trigger === "signIn" || trigger === "signUp" || !token.sub || !token.role;
-
-      if (token.email && shouldSync) {
-        try {
-          // Use query builder for safer execution
-          const dbUser = await db.query.users.findFirst({
-            where: eq(users.email, token.email as string),
-            columns: {
-              id: true,
-              role: true,
-              isActive: true,
-            }
-          });
-
-          if (dbUser) {
-            token.sub = dbUser.id; // Use DB ID as the subject
-            token.role = dbUser.role; // Sync Role (ADMIN/USER)
-            token.isActive = dbUser.isActive;
-            // console.log("✅ JWT Synced with DB:", { id: dbUser.id, role: dbUser.role });
-          } else {
-             console.log("⚠️ User not found in DB during JWT sync:", token.email);
-          }
-        } catch (error: any) {
-          console.error(`❌ Failed to sync user in JWT: ${error.message}`);
-          // Fallback: don't crash, just use existing token data
+      if (token.email && (trigger === "signIn" || !token.role)) {
+        const dbUser = await db.query.users.findFirst({
+          where: eq(users.email, token.email as string),
+        });
+        if (dbUser) {
+          token.sub = dbUser.id;
+          const validatedRole = RoleSchema.safeParse(dbUser.role);
+          token.role = validatedRole.success ? validatedRole.data : "USER";
         }
       }
-      
+      if (trigger === "update" && token.sub) {
+        const freshUser = await db.query.users.findFirst({
+          where: eq(users.id, token.sub),
+          columns: { role: true },
+        });
+        if (freshUser) {
+          const validatedRole = RoleSchema.safeParse(freshUser.role);
+          token.role = validatedRole.success ? validatedRole.data : "USER";
+        }
+      }
       return token;
     },
     async session({ session, token }) {
-      // Session callback - avoid console in production
-      if (token.sub && session.user) {
-        session.user.id = token.sub;
-        session.user.email = token.email as string;
-        session.user.role = token.role as string; // Will now be 'ADMIN' from DB
+      if (token && session.user) {
+        session.user.id = token.id as string;
+        session.user.role = token.role as "ADMIN" | "USER";
       }
       return session;
     },
   },
 });
-
-console.log("🔒 Auth Configuration Loaded");
-console.log("- AUTH_SECRET Present:", !!process.env.AUTH_SECRET);
-console.log("- NODE_ENV:", process.env.NODE_ENV);
-console.log("- GOOGLE CLIENT ID Present:", !!(process.env.AUTH_GOOGLE_ID || process.env.GOOGLE_CLIENT_ID));
