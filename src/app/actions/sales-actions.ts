@@ -90,6 +90,7 @@ export interface Sale {
     createdAt: string;
     date?: string;
     lastPaymentDate?: string;
+    isOfficialInvoice?: boolean;
 }
 
 export interface CreateSaleInput {
@@ -193,7 +194,8 @@ const mapSale = (s: any): Sale => ({
     notes: s.notes,
     createdAt: s.createdAt ? (typeof s.createdAt === 'string' ? s.createdAt : s.createdAt.toISOString()) : new Date().toISOString(),
     date: s.date ? (typeof s.date === 'string' ? s.date : s.date.toISOString()) : undefined,
-    lastPaymentDate: s.lastPaymentDate ? (typeof s.lastPaymentDate === 'string' ? s.lastPaymentDate : s.lastPaymentDate.toISOString()) : undefined
+    lastPaymentDate: s.lastPaymentDate ? (typeof s.lastPaymentDate === 'string' ? s.lastPaymentDate : s.lastPaymentDate.toISOString()) : undefined,
+    isOfficialInvoice: s.isOfficialInvoice ?? true,
 });
 
 

@@ -75,9 +75,11 @@ export function VentesClientPage({ initialSales, initialClients, initialError }:
                 filterStatus === 'all' ? true :
                     filterStatus === 'paid' ? isPaid : !isPaid;
 
-            const typeMatch =
-                !isExpertMode || filterType === 'all' ? true :
-                    filterType === 'official' ? sale.isOfficialInvoice : !sale.isOfficialInvoice;
+            const isOfficial = sale.isOfficialInvoice === true || (sale as any).is_official_invoice === true;
+        
+            const typeMatch = filterType === 'all' || 
+                (filterType === 'official' && isOfficial) || 
+                (filterType === 'hors-bilan' && !isOfficial);
 
             return searchMatch && statusMatch && typeMatch;
         });
@@ -248,15 +250,13 @@ export function VentesClientPage({ initialSales, initialClients, initialError }:
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-                        {isExpertMode && (
-                            <Tabs value={filterType} onValueChange={(v: any) => setFilterType(v)} className="w-full sm:w-auto">
-                                <TabsList className="grid w-full grid-cols-3 sm:w-[320px]">
-                                    <TabsTrigger value="all">Toutes</TabsTrigger>
-                                    <TabsTrigger value="official" className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700">Officielles ✅</TabsTrigger>
-                                    <TabsTrigger value="hors-bilan" className="data-[state=active]:bg-orange-100 data-[state=active]:text-orange-700">Hors-Bilan 🔴</TabsTrigger>
-                                </TabsList>
-                            </Tabs>
-                        )}
+                        <Tabs value={filterType} onValueChange={(v: any) => setFilterType(v)} className="w-full sm:w-auto">
+                            <TabsList className="grid w-full grid-cols-3 sm:w-[320px]">
+                                <TabsTrigger value="all">Toutes</TabsTrigger>
+                                <TabsTrigger value="official" className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700">Officielles ✅</TabsTrigger>
+                                <TabsTrigger value="hors-bilan" className="data-[state=active]:bg-orange-100 data-[state=active]:text-orange-700">Hors-Bilan 🔴</TabsTrigger>
+                            </TabsList>
+                        </Tabs>
 
                         <Tabs value={filterStatus} onValueChange={(v: any) => setFilterStatus(v)} className="w-full sm:w-auto">
                             <TabsList className="grid w-full grid-cols-3 sm:w-[280px]">
@@ -278,7 +278,7 @@ export function VentesClientPage({ initialSales, initialClients, initialError }:
                     </div>
                 ) : viewMode === 'table' ? (
                     <DataTable
-                        columns={isExpertMode ? columns : columns.filter(c => (c as any).accessorKey !== 'isOfficialInvoice')}
+                        columns={columns}
                         data={ordersWithClientData}
                         searchKey="clientNom"
                         searchValue={searchTerm}
@@ -366,17 +366,20 @@ function KanbanGrid({ sales, clientsMap, isExpertMode }: { sales: Sale[], client
                                              sale.deliveryStatus === 'en_cours' ? 'En cours' : 'Attente'}
                                         </Badge>
                                     )}
-                                    {isExpertMode && (
-                                        <Badge
-                                            variant="outline"
-                                            className={cn(
-                                                "text-[10px] px-2 py-0 mt-1 uppercase font-bold",
-                                                sale.isOfficialInvoice ? "bg-indigo-50 text-indigo-600 border-indigo-100" : "bg-orange-50 text-orange-600 border-orange-100"
-                                            )}
-                                        >
-                                            {sale.isOfficialInvoice ? '📋 Officielle' : '🚫 Hors-Bilan'}
-                                        </Badge>
-                                    )}
+                                    {(() => {
+                                        const isOfficial = sale.isOfficialInvoice === true || (sale as any).is_official_invoice === true;
+                                        return (
+                                            <Badge
+                                                variant="outline"
+                                                className={cn(
+                                                    "text-[10px] px-2 py-0 mt-1 uppercase font-bold",
+                                                    isOfficial ? "bg-indigo-50 text-indigo-600 border-indigo-100" : "bg-orange-50 text-orange-600 border-orange-100"
+                                                )}
+                                            >
+                                                {isOfficial ? 'Officielle ✅' : 'Hors-Bilan 🔴'}
+                                            </Badge>
+                                        );
+                                    })()}
                                 </div>
                             </div>
 
@@ -459,17 +462,20 @@ function EnhancedListView({ sales, clientsMap, isExpertMode }: { sales: Sale[], 
                                     <Badge variant={isPaid ? "secondary" : "outline"} className={cn(isPaid ? "bg-green-100 text-green-700 border-green-200" : "bg-orange-100 text-orange-700 border-orange-200")}>
                                         {isPaid ? "Payé" : "Impayé"}
                                     </Badge>
-                                    {isExpertMode && (
-                                        <Badge
-                                            variant="outline"
-                                            className={cn(
-                                                "text-[10px] uppercase font-bold",
-                                                sale.isOfficialInvoice ? "bg-indigo-50 text-indigo-600 border-indigo-100" : "bg-orange-50 text-orange-600 border-orange-100"
-                                            )}
-                                        >
-                                            {sale.isOfficialInvoice ? '📋 Officielle' : '🚫 Hors-Bilan'}
-                                        </Badge>
-                                    )}
+                                    {(() => {
+                                        const isOfficial = sale.isOfficialInvoice === true || (sale as any).is_official_invoice === true;
+                                        return (
+                                            <Badge
+                                                variant="outline"
+                                                className={cn(
+                                                    "text-[10px] uppercase font-bold",
+                                                    isOfficial ? "bg-indigo-50 text-indigo-600 border-indigo-100" : "bg-orange-50 text-orange-600 border-orange-100"
+                                                )}
+                                            >
+                                                {isOfficial ? 'Officielle ✅' : 'Hors-Bilan 🔴'}
+                                            </Badge>
+                                        );
+                                    })()}
                                 </div>
                             </div>
 

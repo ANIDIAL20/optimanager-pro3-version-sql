@@ -17,6 +17,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { PaymentSection } from '@/app/dashboard/clients/[id]/_components/pos/payment-section';
 import { DiscountDialog } from '@/components/clients/discount-dialog';
 import { LensDetailsDialog } from '@/components/sales/lens-details-dialog';
@@ -411,64 +413,51 @@ export function PosCartPanel({ alreadyPaid = 0, reservationIds = [], onSuccess, 
         </div>
 
         <div className="px-4 py-4 bg-white border-t border-b border-slate-100">
-          <button
-            type="button"
-            onClick={() => {
-              if (factureOfficielle) setShowConfirmDialog(true);
-              else setFactureOfficielle(true);
-            }}
-            className={cn(
-              'w-full text-left px-4 py-3 rounded-xl border-2 transition-all duration-300 shadow-sm flex items-center justify-between group focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2',
-              factureOfficielle
-                ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300'
-                : 'bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100 hover:border-orange-300'
-            )}
-            aria-label={factureOfficielle ? 'Désactiver la déclaration fiscale' : 'Activer la déclaration fiscale'}
-          >
-            <div className="flex items-center gap-3.5">
-              <div
+          <div className={cn(
+            "rounded-xl border-2 px-4 py-3 flex items-center justify-between gap-4 transition-all duration-300 shadow-sm hover:shadow-md",
+            factureOfficielle 
+              ? "bg-indigo-50 border-indigo-200" 
+              : "bg-orange-50 border-orange-200"
+          )}>
+            <div className="flex flex-col gap-0.5">
+              <Label 
+                htmlFor="official-invoice-toggle"
                 className={cn(
-                  'p-2.5 rounded-lg flex-shrink-0',
-                  factureOfficielle
-                    ? 'bg-indigo-100 text-indigo-700'
-                    : 'bg-orange-100 text-orange-600'
+                  "text-xs font-semibold uppercase tracking-wide cursor-pointer text-nowrap",
+                  factureOfficielle ? "text-indigo-700" : "text-orange-700"
                 )}
               >
-                <Receipt size={22} className={factureOfficielle ? 'stroke-[2.5px]' : ''} />
-              </div>
-              <div className="flex flex-col">
-                <p className="text-[15px] font-bold italic uppercase tracking-wide">
-                  Facture Officielle
-                </p>
-                <p className={cn(
-                  "text-[10px] font-medium italic mt-0.5 tracking-wider",
-                  factureOfficielle ? "text-indigo-600/80" : "text-orange-600/80"
-                )}>
-                  {factureOfficielle
-                    ? '• TVA 20% INCLUSE • DÉCLARATION FISCALE ACTIVE'
-                    : '⚠️ HORS-BILAN • AUCUNE TRACE COMPTABLE'}
-                </p>
-              </div>
+                Facture officielle
+              </Label>
+              <span className={cn(
+                "text-[10px] font-medium leading-tight",
+                factureOfficielle ? "text-indigo-600/80" : "text-orange-600/80"
+              )}>
+                {factureOfficielle 
+                  ? "TVA 20% incluse · Déclaration fiscale active" 
+                  : "⚠️ Hors-Bilan · Aucune trace comptable"}
+              </span>
             </div>
-
-            <div className="flex-shrink-0">
-              <div
+            
+            <div className="flex items-center shrink-0">
+              <Switch
+                id="official-invoice-toggle"
+                checked={factureOfficielle}
+                onCheckedChange={(checked) => {
+                  if (factureOfficielle && !checked) {
+                    setShowConfirmDialog(true);
+                  } else {
+                    setFactureOfficielle(checked);
+                  }
+                }}
                 className={cn(
-                  'w-10 h-6 rounded-full transition-all duration-300 relative border-2',
-                  factureOfficielle
-                    ? 'bg-indigo-500 border-indigo-600'
-                    : 'bg-orange-200 border-orange-300'
+                  "data-[state=checked]:bg-indigo-600",
+                  !factureOfficielle && "data-[state=unchecked]:bg-orange-300"
                 )}
-              >
-                <span
-                  className={cn(
-                    'absolute top-[2px] w-4 h-4 rounded-full transition-all duration-300 shadow-sm',
-                    factureOfficielle ? 'right-[2px] bg-white' : 'left-[2px] bg-orange-500'
-                  )}
-                />
-              </div>
+                aria-label="Activer la facture officielle"
+              />
             </div>
-          </button>
+          </div>
         </div>
 
         <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>

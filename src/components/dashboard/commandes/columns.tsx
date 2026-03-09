@@ -215,7 +215,7 @@ export const columns: ColumnDef<Order>[] = [
         accessorKey: "isOfficialInvoice",
         header: "Facture",
         cell: ({ row }) => {
-            const isOfficial = row.original.isOfficialInvoice;
+            const isOfficial = row.original.isOfficialInvoice === true || (row.original as any).is_official_invoice === true;
 
             return (
                 <Badge
@@ -226,7 +226,7 @@ export const columns: ColumnDef<Order>[] = [
                     )}
                 >
                     {isOfficial ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
-                    {isOfficial ? "Officielle" : "Hors-Bilan"}
+                    {isOfficial ? "Officielle ✅" : "Hors-Bilan 🔴"}
                 </Badge>
             );
         },
