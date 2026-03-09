@@ -4,7 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 import { generateDocumentPDFStream } from '@/lib/pdf-generator';
-import { generateDocumentFilename } from '@/lib/pdf-filenames';
+import { buildBonCommandeFilename } from '@/lib/filename-utils';
 import { buildPdfHeaders } from '@/lib/pdf-response';
 
 export const runtime = 'nodejs';
@@ -77,8 +77,7 @@ export async function GET(
         },
     });
 
-    const safeFilename = generateDocumentFilename(
-        "Commande",
+    const safeFilename = buildBonCommandeFilename(
         order.orderNumber || String(order.id),
         order.supplier?.nom || order.fournisseur || 'Fournisseur'
     );

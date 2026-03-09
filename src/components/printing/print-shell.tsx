@@ -1,69 +1,76 @@
 'use client';
 
-/**
- * PrintShell — thin 'use client' wrapper around PrintDocumentTemplate.
- *
- * The parent Server Component pre-fetches both document data and the saved
- * DocumentTemplateConfig before any HTML is sent to the browser, then passes
- * them as serialisable props here. This eliminates the flash of the default
- * "classic" template that occurred when the old 'use client' pages fetched
- * config in a useEffect.
- *
- * This component owns:
- *   • useRouter() for the "Back" button
- *   • Conditional <AutoPrint /> mount
- *   • The page-level wrapper div (min-h-screen / print reset)
- */
-
+import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { PrintDocumentTemplate } from '@/components/printing/print-document-template';
 import { AutoPrint } from '@/components/printing/auto-print';
 import type { StandardDocumentData } from '@/types/document';
 import type { DocumentTemplateConfig } from '@/types/document-template';
 import { usePrintTitle } from '@/hooks/use-print-title';
-import { generateDocumentFilename, DocumentType } from '@/lib/pdf-filenames';
+import {
+  buildBonCommandeFilename,
+  buildDevisFilename,
+  buildFactureFilename,
+  buildRecuFilename,
+} from '@/lib/filename-utils';
 
 interface PrintShellProps {
-  data: StandardDocumentData;
-  config: DocumentTemplateConfig;
-  /** Trigger window.print() automatically after fonts + images are ready */
+  data?: StandardDocumentData;
+  config?: DocumentTemplateConfig;
+  documentTitle?: string;
+  children?: ReactNode;
   autoprint?: boolean;
-  /** Hide the Back/Print toolbar (e.g. when opened in ?preview mode) */
   isPreview?: boolean;
+}
+
+function resolveDocumentTitle(data?: StandardDocumentData, documentTitle?: string) {
+  if (documentTitle) {
+    return documentTitle;
+  }
+
+  if (!data) {
+    return 'OptiManager Pro.pdf';
+  }
+
+  if (data.type === 'FACTURE') {
+    return buildFactureFilename(data.documentNumber, data.client?.nom);
+  }
+
+  if (data.type === 'DEVIS') {
+    return buildDevisFilename(data.documentNumber, data.client?.nom);
+  }
+
+  if (data.type === 'REÇU') {
+    return buildRecuFilename(data.documentNumber, data.client?.nom);
+  }
+
+  return buildBonCommandeFilename(data.documentNumber, data.fournisseur?.nom);
 }
 
 export function PrintShell({
   data,
   config,
+  documentTitle,
+  children,
   autoprint = false,
   isPreview = false,
 }: PrintShellProps) {
   const router = useRouter();
+  const resolvedTitle = resolveDocumentTitle(data, documentTitle);
 
-  // Unified filename generation for all documents using PrintShell
-  const docType: DocumentType = 
-    data.type === 'REÇU' ? 'Recu' : 
-    data.type === 'DEVIS' ? 'Devis' : 
-    data.type === 'FACTURE' ? 'Facture' : 
-    data.type === 'BON DE COMMANDE' ? 'Commande' : 'Devis';
-
-  usePrintTitle(
-    generateDocumentFilename(
-        docType,
-        data.documentNumber,
-        data.client?.nom || data.fournisseur?.nom || 'Client'
-    )
-  );
+  usePrintTitle(resolvedTitle);
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 print:bg-white print:py-0">
       {autoprint && <AutoPrint />}
-      <PrintDocumentTemplate
-        data={data}
-        config={config}
-        showToolbar={!isPreview}
-        onBack={() => router.back()}
-      />
+      {children ?? (data && config ? (
+        <PrintDocumentTemplate
+          data={data}
+          config={config}
+          showToolbar={!isPreview}
+          onBack={() => router.back()}
+        />
+      ) : null)}
     </div>
   );
 }

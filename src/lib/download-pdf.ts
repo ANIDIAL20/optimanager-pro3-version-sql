@@ -19,38 +19,44 @@ function extractFileName(
   return fallback;
 }
 
-export async function downloadPdfFromApi(
-  url: string,
-  fallbackFilename: string
-) {
+async function fetchPdfAsset(url: string, fallbackFilename: string) {
   const requestUrl = new URL(url, window.location.origin);
-  requestUrl.searchParams.set("latest", "true");
-  requestUrl.searchParams.set("_", Date.now().toString());
+  requestUrl.searchParams.set('latest', 'true');
+  requestUrl.searchParams.set('_', Date.now().toString());
 
   const response = await fetch(requestUrl.toString(), {
-    cache: "no-store",
+    cache: 'no-store',
     headers: {
-      "Cache-Control": "no-cache",
-      Pragma: "no-cache",
+      'Cache-Control': 'no-cache',
+      Pragma: 'no-cache',
     },
   });
 
   if (!response.ok) {
-    throw new Error("Download failed");
+    throw new Error('Download failed');
   }
 
-  const disposition = response.headers.get("Content-Disposition");
-  console.log("[download-pdf] Content-Disposition:", disposition);
-  console.log("[download-pdf] All headers:", [...response.headers.entries()]);
+  const disposition = response.headers.get('Content-Disposition');
+  console.log('[download-pdf] Content-Disposition:', disposition);
+  console.log('[download-pdf] All headers:', [...response.headers.entries()]);
 
   const blob = await response.blob();
-  const objectUrl = window.URL.createObjectURL(blob);
-  const downloadName = extractFileName(disposition, fallbackFilename);
+  const filename = extractFileName(disposition, fallbackFilename);
 
-  const link = document.createElement("a");
+  return { blob, filename };
+}
+
+export async function downloadPdfFromApi(
+  url: string,
+  fallbackFilename: string
+) {
+  const { blob, filename } = await fetchPdfAsset(url, fallbackFilename);
+  const objectUrl = window.URL.createObjectURL(blob);
+
+  const link = document.createElement('a');
   link.href = objectUrl;
-  link.download = downloadName;
-  link.style.display = "none";
+  link.download = filename;
+  link.style.display = 'none';
 
   document.body.appendChild(link);
 
@@ -60,4 +66,22 @@ export async function downloadPdfFromApi(
     window.URL.revokeObjectURL(objectUrl);
     document.body.removeChild(link);
   }
+}
+
+export async function sharePdfFromApi(
+  url: string,
+  fallbackFilename: string
+) {
+  const { blob, filename } = await fetchPdfAsset(url, fallbackFilename);
+  const file = new File([blob], filename, { type: 'application/pdf' });
+
+  if (navigator.canShare?.({ files: [file] })) {
+    await navigator.share({
+      title: filename,
+      files: [file],
+    });
+    return true;
+  }
+
+  return false;
 }

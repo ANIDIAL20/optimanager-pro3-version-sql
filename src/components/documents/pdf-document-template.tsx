@@ -33,7 +33,7 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
     return (
         <Document title="OptiManager Pro">
             <Page size="A4" style={{ padding: 40 }}>
-                <Text>Données du document manquantes.</Text>
+                <Text>DonnÃƒÆ’Ã‚Â©es du document manquantes.</Text>
             </Page>
         </Document>
     );
@@ -189,7 +189,7 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
     devis: { fr: 'DEVIS', ar: 'DEVIS', en: 'QUOTE' },
     bc: { fr: 'BON DE COMMANDE', ar: 'BON DE COMMANDE', en: 'PURCHASE ORDER' },
     bl: { fr: 'BON DE LIVRAISON', ar: 'BON DE LIVRAISON', en: 'DELIVERY NOTE' },
-    recu: { fr: 'REÇU', ar: 'REÇU', en: 'RECEIPT' },
+    recu: { fr: 'REÃƒÆ’Ã¢â‚¬Â¡U', ar: 'REÃƒÆ’Ã¢â‚¬Â¡U', en: 'RECEIPT' },
   };
 
   const titleLang = (language === 'ar' || language === 'en') ? language : 'fr';
@@ -198,12 +198,12 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
   const amountInWordsLabel = useMemo(() => {
     if (titleLang === 'ar' || titleLang === 'fr') {
       return docType === 'devis'
-        ? 'Arrêté le présent devis à la somme de :'
+        ? 'ArrÃƒÆ’Ã‚ÂªtÃƒÆ’Ã‚Â© le prÃƒÆ’Ã‚Â©sent devis ÃƒÆ’Ã‚Â  la somme de :'
         : docType === 'facture'
-          ? 'Arrêté la présente facture à la somme de :'
+          ? 'ArrÃƒÆ’Ã‚ÂªtÃƒÆ’Ã‚Â© la prÃƒÆ’Ã‚Â©sente facture ÃƒÆ’Ã‚Â  la somme de :'
           : docType === 'bc'
-            ? 'Arrêté le présent bon de commande à la somme de :'
-            : 'Arrêté le présent bon de livraison à la somme de :';
+            ? 'ArrÃƒÆ’Ã‚ÂªtÃƒÆ’Ã‚Â© le prÃƒÆ’Ã‚Â©sent bon de commande ÃƒÆ’Ã‚Â  la somme de :'
+            : 'ArrÃƒÆ’Ã‚ÂªtÃƒÆ’Ã‚Â© le prÃƒÆ’Ã‚Â©sent bon de livraison ÃƒÆ’Ã‚Â  la somme de :';
     }
     if (titleLang === 'en') {
       return docType === 'devis'
@@ -222,7 +222,7 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
       const typeLabels: Record<DocType, string> = {
         facture: 'Facture',
         devis: 'Devis',
-        bc: 'Commande',
+        bc: 'BonCommande',
         bl: 'Bon_Livraison',
         recu: 'Recu',
       };
@@ -299,7 +299,7 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
         {/* Title */}
         <View style={styles.titleSection}>
             <View>
-                <Text style={styles.docTitle}>{docTitle} N° {doc.saleNumber || doc.id}</Text>
+                <Text style={styles.docTitle}>{docTitle} NÃƒâ€šÃ‚Â° {doc.saleNumber || doc.id}</Text>
                 <Text style={styles.label}>Date: {formatDateSafe(doc.date || doc.createdAt)}</Text>
             </View>
             <View style={styles.clientBox}>
@@ -312,9 +312,9 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
         {/* Items Table */}
         <View style={styles.table}>
             <View style={styles.tableHeader}>
-                <Text style={styles.colDesc}>Désignation</Text>
+                <Text style={styles.colDesc}>DÃƒÆ’Ã‚Â©signation</Text>
                 <Text style={styles.colBrand}>Marque</Text>
-                <Text style={styles.colModel}>Modèle</Text>
+                <Text style={styles.colModel}>ModÃƒÆ’Ã‚Â¨le</Text>
                 <Text style={styles.colQty}>Qte</Text>
                 <Text style={styles.colPrice}>P.U.</Text>
                 <Text style={styles.colTotal}>Total</Text>
@@ -331,7 +331,7 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
                         <View style={styles.rowMain}>
                             <View style={styles.colDesc}>
                                 <Text>{item.lensType || item.designation || item.name || item.supplierName || item.productName || item.label}</Text>
-                                {item.reference && !item.reference.startsWith('LENS-PACK') && <Text style={{fontSize: 8, color: '#718096', marginTop: 2}}>Réf: {item.reference}</Text>}
+                                {item.reference && !item.reference.startsWith('LENS-PACK') && <Text style={{fontSize: 8, color: '#718096', marginTop: 2}}>RÃƒÆ’Ã‚Â©f: {item.reference}</Text>}
                             </View>
                             <Text style={styles.colBrand}>{item.brand || '-'}</Text>
                             <Text style={styles.colModel}>{item.model || '-'}</Text>
@@ -348,7 +348,7 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
                                         <Text style={[styles.optVal, {width: '8%', color: primaryColor}]}>OD</Text>
                                         <Text style={styles.optLabel}>Sph: <Text style={styles.optVal}>{formatOpticalValue(od.sphere)}</Text></Text>
                                         <Text style={styles.optLabel}>Cyl: <Text style={styles.optVal}>{formatOpticalValue(od.cylinder)}</Text></Text>
-                                        {od.axis && <Text style={styles.optLabel}>Axe: <Text style={styles.optVal}>{od.axis}°</Text></Text>}
+                                        {od.axis && <Text style={styles.optLabel}>Axe: <Text style={styles.optVal}>{od.axis}Ãƒâ€šÃ‚Â°</Text></Text>}
                                         {od.addition && <Text style={styles.optLabel}>Add: <Text style={styles.optVal}>{od.addition}</Text></Text>}
                                     </View>
                                 )}
@@ -357,7 +357,7 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
                                         <Text style={[styles.optVal, {width: '8%', color: primaryColor}]}>OG</Text>
                                         <Text style={styles.optLabel}>Sph: <Text style={styles.optVal}>{formatOpticalValue(og.sphere)}</Text></Text>
                                         <Text style={styles.optLabel}>Cyl: <Text style={styles.optVal}>{formatOpticalValue(og.cylinder)}</Text></Text>
-                                        {og.axis && <Text style={styles.optLabel}>Axe: <Text style={styles.optVal}>{og.axis}°</Text></Text>}
+                                        {og.axis && <Text style={styles.optLabel}>Axe: <Text style={styles.optVal}>{og.axis}Ãƒâ€šÃ‚Â°</Text></Text>}
                                         {og.addition && <Text style={styles.optLabel}>Add: <Text style={styles.optVal}>{og.addition}</Text></Text>}
                                     </View>
                                 )}
@@ -380,7 +380,7 @@ export const PdfDocumentTemplate = ({ docType, data, documentSettings }: PdfDocu
                     <Text style={{fontWeight: 'bold'}}>{formatMoney(Number(doc.totalTVA || 0))}</Text>
                 </View>
                 <View style={styles.totalFinal}>
-                    <Text style={{fontSize: 12, fontWeight: 'bold', color: primaryColor}}>NET À PAYER</Text>
+                    <Text style={{fontSize: 12, fontWeight: 'bold', color: primaryColor}}>NET ÃƒÆ’Ã¢â€šÂ¬ PAYER</Text>
                     <Text style={{fontSize: 12, fontWeight: 'bold', color: primaryColor}}>{formatMoney(Number(doc.totalTTC || doc.total || doc.sousTotal || 0))}</Text>
                 </View>
             </View>

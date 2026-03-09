@@ -5,38 +5,45 @@ import { Printer, FileDown, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { printInPlace } from '@/lib/print-in-place';
-import { generateDocumentFilename } from '@/lib/pdf-filenames';
-import { downloadPdfFromApi } from '@/lib/download-pdf';
+import {
+  buildBonCommandeFilename,
+  buildDevisFilename,
+  buildFactureFilename,
+  buildRecuFilename,
+} from '@/lib/filename-utils';
+import { downloadPdfFromApi, sharePdfFromApi } from '@/lib/download-pdf';
 
 export type PrintDocType = 'facture' | 'devis' | 'bon-commande' | 'recu';
 export type PrintVariant = 'print' | 'pdf' | 'share';
 
 export interface PrintButtonProps {
-  /** Document type — maps to /print/[type]/[id] */
-  type: PrintDocType;
-  /** Database ID of the document */
-  id: number | string;
-  /** print = open in new tab | pdf = open with autoprint | share = copy link */
+  type?: PrintDocType;
+  id?: number | string;
   variant?: PrintVariant;
-  /** Override the default button label */
   label?: string;
-  /** Open and immediately trigger window.print() (sets ?autoprint=true) */
   autoprint?: boolean;
-  /** Extra CSS classes on the Button */
   className?: string;
-  /** Button size */
   size?: 'default' | 'sm' | 'lg' | 'icon';
-  /** Optional metadata for 'bulletproof' filename generation */
   reference?: string;
   clientName?: string;
-  /** Force the API route type for fetch (e.g. 'factures', 'devis') */
   apiRouteType?: 'factures' | 'devis';
+  pdfUrl?: string;
+  filename?: string;
+  printUrl?: string;
+  shareUrl?: string;
+}
+
+function buildFilename(type: PrintDocType, reference: string, clientName?: string) {
+  if (type === 'facture') return buildFactureFilename(reference, clientName);
+  if (type === 'devis') return buildDevisFilename(reference, clientName);
+  if (type === 'recu') return buildRecuFilename(reference, clientName);
+  return buildBonCommandeFilename(reference, clientName);
 }
 
 export function PrintButton({
   type,
   id,
-  variant = 'print',
+  variant,
   label,
   autoprint = false,
   className,
@@ -44,88 +51,115 @@ export function PrintButton({
   apiRouteType,
   reference,
   clientName,
+  pdfUrl,
+  filename,
+  printUrl,
+  shareUrl,
 }: PrintButtonProps) {
   const { toast } = useToast();
+  const resolvedVariant = variant ?? (pdfUrl ? 'pdf' : 'print');
 
-  const buildUrl = () => {
+  const resolvedFilename = React.useMemo(() => {
+    if (filename) return filename;
+    if (!type) return 'OptiManager Pro.pdf';
+    return buildFilename(type, reference || String(id ?? 'document'), clientName);
+  }, [clientName, filename, id, reference, type]);
+
+  const resolvedPdfUrl = React.useMemo(() => {
+    if (pdfUrl) return pdfUrl;
+    if (!type || id == null) return null;
+    const apiPath = apiRouteType || (type === 'facture' ? 'factures' : type);
+    return `/api/${apiPath}/${id}/pdf`;
+  }, [apiRouteType, id, pdfUrl, type]);
+
+  const resolvedPrintUrl = React.useMemo(() => {
+    if (printUrl) return printUrl;
+    if (!type || id == null) return null;
     const params = new URLSearchParams();
-    if (variant === 'pdf' || autoprint) params.set('autoprint', 'true');
+    if (autoprint) params.set('autoprint', 'true');
     const qs = params.toString();
     return `/print/${type}/${id}${qs ? `?${qs}` : ''}`;
-  };
+  }, [autoprint, id, printUrl, type]);
 
   const handleDownload = async () => {
+    if (!resolvedPdfUrl) {
+      toast({ variant: 'destructive', title: 'Erreur', description: 'URL PDF introuvable.' });
+      return;
+    }
+
     try {
-      const apiPath = apiRouteType || (type === 'facture' ? 'factures' : type);
-      const url = `/api/${apiPath}/${id}/pdf`;
-
-      const docTypeLabel =
-        type === 'facture' ? 'Facture' :
-        type === 'devis' ? 'Devis' :
-        type === 'bon-commande' ? 'Commande' : 'Recu';
-
-      await downloadPdfFromApi(
-        url,
-        generateDocumentFilename(
-          docTypeLabel,
-          reference || String(id),
-          clientName || 'Client'
-        )
-      );
-
-      toast({ title: "Téléchargement terminé" });
+      await downloadPdfFromApi(resolvedPdfUrl, resolvedFilename);
+      toast({ title: 'TÃ©lÃ©chargement terminÃ©' });
     } catch (error) {
-      console.error("Download error:", error);
-      toast({ 
-        variant: 'destructive', 
-        title: 'Erreur', 
-        description: 'Le téléchargement a échoué.' 
+      console.error('Download error:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Erreur',
+        description: 'Le tÃ©lÃ©chargement a Ã©chouÃ©.',
       });
     }
+  };
+
+  const handleShare = async () => {
+    const fallbackUrl = shareUrl || resolvedPrintUrl || resolvedPdfUrl || window.location.href;
+
+    if (resolvedPdfUrl && typeof navigator.share === 'function') {
+      try {
+        const shared = await sharePdfFromApi(resolvedPdfUrl, resolvedFilename);
+        if (shared) {
+          toast({ title: 'Partage ouvert' });
+          return;
+        }
+      } catch (error) {
+        console.error('Share file error:', error);
+      }
+    }
+
+    if (typeof navigator.share === 'function') {
+      navigator.share({ url: fallbackUrl }).catch(() => {
+        navigator.clipboard.writeText(fallbackUrl);
+        toast({ title: 'Lien copiÃ©', description: fallbackUrl });
+      });
+      return;
+    }
+
+    navigator.clipboard
+      .writeText(fallbackUrl)
+      .then(() => toast({ title: 'Lien copiÃ©', description: fallbackUrl }))
+      .catch(() => toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de copier.' }));
   };
 
   const handleClick = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    if (variant === 'share') {
-      const url = `${window.location.origin}/print/${type}/${id}`;
-      // ... same share logic
-      if (navigator.share) {
-        navigator.share({ url }).catch(() => {
-          navigator.clipboard.writeText(url);
-          toast({ title: 'Lien copié', description: url });
-        });
-      } else {
-        navigator.clipboard
-          .writeText(url)
-          .then(() => toast({ title: 'Lien copié', description: 'Lien vers le document copié.' }))
-          .catch(() => toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de copier.' }));
-      }
+
+    if (resolvedVariant === 'share') {
+      await handleShare();
       return;
     }
-    
-    if (variant === 'pdf') {
+
+    if (resolvedVariant === 'pdf') {
       await handleDownload();
       return;
     }
-    
-    const url = buildUrl();
-    if (variant === 'print') {
-      printInPlace(url);
-    } else {
-      window.open(url, '_blank');
+
+    if (!resolvedPrintUrl) {
+      toast({ variant: 'destructive', title: 'Erreur', description: 'URL d\'impression introuvable.' });
+      return;
     }
+
+    printInPlace(resolvedPrintUrl);
   };
 
   const icons: Record<PrintVariant, React.ReactNode> = {
     print: <Printer className="w-4 h-4" />,
-    pdf:   <FileDown className="w-4 h-4" />,
+    pdf: <FileDown className="w-4 h-4" />,
     share: <Share2 className="w-4 h-4" />,
   };
 
   const defaultLabels: Record<PrintVariant, string> = {
     print: 'Imprimer',
-    pdf:   'Télécharger PDF',
+    pdf: 'TÃ©lÃ©charger PDF',
     share: 'Partager',
   };
 
@@ -137,8 +171,8 @@ export function PrintButton({
       onClick={handleClick}
       className={`flex items-center gap-2 ${className ?? ''}`}
     >
-      {icons[variant]}
-      {label ?? defaultLabels[variant]}
+      {icons[resolvedVariant]}
+      {label ?? defaultLabels[resolvedVariant]}
     </Button>
   );
 }

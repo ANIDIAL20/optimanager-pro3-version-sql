@@ -1,5 +1,5 @@
 /**
- * /print/bon-commande/[id] — Server Component
+ * /print/bon-commande/[id] Ã¢â‚¬â€ Server Component
  * Standardized to match Facture/Devis/Recu for SSR Title & Template consistency.
  */
 import { notFound } from 'next/navigation';
@@ -8,7 +8,7 @@ import { getDocumentConfigForPrint } from '@/app/actions/shop-actions';
 import { DEFAULT_TEMPLATE_CONFIG } from '@/types/document-template';
 import { bonCommandeAdapter } from '@/lib/documents/adapters';
 import { PrintShell } from '@/components/printing/print-shell';
-import { generateDocumentFilename } from '@/lib/pdf-filenames';
+import { buildBonCommandeFilename } from '@/lib/filename-utils';
 import type { Metadata } from 'next';
 
 interface BonCommandePrintPageProps {
@@ -25,7 +25,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   }
 
   const data = bonCommandeAdapter.toStandardDocument(result.data);
-  const filename = generateDocumentFilename('Commande', data.documentNumber, data.fournisseur?.nom || 'Fournisseur');
+  const filename = buildBonCommandeFilename(data.documentNumber, data.fournisseur?.nom || 'Fournisseur');
 
   return {
     title: filename,
