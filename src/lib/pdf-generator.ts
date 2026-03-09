@@ -37,15 +37,30 @@ export async function generateDocumentPDFStream({
   console.log(`[PDF_GENERATOR] Using version: ${effectiveSettings.version}`);
   console.log(`[PDF_GENERATOR] Primary color: ${effectiveSettings.default.primaryColor}`);
 
-  // Create React element (no JSX in Node.js context)
-  // @ts-ignore
+  // Create React element
   const element = React.createElement(PdfDocumentTemplate, {
     docType: type,
     data,
     documentSettings: resolvedForDocType,
   });
 
-  // Generate Stream
-  // @ts-ignore
-  return await renderToStream(element);
+  console.log(`[PDF_GENERATOR] Generating stream for docType: ${type}`);
+
+  try {
+    const { pdf } = await import('@react-pdf/renderer');
+    const instance = pdf(element as any) as any;
+    
+    // In Node.js environments with recent react-pdf versions, toStream() is the standard
+    if (instance.toStream) {
+      return await instance.toStream();
+    }
+    
+    // Fallback if toStream is missing
+    console.warn(`[PDF_GENERATOR] toStream missing on instance, falling back to renderToStream`);
+    const { renderToStream: rts } = await import('@react-pdf/renderer');
+    return await rts(element as any);
+  } catch (err: any) {
+    console.error(`[PDF_GENERATOR] Critical Error:`, err);
+    throw new Error(`PDF Stream generation failed: ${err.message}`);
+  }
 }

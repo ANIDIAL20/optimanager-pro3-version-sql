@@ -59,7 +59,11 @@ export async function GET(
     });
 
     // 4. Enrich Items with Lens Details
-    const enrichedItems = (sale.items as any[]).map((item) => {
+    const saleItems = Array.isArray(sale.items) ? (sale.items as any[]) : [];
+    
+    console.log(`[API_FACTURE_PDF] Processing ${saleItems.length} items for Sale ${sale.id}`);
+
+    const enrichedItems = saleItems.map((item) => {
         // If item already has details, keep them
         if (item.lensDetails) return item;
         
@@ -73,7 +77,7 @@ export async function GET(
                     lensDetails: [
                         { eye: 'OD', sphere: order.sphereR, cylinder: order.cylindreR, axis: order.axeR, addition: order.additionR },
                         { eye: 'OG', sphere: order.sphereL, cylinder: order.cylindreL, axis: order.axeL, addition: order.additionL }
-                    ].filter(d => (d.sphere || d.cylinder)) // Only valid details
+                    ].filter(d => (d.sphere !== undefined || d.cylinder !== undefined)) 
                 };
             }
         }
