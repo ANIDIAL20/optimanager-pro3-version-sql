@@ -7,20 +7,14 @@ import { eq, sql } from 'drizzle-orm';
 import { gzip, gunzip } from 'node:zlib';
 import { promisify } from 'node:util';
 import { revalidatePath } from 'next/cache';
-import { v4 as uuidv4 } from 'uuid'; // ✅ FIX 1 — ES import au lieu de require()
+import { v4 as uuidv4 } from 'uuid';
 
 const gzipAsync = promisify(gzip);
 const gunzipAsync = promisify(gunzip);
 
 // ─────────────────────────────────────────────
-// HELPERS
+// HELPER: sanitize dates in backup JSON
 // ─────────────────────────────────────────────
-
-// ✅ FIX 2 — sanitizeDates corrigé (dead code supprimé)
-// AVANT : le check `typeof obj === 'string'` était APRÈS `if typeof !== 'object' return obj`
-//         donc les strings étaient retournées avant d'atteindre la conversion → les dates
-//         sous forme de string n'étaient JAMAIS converties.
-// APRÈS : on vérifie le string EN PREMIER.
 function sanitizeDates(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj;
   if (typeof obj === 'string' && /^\d{4}-\d{2}-\d{2}(T|\s)/.test(obj)) {
@@ -36,10 +30,9 @@ function sanitizeDates(obj: unknown): unknown {
   return res;
 }
 
-// ✅ FIX 3 — idMap déplacé DANS les fonctions (plus module-level)
-// AVANT : `const idMap = new Map()` au niveau du module = persistait entre les requêtes
-//         en production (serveur Node.js stateful) → corruption des IDs entre utilisateurs.
-// APRÈS : créé localement dans chaque fonction qui en a besoin.
+// ─────────────────────────────────────────────
+// HELPER: ID migration helpers (local per call)
+// ─────────────────────────────────────────────
 function createIdHelpers() {
   const idMap = new Map<string, string>();
 
@@ -53,20 +46,132 @@ function createIdHelpers() {
   };
 
   const migrateIntId = (id: unknown) => Number(id);
-  const fk = (id: unknown) => id ? (idMap.get(String(id)) || null) : null;
+  const fk  = (id: unknown) => id ? (idMap.get(String(id)) || null) : null;
   const fkInt = (id: unknown) => id ? Number(id) : null;
 
   return { migrateId, migrateIntId, fk, fkInt };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// purgeAllUserData
+// Deletes ALL rows belonging to userId across every table.
+//
+// RULES:
+//  - ONLY parameterized sql`` template literals — no drizzle .delete(), no sql.raw()
+//  - Table names are the ACTUAL PostgreSQL names from pgTable('...')
+//  - Order is FK-safe: children before parents
+//
+// ACTUAL TABLE NAMES (verified from schema files):
+//  expenses.ts      → pgTable('expenses_v2', ...)      ← NOT 'expenses'
+//  audit-log.schema → pgTable('audit_logs_v2', ...)
+//  logs-misc.ts     → pgTable('audit_logs', ...)  and pgTable('audit_log', ...)
+//  frame_reservations uses store_id (not user_id)
+// ─────────────────────────────────────────────────────────────────────────────
+async function purgeAllUserData(tx: any, userId: string) {
+
+  // ── Step 0: SET NULL on circular FKs to allow deletion of parent rows ────────
+  await tx.execute(sql`UPDATE devis              SET sale_id = NULL WHERE user_id = ${userId}`);
+  await tx.execute(sql`UPDATE lens_orders        SET sale_id = NULL WHERE user_id = ${userId}`);
+  await tx.execute(sql`UPDATE reservations       SET sale_id = NULL WHERE user_id = ${userId}`);
+  await tx.execute(sql`UPDATE frame_reservations SET sale_id = NULL WHERE store_id = ${userId}`);
+
+  // ── Step 1: Leaf rows with no user_id (require JOIN to find owner) ────────────
+  await tx.execute(sql`
+    DELETE FROM sale_lens_details
+    WHERE sale_item_id IN (
+      SELECT si.id FROM sale_items si
+      JOIN sales s ON s.id = si.sale_id
+      WHERE s.user_id = ${userId}
+    )`);
+
+  await tx.execute(sql`
+    DELETE FROM sale_contact_lens_details
+    WHERE sale_item_id IN (
+      SELECT si.id FROM sale_items si
+      JOIN sales s ON s.id = si.sale_id
+      WHERE s.user_id = ${userId}
+    )`);
+
+  await tx.execute(sql`
+    DELETE FROM sale_items
+    WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${userId})`);
+
+  await tx.execute(sql`
+    DELETE FROM goods_receipt_items
+    WHERE receipt_id IN (SELECT id FROM goods_receipts WHERE user_id = ${userId})`);
+
+  await tx.execute(sql`
+    DELETE FROM supplier_order_items
+    WHERE order_id IN (SELECT id FROM supplier_orders WHERE user_id = ${userId})`);
+
+  // ── Step 2: frame_reservations (uses store_id, not user_id) ──────────────────
+  await tx.execute(sql`DELETE FROM frame_reservations WHERE store_id = ${userId}`);
+
+  // ── Step 3: Child tables referencing clients / sales / suppliers ──────────────
+  await tx.execute(sql`DELETE FROM client_interactions WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM reservations         WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM invoice_imports      WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM reminders            WHERE user_id = ${userId}`);
+
+  // ── Step 4: Audit and notification tables ────────────────────────────────────
+  await tx.execute(sql`DELETE FROM notifications WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM audit_logs    WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM audit_logs_v2 WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM audit_log     WHERE user_id = ${userId}`);
+
+  // ── Step 5: Financial tables ──────────────────────────────────────────────────
+  await tx.execute(sql`DELETE FROM cash_movements       WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM cash_sessions        WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM client_transactions  WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM comptabilite_journal WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM expenses_v2          WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM purchases            WHERE user_id = ${userId}`);
+
+  // ── Step 6: Supplier credit chain ────────────────────────────────────────────
+  await tx.execute(sql`DELETE FROM supplier_credit_allocations WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM supplier_credits            WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM supplier_order_payments     WHERE user_id = ${userId}`);
+
+  // ── Step 7: Goods receipts and lens orders ────────────────────────────────────
+  await tx.execute(sql`DELETE FROM goods_receipts WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM lens_orders    WHERE user_id = ${userId}`);
+
+  // ── Step 8: Stock movements ───────────────────────────────────────────────────
+  await tx.execute(sql`DELETE FROM stock_movements WHERE user_id = ${userId}`);
+
+  // ── Step 9: Supplier payments and orders ──────────────────────────────────────
+  await tx.execute(sql`DELETE FROM supplier_payments WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM supplier_orders   WHERE user_id = ${userId}`);
+
+  // ── Step 10: Core sales and prescriptions ─────────────────────────────────────
+  await tx.execute(sql`DELETE FROM devis WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM sales WHERE user_id = ${userId}`);
+  // prescriptions_legacy MUST come after lens_orders (lens_orders references it)
+  await tx.execute(sql`DELETE FROM contact_lens_prescriptions WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM prescriptions              WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM prescriptions_legacy       WHERE user_id = ${userId}`);
+
+  // ── Step 11: Parent tables ────────────────────────────────────────────────────
+  await tx.execute(sql`DELETE FROM suppliers WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM clients   WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM products  WHERE user_id = ${userId}`);
+
+  // ── Step 12: Settings and catalogues ─────────────────────────────────────────
+  await tx.execute(sql`DELETE FROM shop_profiles  WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM settings       WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM brands         WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM categories     WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM materials      WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM colors         WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM treatments     WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM mounting_types WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM banks          WHERE user_id = ${userId}`);
+  await tx.execute(sql`DELETE FROM insurances     WHERE user_id = ${userId}`);
+}
+
 // ─────────────────────────────────────────────
 // EXPORT
 // ─────────────────────────────────────────────
-
-// ✅ FIX 4 — exportUserData wrappé dans try/catch
-// AVANT : aucun try/catch → toute erreur DB remontait comme exception non gérée
-//         → le client recevait "Impossible d'exporter les données" sans détail.
-// APRÈS : erreur loggée + message explicite retourné.
 export async function exportUserData(): Promise<{ success: boolean; data?: string; error?: string }> {
   const session = await auth();
   if (!session?.user?.id) return { success: false, error: 'Non authentifié' };
@@ -80,8 +185,7 @@ export async function exportUserData(): Promise<{ success: boolean; data?: strin
       'supplierPayments', 'supplierOrderPayments', 'supplierCredits', 'supplierCreditAllocations',
       'goodsReceipts', 'shopProfiles', 'settings', 'reminders', 'stockMovements', 'expenses',
       'clientTransactions', 'cashSessions', 'cashMovements', 'comptabiliteJournal', 'purchases',
-      'auditLogs', 'reservations', 'notifications', 'clientInteractions',
-      'invoiceImports'
+      'auditLogs', 'reservations', 'notifications', 'clientInteractions', 'invoiceImports',
     ];
 
     const data: Record<string, unknown[]> = {};
@@ -99,12 +203,13 @@ export async function exportUserData(): Promise<{ success: boolean; data?: strin
       }
     }));
 
+    // frame_reservations uses storeId
     data.frameReservations = await db
       .select()
       .from(s.frameReservations)
       .where(eq(s.frameReservations.storeId, uId));
 
-    // Tables relationnelles sans userId direct
+    // Relational tables without userId — fetch via JOIN
     data.saleItems = await db.execute(
       sql`SELECT * FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${uId})`
     ).then(r => r.rows);
@@ -132,14 +237,14 @@ export async function exportUserData(): Promise<{ success: boolean; data?: strin
 
     const json = JSON.stringify(backup, (_, v) => typeof v === 'bigint' ? v.toString() : v);
     const b64 = (await gzipAsync(Buffer.from(json, 'utf-8'))).toString('base64');
-    
+
     return { success: true, data: b64 };
 
   } catch (error) {
-    console.error('[exportUserData] ERREUR COMPLÈTE:', error);
+    console.error('[exportUserData] ERREUR:', error);
     return {
       success: false,
-      error: error instanceof Error ? `Export échoué : ${error.message}` : 'Export échoué : erreur inconnue'
+      error: error instanceof Error ? `Export échoué : ${error.message}` : 'Export échoué : erreur inconnue',
     };
   }
 }
@@ -147,7 +252,6 @@ export async function exportUserData(): Promise<{ success: boolean; data?: strin
 // ─────────────────────────────────────────────
 // RESTORE
 // ─────────────────────────────────────────────
-
 export async function restoreUserData(base64Data: FormData | string) {
   const session = await auth();
   if (!session?.user?.id) return { success: false, error: 'Non authentifié' };
@@ -169,11 +273,14 @@ export async function restoreUserData(base64Data: FormData | string) {
     const backup = JSON.parse((await gunzipAsync(Buffer.from(b64, 'base64'))).toString('utf-8'));
     const d = sanitizeDates(backup.data || backup) as Record<string, unknown[]>;
     const isLegacy = parseFloat(backup.metadata?.version || '1.0') < 2.0;
-
-    // ✅ idMap local — pas de pollution entre requêtes
     const { migrateId, migrateIntId, fk, fkInt } = createIdHelpers();
 
     await db.transaction(async (tx) => {
+
+      // ── DELETE: single call, correct FK order, correct table names ─────────
+      await purgeAllUserData(tx, uId);
+
+      // ── INSERT: parents before children ────────────────────────────────────
       const ins = async (t: Parameters<typeof tx.insert>[0], rows: any[]) => {
         if (!rows?.length) return;
         for (let i = 0; i < rows.length; i += 100) {
@@ -181,207 +288,63 @@ export async function restoreUserData(base64Data: FormData | string) {
         }
       };
 
-      // ─── DELETE — purgeUserData handles ALL tables with correct FK order ─────
-      await purgeUserData(tx, uId);
-
-      // INSERT — ordre respectant les Foreign Keys (parents avant enfants)
-      await ins(s.brands,      (d.brands      || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
-      await ins(s.categories,  (d.categories  || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
-      await ins(s.materials,   (d.materials   || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
-      await ins(s.colors,      (d.colors      || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
-      await ins(s.treatments,  (d.treatments  || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
-      await ins(s.mountingTypes,(d.mountingTypes||[]).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
-      await ins(s.banks,       (d.banks       || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
-      await ins(s.insurances,  (d.insurances  || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
-      await ins(s.shopProfiles,(d.shopProfiles|| []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
-      await ins(s.settings,    (d.settings    || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
-      await ins(s.suppliers,   (d.suppliers   || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy) })));
-      await ins(s.clients,     (d.clients     || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
-      await ins(s.products,    (d.products    || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
-      await ins(s.prescriptions,(d.prescriptions||[]).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy), clientId: fkInt(r.clientId) })));
-      await ins(s.contactLensPrescriptions,(d.contactLensPrescriptions||[]).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), clientId: fkInt(r.clientId) })));
-      await ins(s.sales,       (d.sales       || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), clientId: fkInt(r.clientId), prescriptionId: fk(r.prescriptionId) })));
-      await ins(s.saleItems,   (d.saleItems   || []).map((r: any) => ({ ...r, id: migrateIntId(r.id), saleId: fkInt(r.saleId), productId: fkInt(r.productId) })));
-      await ins(s.saleLensDetails,(d.saleLensDetails||[]).map((r: any) => ({ ...r, id: migrateIntId(r.id), saleItemId: fkInt(r.saleItemId) })));
-      await ins(s.saleContactLensDetails,(d.saleContactLensDetails||[]).map((r: any) => ({ ...r, id: migrateIntId(r.id), saleItemId: fkInt(r.saleItemId) })));
-      await ins(s.devis,       (d.devis       || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), clientId: fkInt(r.clientId) })));
-      await ins(s.supplierOrders,(d.supplierOrders||[]).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy), supplierId: fk(r.supplierId) })));
-      await ins(s.supplierOrderItems,(d.supplierOrderItems||[]).map((r: any) => ({ ...r, id: migrateIntId(r.id), orderId: fk(r.orderId), productId: fkInt(r.productId) })));
-      await ins(s.supplierPayments,(d.supplierPayments||[]).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy), supplierId: fk(r.supplierId), orderId: fk(r.orderId) })));
-      await ins(s.goodsReceipts,(d.goodsReceipts||[]).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy), supplierId: fk(r.supplierId) })));
-      await ins(s.goodsReceiptItems,(d.goodsReceiptItems||[]).map((r: any) => ({ ...r, id: migrateId(r.id, isLegacy), receiptId: fk(r.receiptId), orderItemId: fkInt(r.orderItemId), productId: fkInt(r.productId) })));
-      await ins(s.lensOrders,  (d.lensOrders  || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy), supplierOrderId: fk(r.supplierOrderId), prescriptionId: fk(r.prescriptionId), clientId: fkInt(r.clientId), saleId: fkInt(r.saleId) })));
-      await ins(s.stockMovements,(d.stockMovements||[]).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), productId: fkInt(r.productId) })));
-      await ins(s.reminders,   (d.reminders   || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy), clientId: fkInt(r.clientId) })));
-      await ins(s.expenses,    (d.expenses    || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
-      await ins(s.clientTransactions,(d.clientTransactions||[]).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), clientId: fkInt(r.clientId) })));
-      await ins(s.cashSessions,(d.cashSessions|| []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy) })));
-      await ins(s.cashMovements,(d.cashMovements||[]).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy), sessionId: fk(r.sessionId) })));
-      await ins(s.comptabiliteJournal,(d.comptabiliteJournal||[]).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), saleId: fkInt(r.saleId) })));
-      await ins(s.purchases,   (d.purchases   || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), supplierId: fk(r.supplierId) })));
-      await ins(s.notifications,(d.notifications||[]).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
-      await ins(s.auditLogs,   (d.auditLogs   || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy) })));
-      await ins(s.reservations,(d.reservations|| []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), clientId: fkInt(r.clientId), saleId: fkInt(r.saleId) })));
-      await ins(s.frameReservations,(d.frameReservations||[]).map((r: any) => ({ ...r, storeId: uId, id: migrateIntId(r.id), clientId: fkInt(r.clientId), saleId: fkInt(r.saleId) })));
-      await ins(s.clientInteractions,(d.clientInteractions||[]).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), clientId: fkInt(r.clientId) })));
-      await ins(s.invoiceImports,(d.invoiceImports||[]).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), supplierId: fk(r.supplierId) })));
+      await ins(s.brands,         (d.brands         || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
+      await ins(s.categories,     (d.categories     || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
+      await ins(s.materials,      (d.materials      || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
+      await ins(s.colors,         (d.colors         || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
+      await ins(s.treatments,     (d.treatments     || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
+      await ins(s.mountingTypes,  (d.mountingTypes  || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
+      await ins(s.banks,          (d.banks          || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
+      await ins(s.insurances,     (d.insurances     || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
+      await ins(s.shopProfiles,   (d.shopProfiles   || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
+      await ins(s.settings,       (d.settings       || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
+      await ins(s.suppliers,      (d.suppliers      || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy) })));
+      await ins(s.clients,        (d.clients        || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
+      await ins(s.products,       (d.products       || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
+      await ins(s.prescriptions,  (d.prescriptions  || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy), clientId: fkInt(r.clientId) })));
+      await ins(s.contactLensPrescriptions, (d.contactLensPrescriptions || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), clientId: fkInt(r.clientId) })));
+      await ins(s.sales,          (d.sales          || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), clientId: fkInt(r.clientId), prescriptionId: fk(r.prescriptionId) })));
+      await ins(s.saleItems,      (d.saleItems      || []).map((r: any) => ({ ...r, id: migrateIntId(r.id), saleId: fkInt(r.saleId), productId: fkInt(r.productId) })));
+      await ins(s.saleLensDetails,(d.saleLensDetails || []).map((r: any) => ({ ...r, id: migrateIntId(r.id), saleItemId: fkInt(r.saleItemId) })));
+      await ins(s.saleContactLensDetails, (d.saleContactLensDetails || []).map((r: any) => ({ ...r, id: migrateIntId(r.id), saleItemId: fkInt(r.saleItemId) })));
+      await ins(s.devis,          (d.devis          || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), clientId: fkInt(r.clientId) })));
+      await ins(s.supplierOrders, (d.supplierOrders || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy), supplierId: fk(r.supplierId) })));
+      await ins(s.supplierOrderItems, (d.supplierOrderItems || []).map((r: any) => ({ ...r, id: migrateIntId(r.id), orderId: fk(r.orderId), productId: fkInt(r.productId) })));
+      await ins(s.supplierPayments,   (d.supplierPayments   || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy), supplierId: fk(r.supplierId), orderId: fk(r.orderId) })));
+      await ins(s.goodsReceipts,  (d.goodsReceipts  || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy), supplierId: fk(r.supplierId) })));
+      await ins(s.goodsReceiptItems, (d.goodsReceiptItems || []).map((r: any) => ({ ...r, id: migrateId(r.id, isLegacy), receiptId: fk(r.receiptId), orderItemId: fkInt(r.orderItemId), productId: fkInt(r.productId) })));
+      await ins(s.lensOrders,     (d.lensOrders     || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy), supplierOrderId: fk(r.supplierOrderId), prescriptionId: fk(r.prescriptionId), clientId: fkInt(r.clientId), saleId: fkInt(r.saleId) })));
+      await ins(s.stockMovements, (d.stockMovements || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), productId: fkInt(r.productId) })));
+      await ins(s.reminders,      (d.reminders      || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy) })));
+      await ins(s.expenses,       (d.expenses       || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
+      await ins(s.clientTransactions, (d.clientTransactions || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), clientId: fkInt(r.clientId) })));
+      await ins(s.cashSessions,   (d.cashSessions   || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy) })));
+      await ins(s.cashMovements,  (d.cashMovements  || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy), sessionId: fk(r.sessionId) })));
+      await ins(s.comptabiliteJournal, (d.comptabiliteJournal || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), saleId: fkInt(r.saleId) })));
+      await ins(s.purchases,      (d.purchases      || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), supplierId: fk(r.supplierId) })));
+      await ins(s.notifications,  (d.notifications  || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
+      await ins(s.auditLogs,      (d.auditLogs      || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy) })));
+      await ins(s.reservations,   (d.reservations   || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), clientId: fkInt(r.clientId), saleId: fkInt(r.saleId) })));
+      await ins(s.frameReservations, (d.frameReservations || []).map((r: any) => ({ ...r, storeId: uId, id: migrateIntId(r.id), clientId: fkInt(r.clientId), saleId: fkInt(r.saleId) })));
+      await ins(s.clientInteractions, (d.clientInteractions || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), clientId: fkInt(r.clientId) })));
+      await ins(s.invoiceImports, (d.invoiceImports  || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
     });
 
     revalidatePath('/dashboard');
     return { success: true };
 
   } catch (error) {
-    console.error('[restoreUserData] ERREUR COMPLÈTE:', error);
+    console.error('[restoreUserData] ERREUR:', error);
     return {
       success: false,
-      error: error instanceof Error ? `Restauration échouée : ${error.message}` : 'Restauration échouée : erreur inconnue'
+      error: error instanceof Error ? `Restauration échouée : ${error.message}` : 'Restauration échouée : erreur inconnue',
     };
   }
 }
 
 // ─────────────────────────────────────────────
-// SHARED HELPER: purge all user data safely
-// Uses raw SQL to avoid FK ordering issues
+// RESET ACCOUNT
 // ─────────────────────────────────────────────
-/**
- * purgeUserData — deletes ALL data for a given userId across all tables.
- *
- * ⚠️  ORDER IS CRITICAL: child tables must be deleted before parent tables.
- *     Every table name below is the ACTUAL PostgreSQL table name from pgTable('...').
- *
- * FK map (child → parent):
- *   sale_lens_details       → sale_items      → sales
- *   sale_contact_lens_details → sale_items    → sales
- *   goods_receipt_items     → goods_receipts  → suppliers
- *   supplier_order_items    → supplier_orders → suppliers
- *   supplier_credit_allocations → supplier_credits → suppliers / supplier_orders
- *   supplier_order_payments → supplier_payments + supplier_orders
- *   lens_orders             → clients, sales, suppliers, prescriptions_legacy  ← key!
- *   reservations            → clients, sales
- *   frame_reservations      → clients  (uses store_id, not user_id)
- *   devis                   → clients, sales
- *   client_interactions     → clients
- *   client_transactions     → clients
- *   comptabilite_journal    → sales
- *   cash_movements          → cash_sessions
- *   prescriptions           → clients
- *   contact_lens_prescriptions → clients
- *   prescriptions_legacy    → clients  — must come AFTER lens_orders!
- */
-async function purgeUserData(tx: any, uId: string) {
-
-  // ── Step 0: Nullify circular / self-referencing FKs ─────────────────────────
-  // devis.sale_id → sales, lens_orders.sale_id → sales
-  // Without this, deleting sales would violate the FK from devis/lens_orders
-  await tx.execute(sql`UPDATE devis       SET sale_id = NULL WHERE user_id = ${uId}`);
-  await tx.execute(sql`UPDATE lens_orders SET sale_id = NULL WHERE user_id = ${uId}`);
-  await tx.execute(sql`UPDATE reservations SET sale_id = NULL WHERE user_id = ${uId}`);
-  await tx.execute(sql`UPDATE frame_reservations SET sale_id = NULL WHERE store_id = ${uId}`);
-
-  // ── Step 1: Deepest leaf rows (no user_id column — must use JOIN) ────────────
-  // sale_lens_details.sale_item_id → sale_items.sale_id → sales.user_id
-  await tx.execute(sql`
-    DELETE FROM sale_lens_details
-    WHERE sale_item_id IN (
-      SELECT si.id FROM sale_items si
-      JOIN sales s ON s.id = si.sale_id
-      WHERE s.user_id = ${uId}
-    )`);
-
-  await tx.execute(sql`
-    DELETE FROM sale_contact_lens_details
-    WHERE sale_item_id IN (
-      SELECT si.id FROM sale_items si
-      JOIN sales s ON s.id = si.sale_id
-      WHERE s.user_id = ${uId}
-    )`);
-
-  // sale_items.sale_id → sales.user_id
-  await tx.execute(sql`
-    DELETE FROM sale_items
-    WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${uId})`);
-
-  // goods_receipt_items.receipt_id → goods_receipts.user_id
-  await tx.execute(sql`
-    DELETE FROM goods_receipt_items
-    WHERE receipt_id IN (SELECT id FROM goods_receipts WHERE user_id = ${uId})`);
-
-  // supplier_order_items.order_id → supplier_orders.user_id
-  await tx.execute(sql`
-    DELETE FROM supplier_order_items
-    WHERE order_id IN (SELECT id FROM supplier_orders WHERE user_id = ${uId})`);
-
-  // ── Step 2: frame_reservations — uses store_id (not user_id) ────────────────
-  await tx.execute(sql`DELETE FROM frame_reservations WHERE store_id = ${uId}`);
-
-  // ── Step 3: Tables that reference clients / sales / suppliers ────────────────
-  // These MUST come before clients, sales, suppliers are deleted
-  await tx.execute(sql`DELETE FROM client_interactions WHERE user_id = ${uId}`);  // → clients
-  await tx.execute(sql`DELETE FROM reservations         WHERE user_id = ${uId}`);  // → clients, sales
-  await tx.execute(sql`DELETE FROM invoice_imports      WHERE user_id = ${uId}`);  // → suppliers (soft fk)
-  await tx.execute(sql`DELETE FROM reminders            WHERE user_id = ${uId}`);  // no fk, but near clients
-
-  // ── Step 4: Audit & notification tables (no FK deps) ─────────────────────────
-  await tx.execute(sql`DELETE FROM notifications  WHERE user_id = ${uId}`);
-  // audit_logs: from logs-misc.ts
-  await tx.execute(sql`DELETE FROM audit_logs     WHERE user_id = ${uId}`);
-  // audit_logs_v2: from audit-log.schema.ts
-  await tx.execute(sql`DELETE FROM audit_logs_v2  WHERE user_id = ${uId}`);
-  // audit_log: legacy table
-  await tx.execute(sql`DELETE FROM audit_log      WHERE user_id = ${uId}`);
-
-  // ── Step 5: Financial tables ─────────────────────────────────────────────────
-  await tx.execute(sql`DELETE FROM cash_movements        WHERE user_id = ${uId}`); // → cash_sessions
-  await tx.execute(sql`DELETE FROM cash_sessions         WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM client_transactions   WHERE user_id = ${uId}`); // → clients
-  await tx.execute(sql`DELETE FROM comptabilite_journal  WHERE user_id = ${uId}`); // → sales
-  await tx.execute(sql`DELETE FROM expenses_v2           WHERE user_id = ${uId}`); // ← ACTUAL TABLE NAME!
-  await tx.execute(sql`DELETE FROM purchases             WHERE user_id = ${uId}`);
-
-  // ── Step 6: Supplier credit chain ────────────────────────────────────────────
-  await tx.execute(sql`DELETE FROM supplier_credit_allocations WHERE user_id = ${uId}`); // → supplier_credits + supplier_orders
-  await tx.execute(sql`DELETE FROM supplier_credits            WHERE user_id = ${uId}`); // → suppliers
-  await tx.execute(sql`DELETE FROM supplier_order_payments     WHERE user_id = ${uId}`); // → supplier_payments + supplier_orders
-
-  // ── Step 7: Goods receipts & lens orders ─────────────────────────────────────
-  await tx.execute(sql`DELETE FROM goods_receipts  WHERE user_id = ${uId}`); // → suppliers
-  await tx.execute(sql`DELETE FROM lens_orders     WHERE user_id = ${uId}`); // → clients, sales, suppliers, prescriptions_legacy
-
-  // ── Step 8: Stock movements ──────────────────────────────────────────────────
-  await tx.execute(sql`DELETE FROM stock_movements WHERE user_id = ${uId}`); // → products (soft fk)
-
-  // ── Step 9: Supplier orders and payments ─────────────────────────────────────
-  await tx.execute(sql`DELETE FROM supplier_payments WHERE user_id = ${uId}`); // → suppliers, supplier_orders
-  await tx.execute(sql`DELETE FROM supplier_orders   WHERE user_id = ${uId}`); // → suppliers
-
-  // ── Step 10: Core sales & prescriptions ──────────────────────────────────────
-  await tx.execute(sql`DELETE FROM devis WHERE user_id = ${uId}`);             // → clients, sales
-  await tx.execute(sql`DELETE FROM sales WHERE user_id = ${uId}`);             // → clients
-
-  // Prescriptions — prescriptions_legacy MUST come AFTER lens_orders (lens_orders refs it)
-  await tx.execute(sql`DELETE FROM contact_lens_prescriptions WHERE user_id = ${uId}`); // → clients
-  await tx.execute(sql`DELETE FROM prescriptions              WHERE user_id = ${uId}`); // → clients
-  await tx.execute(sql`DELETE FROM prescriptions_legacy       WHERE user_id = ${uId}`); // → clients (after lens_orders!)
-
-  // ── Step 11: Parent tables — order matters ────────────────────────────────────
-  await tx.execute(sql`DELETE FROM suppliers WHERE user_id = ${uId}`);  // parent
-  await tx.execute(sql`DELETE FROM clients   WHERE user_id = ${uId}`);  // parent — ALL child tables done ✅
-  await tx.execute(sql`DELETE FROM products  WHERE user_id = ${uId}`);  // parent
-
-  // ── Step 12: Settings & catalogues ────────────────────────────────────────────
-  await tx.execute(sql`DELETE FROM shop_profiles   WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM settings        WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM brands          WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM categories      WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM materials       WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM colors          WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM treatments      WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM mounting_types  WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM banks           WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM insurances      WHERE user_id = ${uId}`);
-}
-
-
 export async function resetUserAccount() {
   try {
     const session = await auth();
@@ -389,7 +352,7 @@ export async function resetUserAccount() {
     const uId = session.user.id;
 
     await db.transaction(async (tx) => {
-      await purgeUserData(tx, uId);
+      await purgeAllUserData(tx, uId);
     });
 
     return { success: true };
@@ -403,7 +366,6 @@ export async function resetUserAccount() {
 // ─────────────────────────────────────────────
 // BACKUP STATS
 // ─────────────────────────────────────────────
-
 export async function getBackupStats() {
   const session = await auth();
   if (!session?.user?.id) throw new Error('Non authentifié');
@@ -417,11 +379,11 @@ export async function getBackupStats() {
     db.select({ n: count() }).from(s.expenses).where(eq(s.expenses.userId, uId)),
   ]);
   return {
-    clients: c[0].n,
-    products: p[0].n,
-    sales: sa[0].n,
-    suppliers: sup[0].n,
-    expenses: ex[0].n,
-    totalRecords: c[0].n + p[0].n + sa[0].n + sup[0].n + ex[0].n,
+    clients:      Number(c[0].n),
+    products:     Number(p[0].n),
+    sales:        Number(sa[0].n),
+    suppliers:    Number(sup[0].n),
+    expenses:     Number(ex[0].n),
+    totalRecords: Number(c[0].n) + Number(p[0].n) + Number(sa[0].n) + Number(sup[0].n) + Number(ex[0].n),
   };
 }
