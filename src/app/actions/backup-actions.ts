@@ -174,9 +174,6 @@ export async function restoreUserData(base64Data: FormData | string) {
     const { migrateId, migrateIntId, fk, fkInt } = createIdHelpers();
 
     await db.transaction(async (tx) => {
-      const del = async (t: Parameters<typeof tx.delete>[0]) =>
-        tx.delete(t).where(eq((t as any).userId as Parameters<typeof eq>[0], uId));
-
       const ins = async (t: Parameters<typeof tx.insert>[0], rows: any[]) => {
         if (!rows?.length) return;
         for (let i = 0; i < rows.length; i += 100) {
@@ -184,8 +181,7 @@ export async function restoreUserData(base64Data: FormData | string) {
         }
       };
 
-
-      // ─── DELETE — utilise purgeUserData pour éviter tout problème de FK ─────
+      // ─── DELETE — purgeUserData handles ALL tables with correct FK order ─────
       await purgeUserData(tx, uId);
 
       // INSERT — ordre respectant les Foreign Keys (parents avant enfants)
