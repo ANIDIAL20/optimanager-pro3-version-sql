@@ -259,66 +259,62 @@ async function purgeUserData(tx: any, uId: string) {
   await tx.execute(sql`DELETE FROM supplier_order_items WHERE order_id IN (SELECT id FROM supplier_orders WHERE user_id = ${uId})`);
   await tx.execute(sql`DELETE FROM goods_receipt_items WHERE receipt_id IN (SELECT id FROM goods_receipts WHERE user_id = ${uId})`);
 
-  // Step 3: All tables with user_id — use raw SQL so we don't miss any table
-  // Order: deepest children first, then parents
-  const tables = [
-    // Children that reference clients / sales / suppliers
-    'frame_reservations',        // uses store_id
-    'client_interactions',
-    'reservations',
-    'invoice_imports',
-    'notifications',
-    'audit_logs',
-    'reminders',
-    // Financial
-    'cash_movements',
-    'cash_sessions',
-    'client_transactions',
-    'comptabilite_journal',
-    'expenses',
-    'purchases',
-    // Supplier chain
-    'supplier_credit_allocations',
-    'supplier_credits',
-    'supplier_order_payments',
-    'supplier_payments',
-    // Stock & orders
-    'goods_receipts',
-    'lens_orders',
-    'stock_movements',
-    // Core business
-    'supplier_orders',
-    'devis',
-    'sales',
-    // Prescriptions (ref clients)
-    'prescriptions_legacy',
-    'contact_lens_prescriptions',
-    'prescriptions',
-    // Parent tables
-    'suppliers',
-    'clients',
-    'products',
-    // Settings & catalogues
-    'shop_profiles',
-    'settings',
-    'brands',
-    'categories',
-    'materials',
-    'colors',
-    'treatments',
-    'mounting_types',
-    'banks',
-    'insurances',
-  ];
+  // Step 3: frame_reservations uses store_id
+  await tx.execute(sql`DELETE FROM frame_reservations WHERE store_id = ${uId}`);
 
-  for (const table of tables) {
-    if (table === 'frame_reservations') {
-      // uses store_id instead of user_id
-      await tx.execute(sql.raw(`DELETE FROM frame_reservations WHERE store_id = '${uId}'`));
-    } else {
-      await tx.execute(sql.raw(`DELETE FROM "${table}" WHERE user_id = '${uId}'`));
-    }
-  }
+  // Step 4: All other tables in FK-safe order — using parameterized sql``
+  await tx.execute(sql`DELETE FROM client_interactions WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM reservations WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM invoice_imports WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM notifications WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM audit_logs WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM reminders WHERE user_id = ${uId}`);
+
+  // Financial
+  await tx.execute(sql`DELETE FROM cash_movements WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM cash_sessions WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM client_transactions WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM comptabilite_journal WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM expenses WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM purchases WHERE user_id = ${uId}`);
+
+  // Supplier chain
+  await tx.execute(sql`DELETE FROM supplier_credit_allocations WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM supplier_credits WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM supplier_order_payments WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM supplier_payments WHERE user_id = ${uId}`);
+
+  // Stock & orders
+  await tx.execute(sql`DELETE FROM goods_receipts WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM lens_orders WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM stock_movements WHERE user_id = ${uId}`);
+
+  // Core business
+  await tx.execute(sql`DELETE FROM supplier_orders WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM devis WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM sales WHERE user_id = ${uId}`);
+
+  // Prescriptions (all versions)
+  await tx.execute(sql`DELETE FROM prescriptions_legacy WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM contact_lens_prescriptions WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM prescriptions WHERE user_id = ${uId}`);
+
+  // Parent tables — clients last ✅
+  await tx.execute(sql`DELETE FROM suppliers WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM clients WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM products WHERE user_id = ${uId}`);
+
+  // Settings & catalogues
+  await tx.execute(sql`DELETE FROM shop_profiles WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM settings WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM brands WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM categories WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM materials WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM colors WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM treatments WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM mounting_types WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM banks WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM insurances WHERE user_id = ${uId}`);
 }
 
 
