@@ -184,30 +184,67 @@ export async function restoreUserData(base64Data: FormData | string) {
         }
       };
 
-      // DELETE — ordre respectant les Foreign Keys (enfants avant parents)
+      // ─── DELETE — ordre strict respectant les Foreign Keys ──────────────
+      // Step 1: Raw SQL — tables sans userId direct
       await tx.execute(sql`DELETE FROM sale_lens_details WHERE sale_item_id IN (SELECT id FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${uId}))`);
       await tx.execute(sql`DELETE FROM sale_contact_lens_details WHERE sale_item_id IN (SELECT id FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${uId}))`);
       await tx.execute(sql`DELETE FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${uId})`);
       await tx.execute(sql`DELETE FROM supplier_order_items WHERE order_id IN (SELECT id FROM supplier_orders WHERE user_id = ${uId})`);
       await tx.execute(sql`DELETE FROM goods_receipt_items WHERE receipt_id IN (SELECT id FROM goods_receipts WHERE user_id = ${uId})`);
 
-      await del(s.goodsReceipts); await del(s.supplierCreditAllocations); await del(s.supplierCredits);
-      await del(s.lensOrders); await del(s.stockMovements); await del(s.reminders);
-      await del(s.cashMovements); await del(s.cashSessions); await del(s.clientTransactions);
-      await del(s.comptabiliteJournal); await del(s.expenses); await del(s.purchases);
-      await del(s.auditLogs); await del(s.supplierOrderPayments); await del(s.supplierPayments);
-      await del(s.supplierOrders); await del(s.devis); await del(s.sales);
-      await del(s.contactLensPrescriptions); await del(s.prescriptions);
-      await del(s.clientInteractions); await del(s.clients); await del(s.products);
-      await del(s.suppliers); await del(s.notifications); await del(s.invoiceImports);
-      await del(s.reservations);
+      // Step 2: frameReservations (storeId au lieu de userId)
       await tx.delete(s.frameReservations).where(eq(s.frameReservations.storeId, uId));
 
-      const catalogs = [
-        s.brands, s.categories, s.materials, s.colors, s.treatments,
-        s.mountingTypes, s.banks, s.insurances, s.shopProfiles, s.settings
-      ];
-      for (const t of catalogs) await del(t);
+      // Step 3: Enfants de clients/sales/suppliers — ⚠️ AVANT de supprimer clients
+      await del(s.reservations);          // refs clients + sales
+      await del(s.clientInteractions);    // refs clients
+      await del(s.invoiceImports);        // refs suppliers
+      await del(s.notifications);
+      await del(s.auditLogs);
+      await del(s.reminders);             // refs clients
+
+      // Step 4: Financier
+      await del(s.cashMovements);         // refs cashSessions
+      await del(s.cashSessions);
+      await del(s.clientTransactions);    // refs clients
+      await del(s.comptabiliteJournal);   // refs sales
+      await del(s.expenses);
+      await del(s.purchases);
+
+      // Step 5: Fournisseurs
+      await del(s.supplierCreditAllocations); // refs supplierCredits
+      await del(s.supplierCredits);
+      await del(s.supplierOrderPayments);     // refs supplierOrders
+      await del(s.supplierPayments);
+
+      // Step 6: Stock & commandes
+      await del(s.goodsReceipts);
+      await del(s.lensOrders);               // refs supplierOrders + prescriptions + clients
+      await del(s.stockMovements);
+
+      // Step 7: Core
+      await del(s.supplierOrders);
+      await del(s.devis);                    // refs clients
+      await del(s.sales);                    // refs clients + prescriptions
+      await del(s.contactLensPrescriptions); // refs clients
+      await del(s.prescriptions);            // refs clients
+
+      // Step 8: Parents — clients en dernier ✅
+      await del(s.suppliers);
+      await del(s.clients);
+      await del(s.products);
+
+      // Step 9: Catalogues & paramètres
+      await del(s.shopProfiles);
+      await del(s.settings);
+      await del(s.brands);
+      await del(s.categories);
+      await del(s.materials);
+      await del(s.colors);
+      await del(s.treatments);
+      await del(s.mountingTypes);
+      await del(s.banks);
+      await del(s.insurances);
 
       // INSERT — ordre respectant les Foreign Keys (parents avant enfants)
       await ins(s.brands,      (d.brands      || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
