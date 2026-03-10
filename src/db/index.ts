@@ -1,13 +1,16 @@
 import { neonConfig, Pool } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
-import * as ws from 'ws';
 import * as schemaFile from './schema';
 import * as schemaDir from './schema/index';
 
 const schema = { ...schemaFile, ...schemaDir };
 
-// Essential for Transactions support in Node.js environment
-neonConfig.webSocketConstructor = (ws as any).default || ws;
+// Essential for Transactions support in Node.js environment, but crashes Edge if imported statically
+if (typeof WebSocket !== 'undefined') {
+  neonConfig.webSocketConstructor = WebSocket;
+} else if (typeof process !== 'undefined' && process.release?.name === 'node') {
+  neonConfig.webSocketConstructor = require('ws');
+}
 
 // Client-side guard: do not evaluate database in browser
 const isBrowser = typeof window !== 'undefined';

@@ -1,5 +1,4 @@
 import type { NextAuthConfig } from "next-auth";
-import { RoleSchema } from "./lib/validations/auth";
 
 export const authConfig = {
   pages: { signIn: "/login" },
@@ -15,7 +14,7 @@ export const authConfig = {
 
       if (isOnAdmin) {
         if (!isLoggedIn) return false;
-        if (auth?.user?.role !== "ADMIN") {
+        if ((auth?.user as any)?.role !== "ADMIN") {
           return Response.redirect(new URL("/dashboard", nextUrl));
         }
         return true;
@@ -26,8 +25,22 @@ export const authConfig = {
       }
       return true;
     },
-    // jwt and session should be in auth.ts ONLY
+    // ⚡ CRITICAL: These callbacks run in Edge middleware too.
+    // Without them, auth.user.role is undefined and /admin always redirects.
+    jwt({ token, user }) {
+      if (user) {
+        token.role = (user as any).role || "USER";
+      }
+      return token;
+    },
+    session({ session, token }) {
+      if (token && session.user) {
+        (session.user as any).role = token.role as string;
+      }
+      return session;
+    },
   },
 } satisfies NextAuthConfig;
 
 export default authConfig;
+

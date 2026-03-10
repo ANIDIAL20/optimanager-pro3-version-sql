@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { products, users, clients, suppliers } from '@/db/schema';
 import { eq, count, sql } from 'drizzle-orm';
+import bcrypt from 'bcryptjs';
 
 
 export type ClientData = {
@@ -149,25 +150,30 @@ export const resetClientPassword = adminAction(async (user, uid: string, newPass
         return { success: false, error: "Le mot de passe doit contenir au moins 6 caractères" };
     }
 
-    // 1. Hash password
-    const hashedPassword = await import('bcryptjs').then(bcrypt => bcrypt.hash(newPassword, 10));
+    // 1. Hash password statically
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // 2. Update DB & Unlock Account
-    await db.update(users)
+    // 2. Update DB & Unlock Account, checking if row actually updated
+    const updatedUsers = await db.update(users)
         .set({
             password: hashedPassword,
             failedLoginAttempts: 0,
-            lockoutUntil: null, // Unlock account immediately
+            lockoutUntil: null, 
             updatedAt: new Date()
         })
-        .where(eq(users.id, uid));
+        .where(eq(users.id, uid))
+        .returning({ updatedId: users.id });
 
-    revalidatePath('/dashboard/admin');
+    if (updatedUsers.length === 0) {
+        return { success: false, error: "Utilisateur introuvable dans la base de données (ADMIN_DB_UNAVAILABLE ou ID invalide)" };
+    }
+
+    revalidatePath('/admin');
     return { success: true, message: "Mot de passe réinitialisé avec succès !" };
 
   } catch (error: any) {
     console.error("Error resetting password:", error);
-    return { success: false, error: "Erreur serveur: " + error.message };
+    return { success: false, error: "Erreur serveur critique: " + (error.message || 'ADMIN_DB_UNAVAILABLE') };
   }
 });
 
