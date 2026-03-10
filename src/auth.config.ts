@@ -7,7 +7,8 @@ export const authConfig = {
   providers: [],
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
-      const isLoggedIn = !!auth?.user?.id;
+      // ✅ Check both .id and .email — email is always populated even on first redirect
+      const isLoggedIn = !!(auth?.user?.id || auth?.user?.email);
       const isOnDashboard = nextUrl.pathname.startsWith("/dashboard");
       const isOnLogin = nextUrl.pathname.startsWith("/login");
       const isOnAdmin = nextUrl.pathname.startsWith("/admin");

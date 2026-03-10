@@ -1,14 +1,16 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
-import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { db } from "@/db";
 import { authConfig } from "./auth.config";
-import { users, accounts, sessions, verificationTokens } from "@/db/schema";
+import { users } from "@/db/schema/auth-core";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { RoleSchema } from "./lib/validations/auth";
 
+// ✅ JWT Strategy: No DrizzleAdapter needed.
+// DrizzleAdapter is for database sessions only.
+// Our db is a Proxy object — DrizzleAdapter is incompatible with it.
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   pages: {
@@ -16,7 +18,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     error: "/login",
   },
   session: {
-    strategy: "jwt", // Explicitly enforce JWT sessions
+    strategy: "jwt",
   },
   providers: [
     ...(process.env.AUTH_GOOGLE_ID || process.env.GOOGLE_CLIENT_ID
@@ -130,36 +132,52 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   debug: true,
   callbacks: {
     async jwt({ token, user, trigger }) {
+      // 1. On first sign-in, persist user info in the token
       if (user) {
-        const validatedRole = RoleSchema.safeParse(user.role);
-        token.role = validatedRole.success ? validatedRole.data : "USER";
-        token.id = user.id;
+        token.sub = user.id; // Use token.sub as the canonical user ID
+        token.email = user.email;
       }
-      if (token.email && (trigger === "signIn" || !token.role)) {
-        const dbUser = await db.query.users.findFirst({
-          where: eq(users.email, token.email as string),
-        });
-        if (dbUser) {
-          token.sub = dbUser.id;
-          const validatedRole = RoleSchema.safeParse(dbUser.role);
-          token.role = validatedRole.success ? validatedRole.data : "USER";
+
+      // 2. Sync with DB on signIn, signUp, or when role is missing
+      if (token.email && (trigger === "signIn" || trigger === "signUp" || !token.role)) {
+        try {
+          const dbUser = await db.query.users.findFirst({
+            where: eq(users.email, token.email as string),
+            columns: { id: true, role: true },
+          });
+          if (dbUser) {
+            token.sub = dbUser.id; // Always use DB id as the canonical sub
+            const validatedRole = RoleSchema.safeParse(dbUser.role);
+            token.role = validatedRole.success ? validatedRole.data : "USER";
+          }
+        } catch (e) {
+          console.error("[JWT] DB sync failed:", e);
         }
       }
+
+      // 3. On forced update (e.g. role change), refresh from DB
       if (trigger === "update" && token.sub) {
-        const freshUser = await db.query.users.findFirst({
-          where: eq(users.id, token.sub),
-          columns: { role: true },
-        });
-        if (freshUser) {
-          const validatedRole = RoleSchema.safeParse(freshUser.role);
-          token.role = validatedRole.success ? validatedRole.data : "USER";
+        try {
+          const freshUser = await db.query.users.findFirst({
+            where: eq(users.id, token.sub),
+            columns: { role: true },
+          });
+          if (freshUser) {
+            const validatedRole = RoleSchema.safeParse(freshUser.role);
+            token.role = validatedRole.success ? validatedRole.data : "USER";
+          }
+        } catch (e) {
+          console.error("[JWT] Role refresh failed:", e);
         }
       }
+
       return token;
     },
     async session({ session, token }) {
+      // Use token.sub as the canonical user ID (always set from DB)
       if (token && session.user) {
-        session.user.id = token.id as string;
+        session.user.id = token.sub as string;   // ✅ token.sub is always set
+        session.user.email = token.email as string;
         session.user.role = token.role as "ADMIN" | "USER";
       }
       return session;

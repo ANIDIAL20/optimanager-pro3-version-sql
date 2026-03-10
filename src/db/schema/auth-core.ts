@@ -7,7 +7,7 @@ import { DEFAULT_TEMPLATE_CONFIG } from '@/types/document-template';
 // AUTH.JS TABLES (ENHANCED SECURITY)
 // ========================================
 
-export const users = pgTable("user", {
+export const users = pgTable("users", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
@@ -60,7 +60,7 @@ export const users = pgTable("user", {
 });
 
 export const accounts = pgTable(
-  "account",
+  "accounts",
   {
     userId: text("userId")
       .notNull()
@@ -83,7 +83,7 @@ export const accounts = pgTable(
   })
 );
 
-export const sessions = pgTable("session", {
+export const sessions = pgTable("sessions", {
   sessionToken: text("sessionToken").primaryKey(),
   userId: text("userId")
     .notNull()
@@ -100,7 +100,7 @@ export const sessions = pgTable("session", {
 });
 
 export const verificationTokens = pgTable(
-  "verificationToken",
+  "verification_tokens",
   {
     identifier: text("identifier").notNull(),
     token: text("token").notNull(),
