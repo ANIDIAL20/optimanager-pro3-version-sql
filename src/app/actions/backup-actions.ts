@@ -184,67 +184,9 @@ export async function restoreUserData(base64Data: FormData | string) {
         }
       };
 
-      // ─── DELETE — ordre strict respectant les Foreign Keys ──────────────
-      // Step 1: Raw SQL — tables sans userId direct
-      await tx.execute(sql`DELETE FROM sale_lens_details WHERE sale_item_id IN (SELECT id FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${uId}))`);
-      await tx.execute(sql`DELETE FROM sale_contact_lens_details WHERE sale_item_id IN (SELECT id FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${uId}))`);
-      await tx.execute(sql`DELETE FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${uId})`);
-      await tx.execute(sql`DELETE FROM supplier_order_items WHERE order_id IN (SELECT id FROM supplier_orders WHERE user_id = ${uId})`);
-      await tx.execute(sql`DELETE FROM goods_receipt_items WHERE receipt_id IN (SELECT id FROM goods_receipts WHERE user_id = ${uId})`);
 
-      // Step 2: frameReservations (storeId au lieu de userId)
-      await tx.delete(s.frameReservations).where(eq(s.frameReservations.storeId, uId));
-
-      // Step 3: Enfants de clients/sales/suppliers — ⚠️ AVANT de supprimer clients
-      await del(s.reservations);          // refs clients + sales
-      await del(s.clientInteractions);    // refs clients
-      await del(s.invoiceImports);        // refs suppliers
-      await del(s.notifications);
-      await del(s.auditLogs);
-      await del(s.reminders);             // refs clients
-
-      // Step 4: Financier
-      await del(s.cashMovements);         // refs cashSessions
-      await del(s.cashSessions);
-      await del(s.clientTransactions);    // refs clients
-      await del(s.comptabiliteJournal);   // refs sales
-      await del(s.expenses);
-      await del(s.purchases);
-
-      // Step 5: Fournisseurs
-      await del(s.supplierCreditAllocations); // refs supplierCredits
-      await del(s.supplierCredits);
-      await del(s.supplierOrderPayments);     // refs supplierOrders
-      await del(s.supplierPayments);
-
-      // Step 6: Stock & commandes
-      await del(s.goodsReceipts);
-      await del(s.lensOrders);               // refs supplierOrders + prescriptions + clients
-      await del(s.stockMovements);
-
-      // Step 7: Core
-      await del(s.supplierOrders);
-      await del(s.devis);                    // refs clients
-      await del(s.sales);                    // refs clients + prescriptions
-      await del(s.contactLensPrescriptions); // refs clients
-      await del(s.prescriptions);            // refs clients
-
-      // Step 8: Parents — clients en dernier ✅
-      await del(s.suppliers);
-      await del(s.clients);
-      await del(s.products);
-
-      // Step 9: Catalogues & paramètres
-      await del(s.shopProfiles);
-      await del(s.settings);
-      await del(s.brands);
-      await del(s.categories);
-      await del(s.materials);
-      await del(s.colors);
-      await del(s.treatments);
-      await del(s.mountingTypes);
-      await del(s.banks);
-      await del(s.insurances);
+      // ─── DELETE — utilise purgeUserData pour éviter tout problème de FK ─────
+      await purgeUserData(tx, uId);
 
       // INSERT — ordre respectant les Foreign Keys (parents avant enfants)
       await ins(s.brands,      (d.brands      || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id) })));
@@ -302,8 +244,83 @@ export async function restoreUserData(base64Data: FormData | string) {
 }
 
 // ─────────────────────────────────────────────
-// RESET ACCOUNT
+// SHARED HELPER: purge all user data safely
+// Uses raw SQL to avoid FK ordering issues
 // ─────────────────────────────────────────────
+async function purgeUserData(tx: any, uId: string) {
+  // Step 1: Nullify self-referencing FKs first
+  await tx.execute(sql`UPDATE devis SET sale_id = NULL WHERE user_id = ${uId}`);
+  await tx.execute(sql`UPDATE lens_orders SET sale_id = NULL WHERE user_id = ${uId}`);
+
+  // Step 2: Delete sub-rows (no user_id, need JOIN)
+  await tx.execute(sql`DELETE FROM sale_lens_details WHERE sale_item_id IN (SELECT id FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${uId}))`);
+  await tx.execute(sql`DELETE FROM sale_contact_lens_details WHERE sale_item_id IN (SELECT id FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${uId}))`);
+  await tx.execute(sql`DELETE FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${uId})`);
+  await tx.execute(sql`DELETE FROM supplier_order_items WHERE order_id IN (SELECT id FROM supplier_orders WHERE user_id = ${uId})`);
+  await tx.execute(sql`DELETE FROM goods_receipt_items WHERE receipt_id IN (SELECT id FROM goods_receipts WHERE user_id = ${uId})`);
+
+  // Step 3: All tables with user_id — use raw SQL so we don't miss any table
+  // Order: deepest children first, then parents
+  const tables = [
+    // Children that reference clients / sales / suppliers
+    'frame_reservations',        // uses store_id
+    'client_interactions',
+    'reservations',
+    'invoice_imports',
+    'notifications',
+    'audit_logs',
+    'reminders',
+    // Financial
+    'cash_movements',
+    'cash_sessions',
+    'client_transactions',
+    'comptabilite_journal',
+    'expenses',
+    'purchases',
+    // Supplier chain
+    'supplier_credit_allocations',
+    'supplier_credits',
+    'supplier_order_payments',
+    'supplier_payments',
+    // Stock & orders
+    'goods_receipts',
+    'lens_orders',
+    'stock_movements',
+    // Core business
+    'supplier_orders',
+    'devis',
+    'sales',
+    // Prescriptions (ref clients)
+    'prescriptions_legacy',
+    'contact_lens_prescriptions',
+    'prescriptions',
+    // Parent tables
+    'suppliers',
+    'clients',
+    'products',
+    // Settings & catalogues
+    'shop_profiles',
+    'settings',
+    'brands',
+    'categories',
+    'materials',
+    'colors',
+    'treatments',
+    'mounting_types',
+    'banks',
+    'insurances',
+  ];
+
+  for (const table of tables) {
+    if (table === 'frame_reservations') {
+      // uses store_id instead of user_id
+      await tx.execute(sql.raw(`DELETE FROM frame_reservations WHERE store_id = '${uId}'`));
+    } else {
+      await tx.execute(sql.raw(`DELETE FROM "${table}" WHERE user_id = '${uId}'`));
+    }
+  }
+}
+
 
 export async function resetUserAccount() {
   try {
@@ -312,74 +329,7 @@ export async function resetUserAccount() {
     const uId = session.user.id;
 
     await db.transaction(async (tx) => {
-      const del = async (t: Parameters<typeof tx.delete>[0]) =>
-        tx.delete(t).where(eq((t as any).userId as Parameters<typeof eq>[0], uId));
-
-      // ─── Step 1: Nullify FK references to avoid circular constraint errors ───
-      await tx.update(s.devis).set({ saleId: null }).where(eq(s.devis.userId, uId));
-      await tx.update(s.lensOrders).set({ saleId: null }).where(eq(s.lensOrders.userId, uId));
-
-      // ─── Step 2: Delete deepest child tables (no userId — raw SQL) ──────────
-      await tx.execute(sql`DELETE FROM sale_lens_details WHERE sale_item_id IN (SELECT id FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${uId}))`);
-      await tx.execute(sql`DELETE FROM sale_contact_lens_details WHERE sale_item_id IN (SELECT id FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${uId}))`);
-      await tx.execute(sql`DELETE FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${uId})`);
-      await tx.execute(sql`DELETE FROM supplier_order_items WHERE order_id IN (SELECT id FROM supplier_orders WHERE user_id = ${uId})`);
-      await tx.execute(sql`DELETE FROM goods_receipt_items WHERE receipt_id IN (SELECT id FROM goods_receipts WHERE user_id = ${uId})`);
-
-      // ─── Step 3: frameReservations uses storeId (not userId) ────────────────
-      await tx.delete(s.frameReservations).where(eq(s.frameReservations.storeId, uId));
-
-      // ─── Step 4: Delete child tables that reference clients/sales/suppliers ─
-      // ⚠️ MUST come BEFORE deleting clients/sales/suppliers
-      await del(s.reservations);         // refs clients + sales
-      await del(s.clientInteractions);   // refs clients
-      await del(s.invoiceImports);       // refs suppliers
-      await del(s.notifications);
-      await del(s.auditLogs);
-      await del(s.reminders);            // refs clients
-
-      // ─── Step 5: Financial & transactional tables ────────────────────────────
-      await del(s.cashMovements);        // refs cashSessions
-      await del(s.cashSessions);
-      await del(s.clientTransactions);   // refs clients
-      await del(s.comptabiliteJournal);  // refs sales
-      await del(s.expenses);
-      await del(s.purchases);
-
-      // ─── Step 6: Supplier-related tables ────────────────────────────────────
-      await del(s.supplierCreditAllocations); // refs supplierCredits
-      await del(s.supplierCredits);
-      await del(s.supplierOrderPayments);     // refs supplierOrders
-      await del(s.supplierPayments);
-
-      // ─── Step 7: Goods & lens orders ────────────────────────────────────────
-      await del(s.goodsReceipts);
-      await del(s.lensOrders);              // refs supplierOrders + prescriptions + clients
-      await del(s.stockMovements);
-
-      // ─── Step 8: Core business tables ───────────────────────────────────────
-      await del(s.supplierOrders);
-      await del(s.devis);                   // refs clients
-      await del(s.sales);                   // refs clients + prescriptions
-      await del(s.contactLensPrescriptions);// refs clients
-      await del(s.prescriptions);           // refs clients
-
-      // ─── Step 9: Parent tables ───────────────────────────────────────────────
-      await del(s.suppliers);
-      await del(s.clients);                 // ← must come AFTER all child tables ✅
-      await del(s.products);
-
-      // ─── Step 10: Settings & catalog tables ─────────────────────────────────
-      await del(s.shopProfiles);
-      await del(s.settings);
-      await del(s.brands);
-      await del(s.categories);
-      await del(s.materials);
-      await del(s.colors);
-      await del(s.treatments);
-      await del(s.mountingTypes);
-      await del(s.banks);
-      await del(s.insurances);
+      await purgeUserData(tx, uId);
     });
 
     return { success: true };
