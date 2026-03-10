@@ -247,74 +247,142 @@ export async function restoreUserData(base64Data: FormData | string) {
 // SHARED HELPER: purge all user data safely
 // Uses raw SQL to avoid FK ordering issues
 // ─────────────────────────────────────────────
+/**
+ * purgeUserData — deletes ALL data for a given userId across all tables.
+ *
+ * ⚠️  ORDER IS CRITICAL: child tables must be deleted before parent tables.
+ *     Every table name below is the ACTUAL PostgreSQL table name from pgTable('...').
+ *
+ * FK map (child → parent):
+ *   sale_lens_details       → sale_items      → sales
+ *   sale_contact_lens_details → sale_items    → sales
+ *   goods_receipt_items     → goods_receipts  → suppliers
+ *   supplier_order_items    → supplier_orders → suppliers
+ *   supplier_credit_allocations → supplier_credits → suppliers / supplier_orders
+ *   supplier_order_payments → supplier_payments + supplier_orders
+ *   lens_orders             → clients, sales, suppliers, prescriptions_legacy  ← key!
+ *   reservations            → clients, sales
+ *   frame_reservations      → clients  (uses store_id, not user_id)
+ *   devis                   → clients, sales
+ *   client_interactions     → clients
+ *   client_transactions     → clients
+ *   comptabilite_journal    → sales
+ *   cash_movements          → cash_sessions
+ *   prescriptions           → clients
+ *   contact_lens_prescriptions → clients
+ *   prescriptions_legacy    → clients  — must come AFTER lens_orders!
+ */
 async function purgeUserData(tx: any, uId: string) {
-  // Step 1: Nullify self-referencing FKs first
-  await tx.execute(sql`UPDATE devis SET sale_id = NULL WHERE user_id = ${uId}`);
+
+  // ── Step 0: Nullify circular / self-referencing FKs ─────────────────────────
+  // devis.sale_id → sales, lens_orders.sale_id → sales
+  // Without this, deleting sales would violate the FK from devis/lens_orders
+  await tx.execute(sql`UPDATE devis       SET sale_id = NULL WHERE user_id = ${uId}`);
   await tx.execute(sql`UPDATE lens_orders SET sale_id = NULL WHERE user_id = ${uId}`);
+  await tx.execute(sql`UPDATE reservations SET sale_id = NULL WHERE user_id = ${uId}`);
+  await tx.execute(sql`UPDATE frame_reservations SET sale_id = NULL WHERE store_id = ${uId}`);
 
-  // Step 2: Delete sub-rows (no user_id, need JOIN)
-  await tx.execute(sql`DELETE FROM sale_lens_details WHERE sale_item_id IN (SELECT id FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${uId}))`);
-  await tx.execute(sql`DELETE FROM sale_contact_lens_details WHERE sale_item_id IN (SELECT id FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${uId}))`);
-  await tx.execute(sql`DELETE FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${uId})`);
-  await tx.execute(sql`DELETE FROM supplier_order_items WHERE order_id IN (SELECT id FROM supplier_orders WHERE user_id = ${uId})`);
-  await tx.execute(sql`DELETE FROM goods_receipt_items WHERE receipt_id IN (SELECT id FROM goods_receipts WHERE user_id = ${uId})`);
+  // ── Step 1: Deepest leaf rows (no user_id column — must use JOIN) ────────────
+  // sale_lens_details.sale_item_id → sale_items.sale_id → sales.user_id
+  await tx.execute(sql`
+    DELETE FROM sale_lens_details
+    WHERE sale_item_id IN (
+      SELECT si.id FROM sale_items si
+      JOIN sales s ON s.id = si.sale_id
+      WHERE s.user_id = ${uId}
+    )`);
 
-  // Step 3: frame_reservations uses store_id
+  await tx.execute(sql`
+    DELETE FROM sale_contact_lens_details
+    WHERE sale_item_id IN (
+      SELECT si.id FROM sale_items si
+      JOIN sales s ON s.id = si.sale_id
+      WHERE s.user_id = ${uId}
+    )`);
+
+  // sale_items.sale_id → sales.user_id
+  await tx.execute(sql`
+    DELETE FROM sale_items
+    WHERE sale_id IN (SELECT id FROM sales WHERE user_id = ${uId})`);
+
+  // goods_receipt_items.receipt_id → goods_receipts.user_id
+  await tx.execute(sql`
+    DELETE FROM goods_receipt_items
+    WHERE receipt_id IN (SELECT id FROM goods_receipts WHERE user_id = ${uId})`);
+
+  // supplier_order_items.order_id → supplier_orders.user_id
+  await tx.execute(sql`
+    DELETE FROM supplier_order_items
+    WHERE order_id IN (SELECT id FROM supplier_orders WHERE user_id = ${uId})`);
+
+  // ── Step 2: frame_reservations — uses store_id (not user_id) ────────────────
   await tx.execute(sql`DELETE FROM frame_reservations WHERE store_id = ${uId}`);
 
-  // Step 4: All other tables in FK-safe order — using parameterized sql``
-  await tx.execute(sql`DELETE FROM client_interactions WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM reservations WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM invoice_imports WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM notifications WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM audit_logs WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM reminders WHERE user_id = ${uId}`);
+  // ── Step 3: Tables that reference clients / sales / suppliers ────────────────
+  // These MUST come before clients, sales, suppliers are deleted
+  await tx.execute(sql`DELETE FROM client_interactions WHERE user_id = ${uId}`);  // → clients
+  await tx.execute(sql`DELETE FROM reservations         WHERE user_id = ${uId}`);  // → clients, sales
+  await tx.execute(sql`DELETE FROM invoice_imports      WHERE user_id = ${uId}`);  // → suppliers (soft fk)
+  await tx.execute(sql`DELETE FROM reminders            WHERE user_id = ${uId}`);  // no fk, but near clients
 
-  // Financial
-  await tx.execute(sql`DELETE FROM cash_movements WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM cash_sessions WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM client_transactions WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM comptabilite_journal WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM expenses WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM purchases WHERE user_id = ${uId}`);
+  // ── Step 4: Audit & notification tables (no FK deps) ─────────────────────────
+  await tx.execute(sql`DELETE FROM notifications  WHERE user_id = ${uId}`);
+  // audit_logs: from logs-misc.ts
+  await tx.execute(sql`DELETE FROM audit_logs     WHERE user_id = ${uId}`);
+  // audit_logs_v2: from audit-log.schema.ts
+  await tx.execute(sql`DELETE FROM audit_logs_v2  WHERE user_id = ${uId}`);
+  // audit_log: legacy table
+  await tx.execute(sql`DELETE FROM audit_log      WHERE user_id = ${uId}`);
 
-  // Supplier chain
-  await tx.execute(sql`DELETE FROM supplier_credit_allocations WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM supplier_credits WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM supplier_order_payments WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM supplier_payments WHERE user_id = ${uId}`);
+  // ── Step 5: Financial tables ─────────────────────────────────────────────────
+  await tx.execute(sql`DELETE FROM cash_movements        WHERE user_id = ${uId}`); // → cash_sessions
+  await tx.execute(sql`DELETE FROM cash_sessions         WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM client_transactions   WHERE user_id = ${uId}`); // → clients
+  await tx.execute(sql`DELETE FROM comptabilite_journal  WHERE user_id = ${uId}`); // → sales
+  await tx.execute(sql`DELETE FROM expenses_v2           WHERE user_id = ${uId}`); // ← ACTUAL TABLE NAME!
+  await tx.execute(sql`DELETE FROM purchases             WHERE user_id = ${uId}`);
 
-  // Stock & orders
-  await tx.execute(sql`DELETE FROM goods_receipts WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM lens_orders WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM stock_movements WHERE user_id = ${uId}`);
+  // ── Step 6: Supplier credit chain ────────────────────────────────────────────
+  await tx.execute(sql`DELETE FROM supplier_credit_allocations WHERE user_id = ${uId}`); // → supplier_credits + supplier_orders
+  await tx.execute(sql`DELETE FROM supplier_credits            WHERE user_id = ${uId}`); // → suppliers
+  await tx.execute(sql`DELETE FROM supplier_order_payments     WHERE user_id = ${uId}`); // → supplier_payments + supplier_orders
 
-  // Core business
-  await tx.execute(sql`DELETE FROM supplier_orders WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM devis WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM sales WHERE user_id = ${uId}`);
+  // ── Step 7: Goods receipts & lens orders ─────────────────────────────────────
+  await tx.execute(sql`DELETE FROM goods_receipts  WHERE user_id = ${uId}`); // → suppliers
+  await tx.execute(sql`DELETE FROM lens_orders     WHERE user_id = ${uId}`); // → clients, sales, suppliers, prescriptions_legacy
 
-  // Prescriptions (all versions)
-  await tx.execute(sql`DELETE FROM prescriptions_legacy WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM contact_lens_prescriptions WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM prescriptions WHERE user_id = ${uId}`);
+  // ── Step 8: Stock movements ──────────────────────────────────────────────────
+  await tx.execute(sql`DELETE FROM stock_movements WHERE user_id = ${uId}`); // → products (soft fk)
 
-  // Parent tables — clients last ✅
-  await tx.execute(sql`DELETE FROM suppliers WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM clients WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM products WHERE user_id = ${uId}`);
+  // ── Step 9: Supplier orders and payments ─────────────────────────────────────
+  await tx.execute(sql`DELETE FROM supplier_payments WHERE user_id = ${uId}`); // → suppliers, supplier_orders
+  await tx.execute(sql`DELETE FROM supplier_orders   WHERE user_id = ${uId}`); // → suppliers
 
-  // Settings & catalogues
-  await tx.execute(sql`DELETE FROM shop_profiles WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM settings WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM brands WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM categories WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM materials WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM colors WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM treatments WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM mounting_types WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM banks WHERE user_id = ${uId}`);
-  await tx.execute(sql`DELETE FROM insurances WHERE user_id = ${uId}`);
+  // ── Step 10: Core sales & prescriptions ──────────────────────────────────────
+  await tx.execute(sql`DELETE FROM devis WHERE user_id = ${uId}`);             // → clients, sales
+  await tx.execute(sql`DELETE FROM sales WHERE user_id = ${uId}`);             // → clients
+
+  // Prescriptions — prescriptions_legacy MUST come AFTER lens_orders (lens_orders refs it)
+  await tx.execute(sql`DELETE FROM contact_lens_prescriptions WHERE user_id = ${uId}`); // → clients
+  await tx.execute(sql`DELETE FROM prescriptions              WHERE user_id = ${uId}`); // → clients
+  await tx.execute(sql`DELETE FROM prescriptions_legacy       WHERE user_id = ${uId}`); // → clients (after lens_orders!)
+
+  // ── Step 11: Parent tables — order matters ────────────────────────────────────
+  await tx.execute(sql`DELETE FROM suppliers WHERE user_id = ${uId}`);  // parent
+  await tx.execute(sql`DELETE FROM clients   WHERE user_id = ${uId}`);  // parent — ALL child tables done ✅
+  await tx.execute(sql`DELETE FROM products  WHERE user_id = ${uId}`);  // parent
+
+  // ── Step 12: Settings & catalogues ────────────────────────────────────────────
+  await tx.execute(sql`DELETE FROM shop_profiles   WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM settings        WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM brands          WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM categories      WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM materials       WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM colors          WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM treatments      WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM mounting_types  WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM banks           WHERE user_id = ${uId}`);
+  await tx.execute(sql`DELETE FROM insurances      WHERE user_id = ${uId}`);
 }
 
 
