@@ -7,8 +7,6 @@ import { db } from '@/db';
 import { products, users, clients, suppliers } from '@/db/schema';
 import { eq, count, sql } from 'drizzle-orm';
 
-// TODO: These admin actions need to be refactored to use Drizzle
-// For now, returning stub responses to unblock the build
 
 export type ClientData = {
   uid: string;
@@ -239,15 +237,69 @@ export const getAllClients = adminAction(async (user) => {
 });
 
 export const toggleClientStatus = adminAction(async (user, uid: string, currentStatus: ClientData['status']) => {
-  return { success: false, error: "Admin features not yet migrated to Drizzle" };
+  try {
+    const newIsActive = currentStatus !== 'active';
+    await db.update(users)
+      .set({ isActive: newIsActive, updatedAt: new Date() })
+      .where(eq(users.id, uid));
+
+    revalidatePath('/admin');
+    return { success: true, message: newIsActive ? 'Compte activé' : 'Compte suspendu' };
+  } catch (error: any) {
+    console.error('Error toggling status:', error);
+    return { success: false, error: 'Erreur: ' + error.message };
+  }
 });
 
 export const extendSubscription = adminAction(async (user, uid: string, period: 'monthly' | 'yearly') => {
-  return { success: false, error: "Admin features not yet migrated to Drizzle" };
+  try {
+    // Get current expiry
+    const [target] = await db.select({ subscriptionExpiry: users.subscriptionExpiry })
+      .from(users).where(eq(users.id, uid)).limit(1);
+
+    // Start from current expiry or now
+    const baseDate = target?.subscriptionExpiry && new Date(target.subscriptionExpiry) > new Date()
+      ? new Date(target.subscriptionExpiry)
+      : new Date();
+
+    const months = period === 'yearly' ? 12 : 1;
+    const newExpiry = new Date(baseDate);
+    newExpiry.setMonth(newExpiry.getMonth() + months);
+
+    await db.update(users)
+      .set({
+        subscriptionExpiry: newExpiry,
+        billingCycle: period,
+        isActive: true,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, uid));
+
+    revalidatePath('/admin');
+    const label = period === 'yearly' ? '1 an' : '1 mois';
+    return { success: true, message: `Abonnement prolongé de ${label} (jusqu'au ${newExpiry.toLocaleDateString('fr-FR')})` };
+  } catch (error: any) {
+    console.error('Error extending subscription:', error);
+    return { success: false, error: 'Erreur: ' + error.message };
+  }
 });
 
 export const updateClientPlan = adminAction(async (user, uid: string, data: { expiryDate: Date, gracePeriod: number, status: 'active' | 'suspended' | 'frozen' }) => {
-  return { success: false, error: "Admin features not yet migrated to Drizzle", message: "" }; // Type compatibility
+  try {
+    await db.update(users)
+      .set({
+        subscriptionExpiry: data.expiryDate,
+        isActive: data.status === 'active',
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, uid));
+
+    revalidatePath('/admin');
+    return { success: true, message: 'Plan mis à jour avec succès' };
+  } catch (error: any) {
+    console.error('Error updating plan:', error);
+    return { success: false, error: 'Erreur: ' + error.message, message: '' };
+  }
 });
 
 export const updateClientQuotas = adminAction(async (user, uid: string, data: { 
@@ -311,16 +363,87 @@ export const updateClientQuotas = adminAction(async (user, uid: string, data: {
 });
 
 export const deleteClient = adminAction(async (user, uid: string) => {
-  return { success: false, error: "Admin features not yet migrated to Drizzle" };
+  try {
+    // Delete all user data using raw SQL for FK safety (same order as purgeAllUserData in backup)
+    // Step 0: Break circular FKs
+    await db.execute(sql`UPDATE devis SET sale_id = NULL WHERE user_id = ${uid}`);
+    await db.execute(sql`UPDATE lens_orders SET sale_id = NULL WHERE user_id = ${uid}`);
+    await db.execute(sql`UPDATE reservations SET sale_id = NULL WHERE user_id = ${uid}`);
+    await db.execute(sql`UPDATE frame_reservations SET sale_id = NULL WHERE store_id = ${uid}`);
+
+    // Step 1: Leaf tables
+    const leafTables = [
+      'sale_lens_details', 'sale_contact_lens_details', 'sale_items',
+      'goods_receipt_items', 'supplier_order_items',
+      'frame_reservations', 'client_interactions', 'prescriptions',
+      'devis', 'lens_orders', 'reservations',
+      'payments', 'sales', 'clients',
+      'goods_receipts', 'supplier_orders', 'suppliers',
+      'expenses_v2', 'purchases', 'products',
+      'reminders', 'notifications', 'audit_log',
+      'settings', 'shop_profiles',
+    ];
+
+    for (const table of leafTables) {
+      const col = table === 'frame_reservations' ? 'store_id' : 'user_id';
+      try {
+        await db.execute(sql.raw(`DELETE FROM "${table}" WHERE "${col}" = '${uid}'`));
+      } catch { /* table may not exist */ }
+    }
+
+    // Step 2: Delete user account + sessions + accounts
+    await db.execute(sql`DELETE FROM sessions WHERE "userId" = ${uid}`);
+    await db.execute(sql`DELETE FROM accounts WHERE "userId" = ${uid}`);
+    await db.delete(users).where(eq(users.id, uid));
+
+    revalidatePath('/admin');
+    return { success: true, message: 'Client et toutes ses données supprimés avec succès' };
+  } catch (error: any) {
+    console.error('Error deleting client:', error);
+    return { success: false, error: 'Erreur lors de la suppression: ' + error.message };
+  }
 });
 
 export const updateGlobalBanner = adminAction(async (user, data: { message: string, type: 'info' | 'warning' | 'critical', active: boolean }) => {
-  return { success: false, error: "Admin features not yet migrated to Drizzle" };
+  try {
+    const { settings } = await import('@/db/schema');
+    const existing = await db.select().from(settings)
+      .where(eq(settings.settingKey, 'global_banner'))
+      .limit(1);
+
+    const bannerValue = { message: data.message, type: data.type, active: data.active };
+
+    if (existing.length > 0) {
+      await db.update(settings)
+        .set({ value: bannerValue })
+        .where(eq(settings.settingKey, 'global_banner'));
+    } else {
+      await db.insert(settings).values({
+        userId: user.id,
+        settingKey: 'global_banner',
+        value: bannerValue,
+      });
+    }
+
+    revalidatePath('/');
+    return { success: true, message: 'Bannière mise à jour' };
+  } catch (error: any) {
+    console.error('Error updating banner:', error);
+    return { success: false, error: 'Erreur: ' + error.message };
+  }
 });
 
 export async function getGlobalBanner() {
   // This is called from layout, so don't require admin
-  return null;
+  try {
+    const { settings } = await import('@/db/schema');
+    const [banner] = await db.select().from(settings)
+      .where(eq(settings.settingKey, 'global_banner'))
+      .limit(1);
+    return banner?.value || null;
+  } catch {
+    return null;
+  }
 }
 
 
