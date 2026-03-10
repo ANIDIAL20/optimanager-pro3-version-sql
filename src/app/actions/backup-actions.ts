@@ -31,6 +31,19 @@ function sanitizeDates(obj: unknown): unknown {
 }
 
 // ─────────────────────────────────────────────
+// HELPER: convert snake_case keys to camelCase
+// Raw SQL exports return snake_case, Drizzle expects camelCase
+// ─────────────────────────────────────────────
+function snakeToCamel(obj: Record<string, any>): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+    result[camelKey] = value;
+  }
+  return result;
+}
+
+// ─────────────────────────────────────────────
 // HELPER: ID migration helpers (local per call)
 // ─────────────────────────────────────────────
 function createIdHelpers() {
@@ -324,15 +337,16 @@ export async function restoreUserData(base64Data: FormData | string) {
       await ins(s.prescriptions,  (d.prescriptions  || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy), clientId: fkInt(r.clientId) })));
       await ins(s.contactLensPrescriptions, (d.contactLensPrescriptions || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), clientId: fkInt(r.clientId) })));
       await ins(s.sales,          (d.sales          || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), clientId: fkInt(r.clientId), prescriptionId: fk(r.prescriptionId) })));
-      await ins(s.saleItems,      (d.saleItems      || []).map((r: any) => ({ ...r, id: migrateIntId(r.id), saleId: fkInt(r.saleId), productId: fkInt(r.productId) })));
-      await ins(s.saleLensDetails,(d.saleLensDetails || []).map((r: any) => ({ ...r, id: migrateIntId(r.id), saleItemId: fkInt(r.saleItemId) })));
-      await ins(s.saleContactLensDetails, (d.saleContactLensDetails || []).map((r: any) => ({ ...r, id: migrateIntId(r.id), saleItemId: fkInt(r.saleItemId) })));
+      // Raw-SQL-exported tables: convert snake_case keys to camelCase first
+      await ins(s.saleItems,      (d.saleItems      || []).map((r: any) => { const c = snakeToCamel(r); return { ...c, id: migrateIntId(c.id), saleId: fkInt(c.saleId), productId: fkInt(c.productId) }; }));
+      await ins(s.saleLensDetails,(d.saleLensDetails || []).map((r: any) => { const c = snakeToCamel(r); return { ...c, id: migrateIntId(c.id), saleItemId: fkInt(c.saleItemId) }; }));
+      await ins(s.saleContactLensDetails, (d.saleContactLensDetails || []).map((r: any) => { const c = snakeToCamel(r); return { ...c, id: migrateIntId(c.id), saleItemId: fkInt(c.saleItemId) }; }));
       await ins(s.devis,          (d.devis          || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), clientId: fkInt(r.clientId) })));
       await ins(s.supplierOrders, (d.supplierOrders || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy), supplierId: fk(r.supplierId) })));
-      await ins(s.supplierOrderItems, (d.supplierOrderItems || []).map((r: any) => ({ ...r, id: migrateIntId(r.id), orderId: fk(r.orderId), productId: fkInt(r.productId) })));
+      await ins(s.supplierOrderItems, (d.supplierOrderItems || []).map((r: any) => { const c = snakeToCamel(r); return { ...c, id: migrateIntId(c.id), orderId: fk(c.orderId), productId: fkInt(c.productId) }; }));
       await ins(s.supplierPayments,   (d.supplierPayments   || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy), supplierId: fk(r.supplierId), orderId: fk(r.orderId) })));
       await ins(s.goodsReceipts,  (d.goodsReceipts  || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy), supplierId: fk(r.supplierId) })));
-      await ins(s.goodsReceiptItems, (d.goodsReceiptItems || []).map((r: any) => ({ ...r, id: migrateId(r.id, isLegacy), receiptId: fk(r.receiptId), orderItemId: fkInt(r.orderItemId), productId: fkInt(r.productId) })));
+      await ins(s.goodsReceiptItems, (d.goodsReceiptItems || []).map((r: any) => { const c = snakeToCamel(r); return { ...c, id: migrateId(c.id, isLegacy), receiptId: fk(c.receiptId), orderItemId: fkInt(c.orderItemId), productId: fkInt(c.productId) }; }));
       await ins(s.lensOrders,     (d.lensOrders     || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy), supplierOrderId: fk(r.supplierOrderId), prescriptionId: fk(r.prescriptionId), clientId: fkInt(r.clientId), saleId: fkInt(r.saleId) })));
       await ins(s.stockMovements, (d.stockMovements || []).map((r: any) => ({ ...r, userId: uId, id: migrateIntId(r.id), productId: fkInt(r.productId) })));
       await ins(s.reminders,      (d.reminders      || []).map((r: any) => ({ ...r, userId: uId, id: migrateId(r.id, isLegacy) })));
