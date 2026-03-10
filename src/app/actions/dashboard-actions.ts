@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from '@/db';
-import { sales, products, devis, frameReservations } from '@/db/schema';
+import { sales, products, devis, frameReservations, expenses, purchases } from '@/db/schema';
 import { eq, gte, desc, and, lte, asc, sql } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
@@ -28,6 +28,9 @@ export interface DashboardStats {
     }>;
     pendingPaymentsCount: number;
     pendingReservations: any[]; // List of PENDING frame reservations
+    totalExpenses: number;
+    totalPurchases: number;
+    netProfit: number;
 }
 
 /**
@@ -43,7 +46,7 @@ export const getDashboardStats = secureAction(async (userId, user) => {
         const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
 
         // 2. Fetch Data (Drizzle ORM) - Optimized Aggregations
-        const [revenueResults, todaySalesResults, qLowStock, qDevis, qReservations, qRecentSales] = await Promise.all([
+        const [revenueResults, todaySalesResults, qLowStock, qDevis, qReservations, qRecentSales, expensesResults, purchasesResults] = await Promise.all([
             // Global Revenue (Total Net/TTC)
             db.select({ 
                 total: sql<string>`sum(COALESCE(total_net, total_ttc, '0'))` 
@@ -83,11 +86,24 @@ export const getDashboardStats = secureAction(async (userId, user) => {
             db.select().from(sales)
                 .where(eq(sales.userId, userId))
                 .orderBy(desc(sales.createdAt))
-                .limit(5)
+                .limit(5),
+
+            // Total Expenses (all paid expenses)
+            db.select({
+                total: sql<string>`COALESCE(sum(amount), 0)`
+            }).from(expenses).where(eq(expenses.userId, userId)).catch(() => [{ total: '0' }]),
+
+            // Total Purchases (supplier purchases)
+            db.select({
+                total: sql<string>`COALESCE(sum(CAST(total_amount AS NUMERIC)), 0)`
+            }).from(purchases).where(eq(purchases.userId, userId)).catch(() => [{ total: '0' }]),
         ]);
 
         const globalRevenue = parseFloat(revenueResults[0]?.total || '0');
         const todaySalesCount = Number(todaySalesResults[0]?.count || 0);
+        const totalExpenses = parseFloat(expensesResults[0]?.total || '0');
+        const totalPurchases = parseFloat(purchasesResults[0]?.total || '0');
+        const netProfit = globalRevenue - totalExpenses - totalPurchases;
         
         // Total count (Quickly count without fetching)
         const totalSalesCountResult = await db.select({ count: sql`count(*)` }).from(sales).where(eq(sales.userId, userId));
@@ -145,7 +161,10 @@ export const getDashboardStats = secureAction(async (userId, user) => {
             stockAlerts: qLowStock.length, // Rough estimate based on limit/results
             stockAlertItems,
             recentActivity,
-            pendingReservations: qReservations as any || []
+            pendingReservations: qReservations as any || [],
+            totalExpenses,
+            totalPurchases,
+            netProfit
         };
 
         await logSuccess(userId, 'READ', 'dashboard_stats', 'REFRESH');

@@ -24,7 +24,8 @@ import {
     Truck,
     Briefcase,
     Banknote,
-    PackageCheck
+    PackageCheck,
+    Wallet
 } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
 import { ExpiringReservationsWidget } from '@/features/reservations/components/expiring-reservations-widget';
@@ -54,6 +55,9 @@ interface DashboardData {
     }>;
     pendingPaymentsCount: number;
     pendingReservations: any[]; // Frame reservations
+    totalExpenses: number;
+    totalPurchases: number;
+    netProfit: number;
 }
 
 interface UsageStats {
@@ -113,7 +117,7 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                 </p>
             </div>
 
-            {/* Top Row: Revenue (2 cols) + Ventes (1 col) + Action Card (1 col) */}
+            {/* Top Row: Revenue (2 cols) + Profit (2 cols) */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 
                 {/* Chiffre d'Affaires - Large Card (2 cols) -> Linked to Ventes */}
@@ -140,6 +144,55 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                         </div>
                     </SpotlightCard>
                 </Link>
+
+                {/* Bénéfice Net - Profit Card (2 cols) */}
+                {(() => {
+                    const profit = data?.netProfit || 0;
+                    const isPositive = profit >= 0;
+                    return (
+                        <SpotlightCard
+                            className="lg:col-span-2 h-full p-6"
+                            spotlightColor={isPositive ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)'}
+                        >
+                            <div className="flex items-start justify-between mb-4">
+                                <div>
+                                    <p className="text-sm font-medium text-muted-foreground mb-2">
+                                        Bénéfice Net
+                                    </p>
+                                    <h2 className={cn(
+                                        "text-4xl font-bold tracking-tight transition-colors",
+                                        isPositive ? "text-emerald-700" : "text-red-600"
+                                    )}>
+                                        <SensitiveData value={profit} type="currency" currency="DH" />
+                                    </h2>
+                                </div>
+                                <div className={cn(
+                                    "h-12 w-12 rounded-xl flex items-center justify-center shadow-md bg-gradient-to-br",
+                                    isPositive
+                                        ? "from-emerald-500 to-teal-600"
+                                        : "from-red-500 to-rose-600"
+                                )}>
+                                    <Wallet className="h-6 w-6 text-white" />
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-200 border-slate-200 text-[10px]">
+                                    CA: {(data?.globalRevenue || 0).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} DH
+                                </Badge>
+                                <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200 text-[10px]">
+                                    Charges: −{(data?.totalExpenses || 0).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} DH
+                                </Badge>
+                                <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200 text-[10px]">
+                                    Achats: −{(data?.totalPurchases || 0).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} DH
+                                </Badge>
+                            </div>
+                        </SpotlightCard>
+                    );
+                })()}
+            </div>
+
+            {/* Second Row: Ventes du Jour + Nouvelle Vente CTA */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                 {/* Ventes du Jour - Small Card (1 col) -> Linked to Ventes */}
                 <Link href="/dashboard/ventes" className="block group">
