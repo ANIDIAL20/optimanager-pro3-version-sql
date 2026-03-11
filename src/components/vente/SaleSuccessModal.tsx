@@ -37,7 +37,7 @@ export function SaleSuccessModal({ isOpen, onClose, saleId, avance, lensOrderIds
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <Dialog open={isOpen} onOpenChange={(open) => !open && handleFinish()}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden rounded-[2rem] border-none shadow-2xl">
           {/* Header — green gradient */}
           <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-8 text-center text-white">
