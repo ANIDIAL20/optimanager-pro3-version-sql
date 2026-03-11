@@ -124,6 +124,7 @@ export default function QuickSaleWizard({ onClose }: { onClose: () => void }) {
           isOpen={successModalOpen}
           onClose={onClose}
           saleId={completedSaleId.toString()}
+          avance={paiement.mode === "acompte" ? paiement.montantPaye : undefined}
         />
       )}
 

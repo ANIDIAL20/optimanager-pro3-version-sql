@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, Printer, Glasses, Home, Receipt } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { printInPlace } from "@/lib/print-in-place";
+import { LensOrderShareDialog } from "./LensOrderShareDialog";
 
 interface SaleSuccessModalProps {
   isOpen: boolean;
@@ -19,6 +20,7 @@ interface SaleSuccessModalProps {
 
 export function SaleSuccessModal({ isOpen, onClose, saleId, avance, lensOrderIds }: SaleSuccessModalProps) {
   const router = useRouter();
+  const [showShareDialog, setShowShareDialog] = React.useState(false);
 
   const handlePrintInvoice = () => {
     printInPlace(`/print/facture/${saleId}`);
@@ -28,81 +30,78 @@ export function SaleSuccessModal({ isOpen, onClose, saleId, avance, lensOrderIds
     printInPlace(`/print/recu/${saleId}`);
   };
 
-  const handlePrintLabOrder = () => {
-    if (lensOrderIds && lensOrderIds.length > 0) {
-      // Open one tab per lens order
-      lensOrderIds.forEach((id) => {
-        printInPlace(`/dashboard/lens-orders/${id}/print`);
-      });
-    } else {
-      // Fallback: no lens order IDs passed — open global lens orders list
-      window.open(`/dashboard/lens-orders`, "_blank");
-    }
-  };
-
   const handleFinish = () => {
     onClose();
     router.push("/dashboard/ventes");
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && handleFinish()}>
-      <DialogContent className="sm:max-w-md p-0 overflow-hidden rounded-[2rem] border-none shadow-2xl">
-        {/* Header — green gradient */}
-        <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-8 text-center text-white">
-          <div className="flex justify-center mb-4">
-            <CheckCircle2 className="w-16 h-16 animate-bounce" />
+    <>
+      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden rounded-[2rem] border-none shadow-2xl">
+          {/* Header — green gradient */}
+          <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-8 text-center text-white">
+            <div className="flex justify-center mb-4">
+              <CheckCircle2 className="w-16 h-16 animate-bounce" />
+            </div>
+            <DialogTitle className="text-2xl font-black text-center">
+              Vente Réussie !
+            </DialogTitle>
+            <p className="text-emerald-100 mt-2 text-sm">
+              La vente a été enregistrée avec succès.
+            </p>
           </div>
-          <DialogTitle className="text-2xl font-black text-center">
-            Vente Réussie !
-          </DialogTitle>
-          <p className="text-emerald-100 mt-2 text-sm">
-            La vente a été enregistrée avec succès.
-          </p>
-        </div>
 
-        <div className="p-6 flex flex-col gap-3 bg-white">
-          {/* Primary: Facture */}
-          <Button
-            onClick={handlePrintInvoice}
-            className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-md font-bold"
-          >
-            <Printer className="mr-2 h-5 w-5" />
-            Imprimer la Facture
-          </Button>
+          <div className="p-6 flex flex-col gap-3 bg-white">
+            {/* Primary: Facture */}
+            <Button
+              onClick={handlePrintInvoice}
+              className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-md font-bold"
+            >
+              <Printer className="mr-2 h-5 w-5" />
+              Imprimer la Facture
+            </Button>
 
-          {/* Reçu d'Avance — only shown if avance was collected */}
-          {avance != null && avance > 0 && (
+            {/* Reçu d'Avance — only shown if avance was collected */}
+            {avance != null && avance > 0 && (
+              <Button
+                variant="outline"
+                onClick={handlePrintRecu}
+                className="w-full h-12 border-2 border-emerald-100 hover:border-emerald-500 hover:bg-emerald-50 text-emerald-700 text-md font-bold"
+              >
+                <Receipt className="mr-2 h-5 w-5" />
+                Reçu d&apos;Avance ({avance.toFixed(2)} DH)
+              </Button>
+            )}
+
+            {/* Bon de Commande (Logic from Sales Table) */}
             <Button
               variant="outline"
-              onClick={handlePrintRecu}
-              className="w-full h-12 border-2 border-emerald-100 hover:border-emerald-500 hover:bg-emerald-50 text-emerald-700 text-md font-bold"
+              onClick={() => setShowShareDialog(true)}
+              className="w-full h-12 border-2 border-indigo-100 hover:border-indigo-500 hover:bg-indigo-50 text-indigo-700 text-md font-bold"
             >
-              <Receipt className="mr-2 h-5 w-5" />
-              Reçu d&apos;Avance ({avance.toFixed(2)} DH)
+              <Glasses className="mr-2 h-5 w-5" />
+              Bon de Commande
             </Button>
-          )}
 
-          {/* Bon de Labo */}
-          <Button
-            variant="outline"
-            onClick={handlePrintLabOrder}
-            className="w-full h-12 border-2 border-indigo-100 hover:border-indigo-500 hover:bg-indigo-50 text-indigo-700 text-md font-bold"
-          >
-            <Glasses className="mr-2 h-5 w-5" />
-            Bon de Labo (Verres)
-          </Button>
+            <Button
+              variant="ghost"
+              onClick={handleFinish}
+              className="w-full h-12 text-slate-500 hover:bg-slate-100 hover:text-slate-900 text-md font-bold mt-2"
+            >
+              <Home className="mr-2 h-5 w-5" />
+              Terminer et revenir
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-          <Button
-            variant="ghost"
-            onClick={handleFinish}
-            className="w-full h-12 text-slate-500 hover:bg-slate-100 hover:text-slate-900 text-md font-bold mt-2"
-          >
-            <Home className="mr-2 h-5 w-5" />
-            Terminer et revenir
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+      {/* Lens Order Share Dialog — Same logic as table actions */}
+      <LensOrderShareDialog
+        saleId={saleId}
+        open={showShareDialog}
+        onOpenChange={setShowShareDialog}
+      />
+    </>
   );
 }

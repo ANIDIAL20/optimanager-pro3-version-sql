@@ -1,8 +1,8 @@
 'use server';
 
 import { db } from '@/db';
-import { suppliers } from '@/db/schema';
-import { eq, and, desc, sql, like } from 'drizzle-orm';
+import { suppliers, supplierOrders, supplierPayments, supplierCredits, goodsReceipts, lensOrders } from '@/db/schema';
+import { eq, and, desc, sql, like, count } from 'drizzle-orm';
 import { secureAction, secureActionWithResponse } from '@/lib/secure-action';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { measurePerformance } from '@/lib/performance';
@@ -280,6 +280,45 @@ export const updateSupplier = secureAction(async (userId, user, id: string, data
  */
 export const deleteSupplier = secureAction(async (userId, user, id: string) => {
   try {
+    // Pre-check for linked data to provide a clear functional error instead of a raw DB error
+    const [ordersCountRow, paymentsCountRow, creditsCountRow, receiptsCountRow, lensOrdersCountRow] = await Promise.all([
+      db.select({ c: count() })
+        .from(supplierOrders)
+        .where(and(eq(supplierOrders.supplierId, id), eq(supplierOrders.userId, userId)))
+        .then((rows) => rows[0] ?? { c: 0 }),
+      db.select({ c: count() })
+        .from(supplierPayments)
+        .where(and(eq(supplierPayments.supplierId, id), eq(supplierPayments.userId, userId)))
+        .then((rows) => rows[0] ?? { c: 0 }),
+      db.select({ c: count() })
+        .from(supplierCredits)
+        .where(and(eq(supplierCredits.supplierId, id), eq(supplierCredits.userId, userId)))
+        .then((rows) => rows[0] ?? { c: 0 }),
+      db.select({ c: count() })
+        .from(goodsReceipts)
+        .where(and(eq(goodsReceipts.supplierId, id), eq(goodsReceipts.userId, userId)))
+        .then((rows) => rows[0] ?? { c: 0 }),
+      db.select({ c: count() })
+        .from(lensOrders)
+        .where(and(eq(lensOrders.supplierId, id), eq(lensOrders.userId, userId)))
+        .then((rows) => rows[0] ?? { c: 0 }),
+    ]);
+
+    const hasLinkedData =
+      Number(ordersCountRow.c) > 0 ||
+      Number(paymentsCountRow.c) > 0 ||
+      Number(creditsCountRow.c) > 0 ||
+      Number(receiptsCountRow.c) > 0 ||
+      Number(lensOrdersCountRow.c) > 0;
+
+    if (hasLinkedData) {
+      return {
+        success: false,
+        error:
+          "Impossible de supprimer ce fournisseur car il possède des commandes, paiements, avoirs ou réceptions associées. Veuillez d'abord supprimer ou archiver son historique.",
+      };
+    }
+
     await db
       .delete(suppliers)
       .where(

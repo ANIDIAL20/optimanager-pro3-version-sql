@@ -848,14 +848,16 @@ export const createBulkProducts = secureAction(async (userId, user, data: { item
 
         // 2. Strict Validation & Preparation
         const seenReferences = new Set<string>();
-        const validItems = data.items.filter(item => item.nomProduit && item.reference && Number(item.quantiteStock) > 0);
+        const validItems = data.items.filter(item => item.nomProduit && Number(item.quantiteStock) >= 0);
         
         if (validItems.length === 0) {
-            return { success: false, error: "Aucun produit valide trouvé dans la liste (référence et quantité obligatoire)." };
+            return { success: false, error: "Aucun produit valide trouvé dans la liste (nom obligatoire)." };
         }
 
-        const productsToProcess = validItems.map((item) => {
-             const reference = item.reference!.trim();
+        const productsToProcess = validItems.map((item, index) => {
+             const reference = item.reference && item.reference.trim() !== '' 
+                 ? item.reference.trim() 
+                 : `REF-${Date.now()}-${index}`;
              if (seenReferences.has(reference)) {
                  throw new Error(`Référence en double détectée dans la liste : ${reference}`);
              }
