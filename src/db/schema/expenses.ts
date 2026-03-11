@@ -2,7 +2,7 @@ import { pgTable, serial, text, timestamp, real, index } from 'drizzle-orm/pg-co
 import { sql } from 'drizzle-orm';
 // Schema re-evaluation trigger
 
-export const expenses = pgTable('expenses_v2', {
+export const expensesV2 = pgTable('expenses_v2', {
     id: serial('id').primaryKey(),
     storeId: text('store_id').notNull(), // Link to the shop/store
     userId: text('user_id').notNull(),   // Creator ID
@@ -39,5 +39,8 @@ export const expenses = pgTable('expenses_v2', {
     typeIdx: index('expenses_v2_type_idx').on(table.type),
 }));
 
-export type Expense = typeof expenses.$inferSelect;
-export type NewExpense = typeof expenses.$inferInsert;
+export type Expense = typeof expensesV2.$inferSelect;
+export type NewExpense = typeof expensesV2.$inferInsert;
+
+export const expenses = expensesV2; // Alias for backward compatibility
+

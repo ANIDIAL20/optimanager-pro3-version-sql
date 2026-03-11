@@ -99,6 +99,35 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
         loadDashboardData();
     }, []);
 
+    React.useEffect(() => {
+        if (!data) return;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/30be8363-95ff-4f7c-bb27-635fbf08c469', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Debug-Session-Id': '146942',
+            },
+            body: JSON.stringify({
+                sessionId: '146942',
+                runId: 'pre-fix',
+                hypothesisId: 'H2',
+                location: 'src/app/dashboard/_components/dashboard-client.tsx:~104',
+                message: 'Dashboard stats received by client',
+                data: {
+                    globalRevenue: data.globalRevenue,
+                    totalExpenses: data.totalExpenses,
+                    totalPurchases: data.totalPurchases,
+                    netProfit: data.netProfit,
+                    todaySalesCount: data.todaySalesCount,
+                    totalSalesCount: data.totalSalesCount,
+                },
+                timestamp: Date.now(),
+            }),
+        }).catch(() => {});
+        // #endregion agent log
+    }, [data]);
+
     if (isLoading) {
         return <DashboardSkeleton />;
     }
@@ -177,7 +206,7 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                                 <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-200 border-slate-200 text-[10px]">
-                                    CA: {(data?.globalRevenue || 0).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} DH
+                                    Encaissé: {(data?.globalRevenue || 0).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} DH
                                 </Badge>
                                 <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200 text-[10px]">
                                     Charges: −{(data?.totalExpenses || 0).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} DH
@@ -405,7 +434,7 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                         )}
                     </SpotlightCard>
 
-                    {/* DerniÃ¨res Ventes (2 cols) */}
+                    {/* Dernières Ventes (2 cols) */}
                     <SpotlightCard className="lg:col-span-2 p-6" spotlightColor="rgba(99, 102, 241, 0.1)">
                         <div className="flex items-center justify-between mb-6">
                             <div className="flex items-center gap-2">
@@ -413,7 +442,7 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                                     <ShoppingBag className="h-4 w-4 text-indigo-600" />
                                 </div>
                                 <h3 className="text-lg font-bold text-foreground">
-                                    DerniÃ¨res Ventes
+                                    Dernières Ventes
                                 </h3>
                             </div>
                             <Link
