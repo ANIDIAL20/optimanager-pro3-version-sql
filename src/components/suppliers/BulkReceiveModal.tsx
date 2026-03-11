@@ -221,7 +221,7 @@ export function BulkReceiveModal({ initialSupplierId }: BulkReceiveModalProps = 
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
                 <Button variant="outline" className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 shadow-sm gap-2">
-                    📦 Réception Groupée
+                    <PackageCheck className="h-4 w-4" /> Réception Groupée
                 </Button>
             </DialogTrigger>
             <DialogContent className="max-w-5xl max-h-[95vh] flex flex-col p-6 overflow-hidden">
