@@ -206,13 +206,7 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                                 <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-200 border-slate-200 text-[10px]">
-                                    Encaissé: {(data?.globalRevenue || 0).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} DH
-                                </Badge>
-                                <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200 text-[10px]">
-                                    Charges: −{(data?.totalExpenses || 0).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} DH
-                                </Badge>
-                                <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200 text-[10px]">
-                                    Achats: −{(data?.totalPurchases || 0).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} DH
+                                    Encaissé: {((data as any)?.totalCollected || 0).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} DH
                                 </Badge>
                             </div>
                         </SpotlightCard>
