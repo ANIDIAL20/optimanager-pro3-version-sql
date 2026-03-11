@@ -85,10 +85,11 @@ export const getDashboardStats = secureAction(async (userId, user) => {
                 sql`date >= ${startOfDay} AND date <= ${endOfDay}`
             )),
 
-            // Low Stock Items (Limited for dashboard)
+            // Low Stock Items (Limited for dashboard, excluding Lenses and Services)
             db.select().from(products)
                 .where(and(
                     eq(products.userId, userId), 
+                    notInArray(products.type, ['VERRE', 'AUTRE', 'SERVICE']), // Exclude items not managed by stock
                     lte(products.quantiteStock, sql`COALESCE(${products.seuilAlerte}, 5)`)
                 ))
                 .orderBy(asc(products.quantiteStock))
