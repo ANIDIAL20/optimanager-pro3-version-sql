@@ -16,8 +16,7 @@ const nextConfig: NextConfig = {
       ],
     },
   },
-  serverExternalPackages: ['ws'],
-
+  
   images: {
     unoptimized: true,
     remotePatterns: [

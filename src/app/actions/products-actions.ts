@@ -1,9 +1,6 @@
 'use server';
-import { neonConfig } from '@neondatabase/serverless';
-// Configure WebSocket for Node.js environment (required for transactions)
-if (typeof process !== 'undefined' && process.release?.name === 'node') {
-  neonConfig.webSocketConstructor = eval('require')('ws');
-}
+
+
 
 import { db } from '@/db';
 import { products, stockMovements, invoiceImports, suppliers, brands, colors } from '@/db/schema';

@@ -6,11 +6,11 @@ console.log("DB URL Present:", !!process.env.DATABASE_URL);
 const { Pool } = require('@neondatabase/serverless');
 const { drizzle } = require('drizzle-orm/neon-serverless');
 const { sql } = require('drizzle-orm');
-const ws = require('ws');
+
 
 // Set WebSocket for Node.js
 const { neonConfig } = require('@neondatabase/serverless');
-neonConfig.webSocketConstructor = ws;
+
 
 async function checkTable() {
     try {

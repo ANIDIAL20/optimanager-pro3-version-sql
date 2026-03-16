@@ -1,10 +1,10 @@
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
-import { Pool } from '@neondatabase/serverless';
+
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import { sql } from 'drizzle-orm';
-import ws from 'ws';
+
 
 async function main() {
     console.log('🚀 Starting Data Migration to V2 Architecture...');

@@ -1,11 +1,11 @@
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
-import { Pool } from '@neondatabase/serverless';
+
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import { sql } from 'drizzle-orm';
 import * as fs from 'fs';
-import ws from 'ws';
+
 
 // Import existing schema names from core schema file
 import { suppliers, supplierOrders } from '../src/db/schema';

@@ -1,4 +1,4 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
+
 import * as dotenv from 'dotenv';
 import * as ws from 'ws';
 

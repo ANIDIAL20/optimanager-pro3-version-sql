@@ -2,7 +2,7 @@ import { neon, neonConfig, Pool } from '@neondatabase/serverless';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
-import ws from 'ws';
+
 
 // Load environment variables
 import * as dotenvConf from 'dotenv';
@@ -13,7 +13,7 @@ if (!process.env.DATABASE_URL) {
 }
 
 // Configurer WebSocket pour l'environnement Node (essentiel pour Neon Serverless driver)
-neonConfig.webSocketConstructor = ws;
+
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
