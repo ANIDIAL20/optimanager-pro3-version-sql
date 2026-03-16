@@ -61,7 +61,7 @@ export const createExpense = secureAction(async (userId, user, data: ExpenseForm
         console.log('💾 Insertion en base de données...');
         const [newExpense] = await db.insert(expensesTable).values({
             ...validatedData,
-            storeId: userId, // On utilise l'ID de l'utilisateur comme ID de magasin (tenant principal)
+            // FIX: 1 - Changed storeId to userId to match the new expenses_v2 schema where store_id was replaced by user_id
             userId: userId,
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -103,7 +103,7 @@ export const updateExpense = secureAction(async (userId, user, id: string, data:
             })
             .where(and(
                 eq(expensesTable.id, idNum),
-                eq(expensesTable.storeId, userId)
+                eq(expensesTable.userId, userId)
             ))
             .returning();
 
@@ -139,7 +139,7 @@ export const markAsPaid = secureAction(async (userId, user, id: string, paymentD
  */
 export const getExpenses = secureAction(async (userId, user, filters?: ExpenseFilters) => {
     try {
-        const conditions = [eq(expensesTable.storeId, userId)];
+        const conditions = [eq(expensesTable.userId, userId)];
 
         if (filters) {
             if (filters.search) {
@@ -179,7 +179,7 @@ export const getExpenseById = secureAction(async (userId, user, id: string) => {
         const expense = await db.query.expenses.findFirst({
             where: and(
                 eq(expensesTable.id, idNum),
-                eq(expensesTable.storeId, userId)
+                eq(expensesTable.userId, userId)
             )
         });
 
@@ -201,7 +201,7 @@ export const getExpensesByPeriod = secureAction(async (userId, user, month: numb
         const expenses = await db.select()
             .from(expensesTable)
             .where(and(
-                eq(expensesTable.storeId, userId),
+                eq(expensesTable.userId, userId),
                 between(expensesTable.createdAt, startDate, endDate)
             ))
             .orderBy(desc(expensesTable.createdAt));
@@ -241,7 +241,7 @@ export const deleteExpense = secureAction(async (userId, user, id: string) => {
         const expense = await db.query.expenses.findFirst({
             where: and(
                 eq(expensesTable.id, idNum),
-                eq(expensesTable.storeId, userId)
+                eq(expensesTable.userId, userId)
             )
         });
 
@@ -251,7 +251,7 @@ export const deleteExpense = secureAction(async (userId, user, id: string) => {
         await db.delete(expensesTable)
             .where(and(
                 eq(expensesTable.id, idNum),
-                eq(expensesTable.storeId, userId)
+                eq(expensesTable.userId, userId)
             ));
 
         // 3. Delete attachments from UploadThing if any
@@ -298,7 +298,7 @@ export const getExpenseStats = secureAction(async (userId, user, month: number, 
         })
             .from(expensesTable)
             .where(and(
-                eq(expensesTable.storeId, userId),
+                eq(expensesTable.userId, userId),
                 between(expensesTable.createdAt, startDate, endDate)
             ));
 
@@ -308,7 +308,7 @@ export const getExpenseStats = secureAction(async (userId, user, month: number, 
         })
             .from(expensesTable)
             .where(and(
-                eq(expensesTable.storeId, userId),
+                eq(expensesTable.userId, userId),
                 eq(expensesTable.status, 'pending'),
                 between(expensesTable.createdAt, startDate, endDate)
             ));
@@ -319,7 +319,7 @@ export const getExpenseStats = secureAction(async (userId, user, month: number, 
         })
             .from(expensesTable)
             .where(and(
-                eq(expensesTable.storeId, userId),
+                eq(expensesTable.userId, userId),
                 eq(expensesTable.status, 'overdue'),
                 between(expensesTable.createdAt, startDate, endDate)
             ));
@@ -331,7 +331,7 @@ export const getExpenseStats = secureAction(async (userId, user, month: number, 
         })
             .from(expensesTable)
             .where(and(
-                eq(expensesTable.storeId, userId),
+                eq(expensesTable.userId, userId),
                 between(expensesTable.createdAt, startDate, endDate)
             ))
             .groupBy(expensesTable.type);
@@ -343,7 +343,7 @@ export const getExpenseStats = secureAction(async (userId, user, month: number, 
         })
             .from(expensesTable)
             .where(and(
-                eq(expensesTable.storeId, userId),
+                eq(expensesTable.userId, userId),
                 between(expensesTable.createdAt, startDate, endDate)
             ))
             .groupBy(expensesTable.status);
@@ -385,7 +385,7 @@ export const getTotalByType = secureAction(async (userId, user, type: ExpenseTyp
         })
             .from(expensesTable)
             .where(and(
-                eq(expensesTable.storeId, userId),
+                eq(expensesTable.userId, userId),
                 eq(expensesTable.type, type)
             ));
 

@@ -1,4 +1,9 @@
 'use server';
+import { neonConfig } from '@neondatabase/serverless';
+// Configure WebSocket for Node.js environment (required for transactions)
+if (typeof process !== 'undefined' && process.release?.name === 'node') {
+  neonConfig.webSocketConstructor = eval('require')('ws');
+}
 
 import { db } from '@/db';
 import { 
@@ -492,13 +497,37 @@ export const updateLensOrder = secureAction(
       revalidatePath(`/dashboard/clients/${updated.clientId}`);
       
       return { success: true, message: 'Commande de verres mise à jour', data: updated };
-
     } catch (error: any) {
-      await logFailure(userId, 'UPDATE', 'lens_orders', error.message, orderId);
-      return { 
-        success: false, 
-        error: 'Erreur lors de la mise à jour de la commande' 
-      };
+      await logFailure(userId, 'UPDATE', 'lens_orders', orderId, error.message);
+      return { success: false, error: 'Erreur lors de la mise à jour: ' + error.message };
+    }
+  }
+);
+
+export const markLensOrderAsDelivered = secureAction(
+  async (userId, user, orderId: number) => {
+    try {
+      const [updated] = await db.update(lensOrders)
+        .set({ 
+          status: 'delivered', 
+          deliveredDate: new Date(),
+          updatedAt: new Date() 
+        })
+        .where(and(eq(lensOrders.id, orderId), eq(lensOrders.userId, userId)))
+        .returning();
+
+      if (!updated) {
+        return { success: false, error: 'Commande introuvable' };
+      }
+
+      await logSuccess(userId, 'UPDATE', 'lens_orders', orderId.toString(), { note: 'Marqué comme livré depuis notifications' });
+      
+      revalidatePath('/dashboard/notifications');
+      revalidatePath(`/dashboard/lens-orders/${orderId}`);
+      
+      return { success: true, message: 'Commande marquée comme livrée' };
+    } catch (error: any) {
+      return { success: false, error: error.message };
     }
   }
 );

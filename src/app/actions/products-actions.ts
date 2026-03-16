@@ -1,9 +1,13 @@
-// @ts-nocheck
 'use server';
+import { neonConfig } from '@neondatabase/serverless';
+// Configure WebSocket for Node.js environment (required for transactions)
+if (typeof process !== 'undefined' && process.release?.name === 'node') {
+  neonConfig.webSocketConstructor = eval('require')('ws');
+}
 
 import { db } from '@/db';
-import { products, stockMovements, invoiceImports } from '@/db/schema';
-import { eq, and, or, ilike, desc, lte, asc, sql, gt, not } from 'drizzle-orm';
+import { products, stockMovements, invoiceImports, suppliers, brands, colors } from '@/db/schema';
+import { eq, and, or, ilike, desc, lte, asc, sql, gt, not, isNull } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure, logAudit } from '@/lib/audit-log';
 import { redirect } from 'next/navigation';
@@ -12,24 +16,26 @@ import { measurePerformance } from '@/lib/performance';
 import { getClientUsageStats } from './adminActions';
 import { calculatePrices } from '@/lib/tva-helpers';
 import { redis } from '@/lib/cache/redis';
+import { type ProductFormValues } from '@/lib/validations/product';
 
 // ========================================
-// TYPE DEFINITIONS
+// TYPE DEFINITION
 // ========================================
 
 export interface Product {
     id: string;
     reference: string;
     nomProduit: string;
+    nom?: string;
     prixAchat: number;
     prixVente: number;
     quantiteStock: number;
     seuilAlerte: number;
-    categorie: string; // Deprecated, use category
-    category: string;  // New
-    marque: string;    // Deprecated, use brand
-    brand: string;     // New
-    productType: 'frame' | 'lens' | 'contact_lens' | 'accessory' | 'service' | string; // 'frame', 'lens', etc.
+    categorie: string;
+    category: string;
+    marque: string;
+    brand: string;
+    productType: 'frame' | 'lens' | 'contact_lens' | 'accessory' | 'service' | string;
     modele?: string;
     couleur?: string;
     fournisseur: string;
@@ -37,21 +43,26 @@ export interface Product {
     isActive: boolean;
     createdAt: string;
     updatedAt?: string;
-    // Legacy fields handling for compat
     categorieId?: string;
     marqueId?: string;
     matiereId?: string;
     couleurId?: string;
-    // New fields
     tvaRate: number;
     isMedical: boolean;
     isStockManaged: boolean;
-    type?: string; 
+    type?: string;
+    details?: string;
+    imageUrl?: string;
+    hasTva?: boolean;
+    priceType?: 'HT' | 'TTC';
+    numFacture?: string;
+    fournisseurId?: string;
+    fournisseurNom?: string;
+    marqueNom?: string;  // Populated brand name from LEFT JOIN with brands table
 }
 
 /**
  * Get all products with optional search
- * ✅ SECURED - Multi-tenant
  */
 export const getProducts = secureAction(async (userId, user, params?: string | { query?: string; page?: number; limit?: number; category?: string; hideOutOfStock?: boolean; clientId?: number }) => {
     return await measurePerformance(`getProducts-${userId}`, async () => {
@@ -63,12 +74,10 @@ export const getProducts = secureAction(async (userId, user, params?: string | {
         const clientId = typeof params === 'object' ? params?.clientId : undefined;
         const offset = (page - 1) * limit;
 
-        console.log(`📦 Fetching products for user: ${userId} (Drizzle) - Page: ${page}, Limit: ${limit}, Category: ${categoryFilter || 'ALL'}`);
-
         try {
             const filters = [
                 eq(products.userId, userId),
-                sql`${products.deletedAt} IS NULL`
+                isNull(products.deletedAt)
             ];
 
             if (searchQuery) {
@@ -90,16 +99,10 @@ export const getProducts = secureAction(async (userId, user, params?: string | {
                 )!);
             }
 
-            // 🛡️ POS FILTER — Hide zero-stock managed products (sold unique lenses, etc.)
             if (hideOutOfStock) {
-                filters.push(
-                    gt(products.quantiteStock, 0)
-                );
+                filters.push(gt(products.quantiteStock, 0));
             }
 
-            // 🔒 BUG-3 FIX: VERRE visibility filter
-            // - With clientId   → show normal products + VERRE belonging to this client only
-            // - Without clientId → hide ALL VERRE- products from the POS
             if (clientId !== undefined) {
                 filters.push(
                     or(
@@ -111,7 +114,6 @@ export const getProducts = secureAction(async (userId, user, params?: string | {
                     )!
                 );
             } else {
-                // No client selected: hide all VERRE- products entirely
                 filters.push(not(ilike(products.reference, 'VERRE-%')));
             }
 
@@ -121,52 +123,57 @@ export const getProducts = secureAction(async (userId, user, params?: string | {
             const totalElements = Number(countResult[0]?.count || 0);
             const totalPages = Math.ceil(totalElements / limit);
 
-            const results = await db.select().from(products)
-                .where(and(...filters))
-                .orderBy(
-                    desc(sql`CASE WHEN ${products.quantiteStock} > 0 THEN 1 ELSE 0 END`),
-                    asc(products.nom),
-                    desc(products.id) // Tie-breaker for stable sorting!
-                )
-                .limit(limit)
-                .offset(offset);
+            const results = await db.select({
+                product: products,
+                prixVenteCoalesced: sql<string>`COALESCE(${products.prixVente}, '0')`,
+                prixAchatCoalesced: sql<string>`COALESCE(${products.prixAchat}, '0')`,
+                marqueNom: brands.name
+            })
+            .from(products)
+            .leftJoin(brands, eq(products.marqueId, brands.id))
+            .where(and(...filters))
+            .orderBy(
+                desc(sql`CASE WHEN ${products.quantiteStock} > 0 THEN 1 ELSE 0 END`),
+                asc(products.nom),
+                desc(products.id)
+            )
+            .limit(limit)
+            .offset(offset);
 
-            // Transform Drizzle results to frontend interface
-            const mappedProducts: Product[] = results.map((p: any) => ({
-                id: p.id.toString(),
-                reference: p.reference || '',
-                nomProduit: p.nom,
-                prixAchat: Number(p.prixAchat || 0),
-                prixVente: Number(p.prixVente || 0),
-                quantiteStock: p.quantiteStock || 0,
-                seuilAlerte: p.seuilAlerte || 5,
-                
-                // Map new fields with fallbacks
-                category: p.category || p.categorie || '',
-                categorie: p.category || p.categorie || '', 
-                brand: p.brand || p.marque || '',
-                marque: p.brand || p.marque || '',
-                productType: p.productType || p.type || 'accessory',
-                
-                modele: p.modele || '',
-                couleur: p.couleur || '',
-                fournisseur: p.fournisseur || '',
-                description: p.description || '',
-                isActive: p.isActive || false,
-                createdAt: p.createdAt ? (typeof p.createdAt === 'string' ? p.createdAt : p.createdAt.toISOString()) : new Date().toISOString(),
-                updatedAt: p.updatedAt ? (typeof p.updatedAt === 'string' ? p.updatedAt : p.updatedAt.toISOString()) : undefined,
-                matiereId: p.matiereId?.toString(),
-                couleurId: p.couleurId?.toString(),
-                categorieId: p.category || p.categorie,
-                marqueId: p.brand || p.marque,
-                
-                tvaRate: Number(p.tvaRate || 20),
-                isMedical: p.isMedical || false,
-                isStockManaged: p.isStockManaged !== false // Default true
-            }));
-
-            console.log(`✅ Found ${mappedProducts.length} products (Total: ${totalElements})`);
-            await logSuccess(userId, 'READ', 'products', 'list', { count: mappedProducts.length, total: totalElements, page, searchQuery });
+            const mappedProducts: Product[] = results.map((row: any) => {
+                const p = row.product;
+                return {
+                    id: p.id.toString(),
+                    reference: p.reference || '',
+                    nomProduit: p.nom,
+                    prixAchat: Number(row.prixAchatCoalesced || 0),
+                    prixVente: Number(row.prixVenteCoalesced || 0),
+                    quantiteStock: p.quantiteStock || 0,
+                    seuilAlerte: p.seuilAlerte || 5,
+                    category: p.category || p.categorie || '',
+                    categorie: p.category || p.categorie || '',
+                    brand: row.marqueNom || p.brand || p.marque || '',
+                    marque: row.marqueNom || p.brand || p.marque || '',
+                    marqueNom: row.marqueNom || '',
+                    productType: p.productType || p.type || 'accessory',
+                    modele: p.modele || '',
+                    couleur: p.couleur || '',
+                    fournisseur: p.fournisseur || '',
+                    description: p.description || '',
+                    isActive: p.isActive || false,
+                    createdAt: p.createdAt ? new Date(p.createdAt).toISOString() : '',
+                    updatedAt: p.updatedAt ? new Date(p.updatedAt).toISOString() : undefined,
+                    tvaRate: Number(p.tvaRate || 20),
+                    isMedical: p.isMedical || false,
+                    isStockManaged: (p.productType === 'verre' || p.productType === 'lens') ? false : (p.isStockManaged !== false),
+                    details: p.details || '',
+                    imageUrl: p.imageUrl || '',
+                    hasTva: p.hasTva ?? true,
+                    priceType: (p.priceType || 'TTC') as 'HT' | 'TTC',
+                    fournisseurId: p.fournisseurId || undefined,
+                    numFacture: p.numFacture || undefined
+                };
+            });
 
             return { 
                 success: true, 
@@ -180,15 +187,14 @@ export const getProducts = secureAction(async (userId, user, params?: string | {
             };
 
         } catch (error: any) {
-            console.error('💥 Error fetching products (Drizzle):', error);
-            await logFailure(userId, 'READ', 'products', error.message);
+            console.error('💥 Error fetching products:', error);
             return { success: false, error: 'Erreur lors de la récupération des produits' };
         }
     }, { userId });
 });
 
 /**
- * Optimized Search for POS (Pagination + Filtering)
+ * Optimized Search for POS
  */
 export const searchProducts = secureAction(async (userId, user, params: { 
     query?: string; 
@@ -204,12 +210,9 @@ export const searchProducts = secureAction(async (userId, user, params: {
         
         const filters = [
             eq(products.userId, userId),
-            sql`${products.deletedAt} IS NULL`
+            isNull(products.deletedAt)
         ];
 
-        // 🔒 BUG-1 FIX: VERRE visibility filter
-        // - With clientId   → show normal products + VERRE belonging to this client only
-        // - Without clientId → hide ALL VERRE- products from the POS
         if (params.clientId !== undefined) {
              filters.push(
                  or(
@@ -224,7 +227,6 @@ export const searchProducts = secureAction(async (userId, user, params: {
              filters.push(not(ilike(products.reference, 'VERRE-%')));
         }
 
-        // Type filter (Check new productType first)
         if (params.type && params.type !== 'ALL') {
              if (params.type === 'SOLAIRE') {
                  filters.push(or(
@@ -233,15 +235,13 @@ export const searchProducts = secureAction(async (userId, user, params: {
                      ilike(products.nom, '%solaire%')
                  )!);
              } else {
-                 // Try matching productType or legacy type
                  filters.push(or(
-                     eq(products.productType, params.type),
+                     eq(products.productType, params.type as any),
                      eq(products.type, params.type as any)
                  )!);
              }
         }
 
-        // Category filter
         if (params.category && params.category !== 'all') {
             filters.push(or(
                 eq(products.category, params.category),
@@ -249,7 +249,6 @@ export const searchProducts = secureAction(async (userId, user, params: {
             )!);
         }
 
-        // Text search
         if (params.query) {
             const search = `%${params.query}%`;
             filters.push(or(
@@ -276,17 +275,14 @@ export const searchProducts = secureAction(async (userId, user, params: {
             reservedQuantity: p.reservedQuantity || 0,
             availableQuantity: p.availableQuantity || 0,
             seuilAlerte: p.seuilAlerte || 5,
-            
             category: p.category || p.categorie || '',
             categorie: p.category || p.categorie || '',
             brand: p.brand || p.marque || '',
             marque: p.brand || p.marque || '',
             productType: p.productType || p.type || 'accessory',
-            
             modele: p.modele || '',
             couleur: p.couleur || '',
-            createdAt: p.createdAt ? (typeof p.createdAt === 'string' ? p.createdAt : p.createdAt.toISOString()) : new Date().toISOString(),
-            
+            createdAt: p.createdAt ? new Date(p.createdAt).toISOString() : '',
             tvaRate: Number(p.tvaRate || 20),
             isMedical: p.isMedical || false,
         }));
@@ -307,51 +303,72 @@ export const getProduct = secureAction(async (userId, user, productId: string) =
         const id = parseInt(productId);
         if (isNaN(id)) return { success: false, error: 'ID produit invalide' };
 
-        const product = await db.query.products.findFirst({
-            where: and(eq(products.id, id), eq(products.userId, userId))
-        });
+        const results = await db.select({
+            product: products,
+            supplierName: suppliers.name,
+            marqueNom: brands.name,
+            couleurNom: colors.name
+        })
+        .from(products)
+        .leftJoin(suppliers, eq(products.fournisseurId, suppliers.id))
+        .leftJoin(brands, eq(products.marqueId, brands.id))
+        .leftJoin(colors, eq(products.couleurId, colors.id))
+        .where(and(
+            eq(products.id, id), 
+            eq(products.userId, userId),
+            isNull(products.deletedAt)
+        ))
+        .limit(1);
 
-        if (!product) return { success: false, error: 'Produit introuvable' };
+        const row = results[0];
+        if (!row) return { success: false, error: 'Produit introuvable' };
 
-        // Map Drizzle result to frontend interface
+        const product = row.product;
         const mapped: Product = {
             id: product.id.toString(),
             nomProduit: product.nom,
             reference: product.reference || '',
-            
             category: product.category || product.categorie || '',
             categorie: product.category || product.categorie || '',
-            brand: product.brand || product.marque || '',
-            marque: product.brand || product.marque || '',
+            brand: row.marqueNom || product.brand || product.marque || '',
+            marque: row.marqueNom || product.brand || product.marque || '',
+            marqueNom: row.marqueNom || '',
+            couleurNom: row.couleurNom || '',
+            couleur: row.couleurNom || product.couleur || '',
             productType: product.productType || product.type || 'accessory',
-            
             fournisseur: product.fournisseur || '',
+            fournisseurId: product.fournisseurId || undefined,
+            fournisseurNom: row.supplierName || product.fournisseur || '',
             modele: product.modele || '',
             couleur: product.couleur || '',
             prixAchat: Number(product.prixAchat || 0),
             prixVente: Number(product.prixVente || 0),
             quantiteStock: product.quantiteStock || 0,
-            seuilAlerte: product.seuilAlerte || 5,
-            description: product.description || '',
+            seuilAlerte: product.seuilAlerte || 5, // Important: keep for consistency
+            description: product.numFacture ? (product.description || '') : (product.description?.startsWith('Facture: ') ? '' : (product.description || '')),
             isActive: product.isActive || false,
-            createdAt: product.createdAt ? (typeof product.createdAt === 'string' ? product.createdAt : product.createdAt.toISOString()) : '',
-            updatedAt: product.updatedAt ? (typeof product.updatedAt === 'string' ? product.updatedAt : product.updatedAt.toISOString()) : undefined,
+            createdAt: product.createdAt ? new Date(product.createdAt).toISOString() : '',
+            updatedAt: product.updatedAt ? new Date(product.updatedAt).toISOString() : undefined,
             matiereId: product.matiereId?.toString(),
             couleurId: product.couleurId?.toString(),
             categorieId: product.category || product.categorie || '',
-            marqueId: product.brand || product.marque || '',
-            
+            marqueId: (product.marqueId || '').toString(),
             tvaRate: Number(product.tvaRate || 20),
             isMedical: product.isMedical || false,
-            isStockManaged: product.isStockManaged !== false
+            isStockManaged: product.isStockManaged !== false,
+            details: product.details || '',
+            imageUrl: product.imageUrl || '',
+            hasTva: product.hasTva ?? true,
+            priceType: (product.priceType || 'TTC') as 'HT' | 'TTC',
+            numFacture: product.numFacture || (product.description?.startsWith('Facture: ') ? product.description.replace('Facture: ', '') : ''),
+            // @ts-ignore - map to form field
+            stockMin: product.seuilAlerte || 5 
         };
 
-        await logSuccess(userId, 'READ', 'products', productId);
         return { success: true, data: mapped };
 
     } catch (error: any) {
-        console.error('💥 Error fetching product (Drizzle):', error);
-        await logFailure(userId, 'READ', 'products', error.message, productId);
+        console.error('💥 Error fetching product:', error);
         return { success: false, error: error.message };
     }
 });
@@ -374,21 +391,19 @@ export interface ProductInput {
     description?: string;
     imageUrl?: string;
     imageHint?: string;
-    
-    categorie?: string;
-    category?: string; // New
+    category?: string;
     marque?: string; 
-    brand?: string;    // New
-    productType?: string; // New
-    
+    brand?: string;
+    productType?: string;
     fournisseur?: string; 
+    fournisseurId?: string;
     details?: string; 
+    numFacture?: string;
     modele?: string;
     couleur?: string;
     isActive?: boolean;
-    // ✅ SMART TVA Fields
     hasTva?: boolean;
-    tvaRate?: number; // New
+    tvaRate?: number;
     exemptionNote?: string;
     priceType?: 'HT' | 'TTC'; 
     isMedical?: boolean;
@@ -396,287 +411,177 @@ export interface ProductInput {
 }
 
 export const createProduct = secureAction(async (userId, user, data: ProductInput) => {
-    console.log(`📝 Creating product payload (Drizzle):`, JSON.stringify(data, null, 2));
-
     try {
-        // Validation: Allow 0 as a valid price
         if (!data.nomProduit || data.prixVente === undefined || data.prixVente === null) {
-            return { success: false, error: 'Nom et prix de vente requis (Données incomplètes)' };
+            return { success: false, error: 'Nom et prix de vente requis' };
         }
 
-        // 🛡️ CHECK QUOTAS
         const usage = await getClientUsageStats(userId);
         if (usage.products.count >= usage.products.limit) {
-             return { success: false, error: `Vous avez atteint la limite de produits pour votre plan (${usage.products.limit}). Veuillez mettre à niveau votre abonnement.` };
+             return { success: false, error: `Limite atteinte (${usage.products.limit}).` };
         }
 
-        // Handle defaults
-        const reference = data.reference && data.reference.trim() !== '' 
-                ? data.reference 
-                : `REF-${Date.now()}`;
-
-        // 1. Check Uniqueness (Drizzle)
+        const reference = data.reference && data.reference.trim() !== '' ? data.reference : `REF-${Date.now()}`;
         const existing = await db.query.products.findFirst({
             where: and(eq(products.userId, userId), eq(products.reference, reference))
         });
 
-        if (existing) {
-             return { success: false, error: 'Cette référence (ou code-barres) existe déjà.' };
-        }
+        if (existing) return { success: false, error: 'Référence déjà utilisée.' };
 
-        // 2. Calculate Financials (Source of Truth)
-        const priceInput = Number(data.prixVente);
-        const hasTva = data.hasTva !== undefined ? data.hasTva : true;
-        const priceType = data.priceType || 'TTC';
-        
-        const financials = calculatePrices(priceInput, priceType, hasTva);
-
-        // Resolve generic fields
+        const financials = calculatePrices(Number(data.prixVente), data.priceType || 'TTC', data.hasTva ?? true);
         const categoryVal = data.category || data.categorie || data.categorieId || 'OPTIQUE';
         const brandVal = data.brand || data.marque || data.marqueId || null;
 
-        // 3. Create Product
         const [newProduct] = await db.insert(products).values({
             userId,
             nom: data.nomProduit,
             reference: reference,
-            
-            // New & Old fields synced
             category: categoryVal,
             categorie: categoryVal, 
             brand: brandVal,
             marque: brandVal,
-            productType: data.productType || 'accessory',
-            
+            productType: (data.productType as any) || 'accessory',
             fournisseur: data.fournisseur || null,
+            fournisseurId: data.fournisseurId || null,
+            marqueId: data.marqueId ? parseInt(data.marqueId) : null,
+            numFacture: data.numFacture || null,
             modele: data.modele || null,
             couleur: data.couleur || null,
-            
-            // Ensure numeric values
             prixAchat: data.prixAchat ? String(data.prixAchat) : '0',
             prixVente: String(financials.ttc), 
-            
-            // ✅ New Financial Fields
-            hasTva: hasTva,
+            hasTva: data.hasTva ?? true,
             tvaRate: data.tvaRate ? String(data.tvaRate) : '20.00',
-            priceType: priceType,
+            priceType: data.priceType || 'TTC',
             exemptionNote: data.exemptionNote || null,
             salePriceHT: String(financials.ht),
             salePriceTVA: String(financials.tva),
             salePriceTTC: String(financials.ttc),
-
             quantiteStock: data.quantiteStock || 0,
             seuilAlerte: data.stockMin || 5,
-
             description: data.description || null,
             details: data.details || null,
-            
             matiereId: data.matiereId ? parseInt(data.matiereId) : null,
             couleurId: data.couleurId ? parseInt(data.couleurId) : null,
-            
             isActive: true,
             isMedical: data.isMedical || false,
-            isStockManaged: data.isStockManaged !== false,
-            
+            isStockManaged: data.productType === 'verre' || data.productType === 'lens' ? false : (data.isStockManaged !== false),
             version: 0,
             createdAt: new Date(),
             updatedAt: new Date(),
         }).returning();
 
-        // 3. Log Success
-        await logSuccess(userId, 'CREATE', 'products', newProduct.id.toString(), { name: newProduct.nom });
-        
-        revalidatePath('/dashboard/products');
-        revalidatePath('/dashboard/stock');
+        await logSuccess(userId, 'CREATE', 'products', newProduct.id.toString());
+        revalidatePath('/dashboard/products', 'page');
         revalidateTag('products');
-
-        try {
-            await redis?.del(`notifications:stock-critique:${userId}`);
-        } catch {
-            // ignore cache errors
-        }
-        
         return { success: true, data: newProduct };
 
     } catch (error: any) {
-        console.error('Create Product Error (Drizzle):', error);
-        
-        if (error.code === '23505') {
-             return { success: false, error: 'Cette référence produit existe déjà.' };
-        }
-
-        await logFailure(userId, 'CREATE', 'products', error.message);
-        return { success: false, error: `Erreur lors de la création: ${error.message}` };
+        console.error('Create Error:', error);
+        return { success: false, error: error.message };
     }
 });
 
 /**
  * Update Product
  */
-export const updateProduct = secureAction(async (userId, user, productId: string, data: Partial<ProductInput>) => {
+export const updateProduct = secureAction(async (userId, user, productId: string, data: Partial<ProductFormValues>) => {
     try {
-        console.log(`📝 Update request for product ${productId} (Drizzle)`, data);
         const id = parseInt(productId);
         if (isNaN(id)) return { success: false, error: 'ID produit invalide' };
 
-        // 1. Fetch current product for version check
         const oldProduct = await db.query.products.findFirst({
             where: and(eq(products.id, id), eq(products.userId, userId))
         });
 
         if (!oldProduct) return { success: false, error: 'Produit introuvable' };
 
-        // Calculate Financials if relevant fields change
         const currentPriceVente = data.prixVente !== undefined ? Number(data.prixVente) : Number(oldProduct.prixVente);
         const currentHasTva = data.hasTva !== undefined ? data.hasTva : oldProduct.hasTva;
         const currentPriceType = (data.priceType || (oldProduct as any).priceType || 'TTC') as 'HT' | 'TTC';
-
         const financials = calculatePrices(currentPriceVente, currentPriceType, currentHasTva);
         
-        // Resolve generic fields logic
         const categoryVal = data.category || data.categorie || data.categorieId;
         const brandVal = data.brand || data.marque || data.marqueId;
 
-        // 2. Execute Update (Drizzle)
         await db.update(products)
             .set({
-                nom: data.nomProduit !== undefined ? data.nomProduit : undefined,
-                reference: data.reference !== undefined ? data.reference : undefined,
-                
-                // Sync new/old
-                category: categoryVal !== undefined ? categoryVal : undefined,
-                categorie: categoryVal !== undefined ? categoryVal : undefined,
-                brand: brandVal !== undefined ? brandVal : undefined,
-                marque: brandVal !== undefined ? brandVal : undefined,
-                productType: data.productType !== undefined ? data.productType : undefined,
-                
-                fournisseur: data.fournisseur !== undefined ? data.fournisseur : undefined,
-                modele: data.modele !== undefined ? data.modele : undefined,
-                couleur: data.couleur !== undefined ? data.couleur : undefined,
-                matiereId: data.matiereId !== undefined ? (data.matiereId ? parseInt(data.matiereId) : null) : undefined,
-                couleurId: data.couleurId !== undefined ? (data.couleurId ? parseInt(data.couleurId) : null) : undefined,
-                
+                nom: data.nomProduit,
+                reference: data.reference,
+                category: categoryVal,
+                categorie: categoryVal,
+                brand: brandVal,
+                marque: brandVal,
+                productType: data.productType as any,
+                fournisseur: data.fournisseur,
+                modele: data.modele,
+                couleur: data.couleur,
+                fournisseurId: data.fournisseurId,
+                marqueId: data.marqueId ? parseInt(data.marqueId) : (data.marqueId === null ? null : undefined),
+                numFacture: data.numFacture,
+                matiereId: data.matiereId ? parseInt(data.matiereId) : (data.matiereId === null ? null : undefined),
+                couleurId: data.couleurId ? parseInt(data.couleurId) : (data.couleurId === null ? null : undefined),
                 prixAchat: data.prixAchat !== undefined ? data.prixAchat.toString() : undefined,
-                
-                // Financials Update
                 prixVente: String(financials.ttc), 
                 hasTva: currentHasTva,
                 tvaRate: data.tvaRate !== undefined ? String(data.tvaRate) : undefined,
-                exemptionNote: data.exemptionNote !== undefined ? data.exemptionNote : undefined,
+                exemptionNote: data.exemptionNote,
                 priceType: currentPriceType,
                 salePriceHT: String(financials.ht),
                 salePriceTVA: String(financials.tva),
                 salePriceTTC: String(financials.ttc),
-
-                quantiteStock: data.quantiteStock !== undefined ? data.quantiteStock : undefined,
-                seuilAlerte: data.stockMin !== undefined ? data.stockMin : undefined,
-                description: data.description !== undefined ? data.description : undefined,
-                isActive: data.isActive !== undefined ? data.isActive : undefined,
-                isMedical: data.isMedical !== undefined ? data.isMedical : undefined,
-                isStockManaged: data.isStockManaged !== undefined ? data.isStockManaged : undefined,
-                
+                quantiteStock: data.quantiteStock,
+                seuilAlerte: data.stockMin !== undefined ? data.stockMin : undefined, // Explicit mapping
+                description: data.description,
+                details: data.details,
+                imageUrl: data.imageUrl,
+                isActive: data.isActive,
+                isMedical: data.isMedical,
+                isStockManaged: data.productType === 'verre' || data.productType === 'lens' ? false : data.isStockManaged,
                 version: sql`${products.version} + 1`,
                 updatedAt: new Date()
             })
             .where(and(eq(products.id, id), eq(products.userId, userId)));
 
-        // Audit
-        await logAudit({
-            userId,
-            entityType: 'product',
-            entityId: productId,
-            action: 'UPDATE',
-            oldValue: oldProduct,
-            newValue: data,
-            success: true
-        });
-
+        await logAudit({ userId, entityType: 'product', entityId: productId, action: 'UPDATE', oldValue: oldProduct, newValue: data, success: true });
+        revalidatePath('/dashboard/products', 'page');
+        revalidatePath(`/dashboard/products/${productId}`, 'page');
         revalidateTag('products');
-        revalidatePath('/dashboard/products');
-        revalidatePath(`/dashboard/products/${productId}`);
-        revalidatePath('/dashboard/stock');
-
-        try {
-            await redis?.del(`notifications:stock-critique:${userId}`);
-        } catch {
-            // ignore cache errors
-        }
-        
         return { success: true, message: 'Produit mis à jour' };
 
     } catch (error: any) {
-        console.error('💥 Update Product Error (Drizzle):', error);
-        await logFailure(userId, 'UPDATE', 'products', error.message, productId);
-        return { success: false, error: `Erreur lors de la mise à jour: ${error.message}` };
+        console.error('Update Error:', error);
+        return { success: false, error: error.message };
     }
 });
 
 /**
- * Update Stock (Increment/Decrement)
+ * Update Stock
  */
 export const updateStock = secureAction(async (userId, user, { productId, quantity, type, reason }: { productId: string, quantity: number, type: 'IN' | 'OUT', reason: string }) => {
-    return await measurePerformance(`updateStock-${productId}`, async () => {
-        const id = parseInt(productId);
-        if (isNaN(id)) return { success: false, error: 'ID produit invalide' };
+    const id = parseInt(productId);
+    if (isNaN(id)) return { success: false, error: 'ID produit invalide' };
 
-        try {
-            return await db.transaction(async (tx: any) => {
-                // 1. Get current stock and lock row for update
-                // Drizzle doesn't support FOR UPDATE directly in query builder easily without raw SQL or custom extensions in some versions, 
-                // but we can use `sql` within select or valid transaction isolation.
-                // For simplicity/compatibility in reversion:
-                const product = await tx.query.products.findFirst({
-                    where: and(eq(products.id, id), eq(products.userId, userId))
-                });
-                
-                if (!product) throw new Error('Produit introuvable');
-
-                const currentStock = Number(product.quantiteStock || 0);
-                const newStock = type === 'IN' ? currentStock + quantity : currentStock - quantity;
-
-                if (type === 'OUT' && newStock < 0) {
-                    throw new Error('Stock insuffisant pour cette sortie');
-                }
-
-                // 2. Update Product Stock
-                await tx.update(products)
-                    .set({ 
-                        quantiteStock: newStock, 
-                        updatedAt: new Date() 
-                    })
-                    .where(eq(products.id, id));
-
-                // 3. Record Movement
-                await tx.insert(stockMovements).values({
-                    userId,
-                    productId: id,
-                    type,
-                    quantite: quantity, // Mapped from quantity
-                    notes: reason,      // Mapped from reason
-                    // previousStock/newStock not in schema, removed
-                    createdAt: new Date()
-                });
-
-                await logSuccess(userId, 'UPDATE', 'products', `STOCK-${type}`, { productId, quantity, newStock });
-                
-                revalidatePath('/dashboard/products');
-                revalidatePath(`/dashboard/products/${productId}`);
-                revalidateTag('products');
-
-                try {
-                    await redis?.del(`notifications:stock-critique:${userId}`);
-                } catch {
-                    // ignore cache errors
-                }
-
-                return { success: true, newStock };
+    try {
+        return await db.transaction(async (tx: any) => {
+            const product = await tx.query.products.findFirst({
+                where: and(eq(products.id, id), eq(products.userId, userId))
             });
-        } catch (error: any) {
-            console.error('💥 Stock Update Error (Drizzle):', error);
-            await logFailure(userId, 'UPDATE', 'products', error.message, productId);
-            return { success: false, error: error.message };
-        }
-    }, { userId });
+            
+            if (!product) throw new Error('Produit introuvable');
+            const currentStock = Number(product.quantiteStock || 0);
+            const newStock = type === 'IN' ? currentStock + quantity : currentStock - quantity;
+            if (type === 'OUT' && newStock < 0) throw new Error('Stock insuffisant');
+
+            await tx.update(products).set({ quantiteStock: newStock, updatedAt: new Date() }).where(eq(products.id, id));
+            await tx.insert(stockMovements).values({ userId, productId: id, type, quantite: quantity, notes: reason, createdAt: new Date() });
+            
+            revalidatePath('/dashboard/products', 'page');
+            revalidateTag('products');
+            return { success: true, newStock };
+        });
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
 });
 
 /**
@@ -687,37 +592,12 @@ export const deleteProduct = secureAction(async (userId, user, productId: string
         const id = parseInt(productId);
         if (isNaN(id)) return { success: false, error: 'ID produit invalide' };
 
-        console.log(`🗑️ Deleting product ${id} for user ${userId} (Drizzle)`);
+        await db.update(products).set({ deletedAt: new Date(), version: sql`${products.version} + 1` }).where(and(eq(products.id, id), eq(products.userId, userId)));
         
-        const result = await db.update(products)
-            .set({ 
-                deletedAt: new Date(),
-                version: sql`${products.version} + 1` 
-            })
-            .where(and(eq(products.id, id), eq(products.userId, userId)))
-            .returning({ id: products.id });
-
-        if (result.length === 0) {
-            return { success: false, error: 'Produit introuvable ou déjà supprimé' };
-        }
-
-        await logSuccess(userId, 'DELETE', 'products', productId);
-        
-        revalidatePath('/dashboard/products');
-        revalidatePath('/dashboard/stock');
+        revalidatePath('/dashboard/products', 'page');
         revalidateTag('products');
-
-        try {
-            await redis?.del(`notifications:stock-critique:${userId}`);
-        } catch {
-            // ignore cache errors
-        }
-        
         return { success: true };
-
     } catch (error: any) {
-        console.error('💥 Error deleting product (Drizzle):', error);
-        await logFailure(userId, 'DELETE', 'products', error.message, productId);
         return { success: false, error: error.message };
     }
 });
@@ -729,21 +609,16 @@ export const getLowStockProducts = secureAction(async (userId, user, threshold?:
     try {
         const results = await db.select()
             .from(products)
-            .where(and(
-                eq(products.userId, userId),
-                sql`${products.deletedAt} IS NULL`,
-                // stock <= alert_threshold OR default 5 using SQL COALESCE
-                lte(products.quantiteStock, sql`COALESCE(${products.seuilAlerte}, ${threshold || 5})`)
-            ))
+            .where(
+                and(
+                    eq(products.userId, userId), 
+                    isNull(products.deletedAt),
+                    eq(products.isStockManaged, true),
+                    lte(products.quantiteStock, sql`COALESCE(${products.seuilAlerte}, ${threshold || 5})`)
+                )
+            )
             .orderBy(asc(products.quantiteStock));
-
-        const mapped = results.map((p: any) => ({
-            id: p.id.toString(),
-            name: p.nom,
-            stock: p.quantiteStock,
-            minStock: p.seuilAlerte
-        }));
-
+        const mapped = results.map((p: any) => ({ id: p.id.toString(), name: p.nom, stock: p.quantiteStock, minStock: p.seuilAlerte }));
         return { success: true, data: mapped };
     } catch (error: any) {
         return { success: false, error: error.message };
@@ -751,263 +626,111 @@ export const getLowStockProducts = secureAction(async (userId, user, threshold?:
 });
 
 /**
- * Get distinct categories from products
- */
-/**
- * Get distinct categories from products
+ * Get categories
  */
 export const getCategories = secureAction(async (userId, user) => {
     try {
-        const results = await db.selectDistinct({ category: products.categorie })
-            .from(products)
-            .where(and(
-                eq(products.userId, userId),
-                sql`${products.categorie} IS NOT NULL`,
-                sql`${products.categorie} != ''`
-            ))
-            .orderBy(asc(products.categorie));
-
-        const categories = results.map((r: any) => ({ 
-            id: r.category, 
-            name: r.category 
-        }));
-
-        return { success: true, data: categories };
+        const results = await db.selectDistinct({ category: products.categorie }).from(products).where(and(eq(products.userId, userId), isNull(products.deletedAt), sql`${products.categorie} IS NOT NULL AND ${products.categorie} != ''`)).orderBy(asc(products.categorie));
+        return { success: true, data: results.map((r: any) => ({ id: r.category, name: r.category })) };
     } catch (error: any) {
-        console.error('💥 Error fetching categories (Drizzle):', error);
-        return { success: false, error: 'Erreur récupération catégories' };
+        return { success: false, error: error.message };
     }
 });
 
 /**
- * Get distinct brands (marques) from products
+ * Get brands
  */
 export const getBrands = secureAction(async (userId, user) => {
     try {
-        const results = await db.selectDistinct({ brand: products.marque })
-            .from(products)
-            .where(and(
-                eq(products.userId, userId),
-                sql`${products.marque} IS NOT NULL`,
-                sql`${products.marque} != ''`
-            ))
-            .orderBy(asc(products.marque));
-
-        const brands = results.map((r: any) => ({ 
-            id: r.brand, 
-            name: r.brand 
-        }));
-
-        return { success: true, data: brands };
+        const results = await db.selectDistinct({ brand: products.marque }).from(products).where(and(eq(products.userId, userId), isNull(products.deletedAt), sql`${products.marque} IS NOT NULL AND ${products.marque} != ''`)).orderBy(asc(products.marque));
+        return { success: true, data: results.map((r: any) => ({ id: r.brand, name: r.brand })) };
     } catch (error: any) {
-        console.error('💥 Error fetching brands (Drizzle):', error);
-        return { success: false, error: 'Erreur récupération marques' };
+        return { success: false, error: error.message };
     }
 });
 
 /**
- * Create Bulk Products (e.g. from Invoice)
+ * Create Bulk Products
  */
 export const createBulkProducts = secureAction(async (userId, user, data: { items: ProductInput[], invoiceData?: { fournisseurId?: string, numFacture?: string, dateAchat?: Date } }) => {
-    console.log(`📦 Creating ${data.items.length} products in bulk (Drizzle)`);
-    
-    // 🛡️ CHECK QUOTAS
-    const usage = await getClientUsageStats(userId);
-    if (usage.products.count + data.items.length > usage.products.limit) {
-         return { success: false, error: `L'ajout de ${data.items.length} produits dépasserait votre limite autorisée (${usage.products.limit}).` };
-    }
-
-    const startTime = Date.now();
-
     try {
         const { invoiceData } = data;
         const supplierId = String((invoiceData as any)?.fournisseurId || 'unknown').toLowerCase().trim();
         const invoiceNum = invoiceData?.numFacture?.trim();
         const invoiceDate = invoiceData?.dateAchat || new Date();
 
-        // 1. Idempotency Check
-        if (invoiceNum) {
-            const results = await db.select().from(invoiceImports)
-                .where(and(
-                    eq(invoiceImports.userId, userId),
-                    eq(invoiceImports.supplierId, supplierId),
-                    eq(invoiceImports.invoiceNumber, invoiceNum),
-                    invoiceData?.dateAchat ? eq(invoiceImports.invoiceDate, invoiceDate) : undefined
-                ))
-                .limit(1);
-
-            if (results.length > 0) {
-                const existingImport = results[0];
-                return { 
-                    success: false, 
-                    error: 'duplicate',
-                    message: `La facture ${invoiceNum} a déjà été importée le ${new Date(existingImport.createdAt!).toLocaleDateString()}.` 
-                };
-            }
-        }
-
-        // 2. Strict Validation & Preparation
-        const seenReferences = new Set<string>();
-        const validItems = data.items.filter(item => item.nomProduit && Number(item.quantiteStock) >= 0);
-        
-        if (validItems.length === 0) {
-            return { success: false, error: "Aucun produit valide trouvé dans la liste (nom obligatoire)." };
-        }
-
-        const productsToProcess = validItems.map((item, index) => {
-             const reference = item.reference && item.reference.trim() !== '' 
-                 ? item.reference.trim() 
-                 : `REF-${Date.now()}-${index}`;
-             if (seenReferences.has(reference)) {
-                 throw new Error(`Référence en double détectée dans la liste : ${reference}`);
-             }
-             seenReferences.add(reference);
-
-             const safeNum = (val: any) => {
-                 if (val === null || val === undefined || val === '') return '0';
-                 const parsed = typeof val === 'string' ? parseFloat(val.replace(',', '.')) : val;
-                 return isNaN(parsed) ? '0' : String(parsed);
-             };
-
-             const priceInput = safeNum(item.prixVente);
-             const currentHasTva = item.hasTva !== undefined ? item.hasTva : true;
-             const currentPriceType = (item.priceType || 'TTC') as 'HT' | 'TTC';
-             
-             const financials = calculatePrices(Number(priceInput), currentPriceType, currentHasTva);
-
-             return {
-                userId,
-                nom: item.nomProduit!.trim(),
-                reference: reference,
-                categorie: item.categorie || item.categorieId || null,
-                marque: item.marque || item.marqueId || null,
-                fournisseur: supplierId,
-                modele: item.modele || null,
-                couleur: item.couleur || null,
-                prixAchat: safeNum(item.prixAchat),
-                
-                // Financials
-                prixVente: String(financials.ttc),
-                hasTva: currentHasTva,
-                priceType: currentPriceType,
-                salePriceHT: String(financials.ht),
-                salePriceTVA: String(financials.tva),
-                salePriceTTC: String(financials.ttc),
-
-                quantiteStock: Math.max(0, parseInt(String(item.quantiteStock || 0))),
-                seuilAlerte: Math.max(0, parseInt(String(item.stockMin || 0))),
-                description: item.description || (invoiceNum ? `Facture: ${invoiceNum}` : null),
-                isActive: true,
-                version: 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-                deletedAt: null,
-             };
-        });
-
-        // 3. ATOMIC PROCESS
-        let insertedCount = 0;
-        let updatedCount = 0;
-
         await db.transaction(async (tx: any) => {
-            const movementsArray: any[] = [];
-
-            for (const item of productsToProcess) {
-                const existingResults = await tx.select().from(products)
-                    .where(and(
-                        eq(products.userId, userId),
-                        eq(products.reference, item.reference)
-                    ))
-                    .limit(1);
-
-                const existing = existingResults[0];
-                let productId: number;
-
-                if (existing) {
-                    const incomingQty = Number(item.quantiteStock);
-                    await tx.update(products)
-                        .set({
-                            quantiteStock: sql`${products.quantiteStock} + ${incomingQty}`,
-                            prixAchat: item.prixAchat,
-                            updatedAt: new Date(),
-                            deletedAt: null
-                        })
-                        .where(eq(products.id, existing.id));
-                    
-                    productId = existing.id;
-                    updatedCount++;
-                } else {
-                    const [newProd] = await tx.insert(products).values(item).returning({ id: products.id });
-                    productId = newProd.id;
-                    insertedCount++;
-                }
-
-                movementsArray.push({
+            for (const item of data.items) {
+                const reference = item.reference || `REF-${Date.now()}-${Math.random()}`;
+                const financials = calculatePrices(Number(item.prixVente), item.priceType || 'TTC', item.hasTva ?? true);
+                
+                await tx.insert(products).values({
                     userId,
-                    productId,
-                    type: 'IN',
-                    quantite: item.quantiteStock,
-                    notes: `Import Facture ${invoiceNum || ''}`,
-                    createdAt: new Date()
+                    nom: item.nomProduit,
+                    reference,
+                    categorie: item.categorie || item.categorieId,
+                    category: item.categorie || item.categorieId,
+                    marque: item.marque,
+                    brand: item.marque,
+                    modele: item.modele,
+                    couleur: item.couleur,
+                    fournisseur: item.fournisseur || null,
+                    fournisseurId: (invoiceData?.fournisseurId && invoiceData.fournisseurId !== 'unknown') ? invoiceData.fournisseurId : null,
+                    marqueId: item.marqueId ? parseInt(item.marqueId) : null,
+                    numFacture: invoiceNum || null,
+                    prixAchat: String(item.prixAchat || 0),
+                    prixVente: String(financials.ttc),
+                    salePriceHT: String(financials.ht),
+                    salePriceTVA: String(financials.tva),
+                    salePriceTTC: String(financials.ttc),
+                    hasTva: item.hasTva ?? true,
+                    priceType: item.priceType || 'TTC',
+                    quantiteStock: Number(item.quantiteStock || 0),
+                    seuilAlerte: item.stockMin || 5,
+                    description: item.description || null,
+                    details: item.details || null,
+                    matiereId: item.matiereId ? parseInt(item.matiereId) : null,
+                    couleurId: item.couleurId ? parseInt(item.couleurId) : null,
+                    isActive: true,
+                    isMedical: item.isMedical || false,
+                    isStockManaged: item.productType === 'verre' || item.productType === 'lens' ? false : (item.isStockManaged !== false),
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    version: 0
                 });
             }
-
-            // ✅ BULK INSERT for movements
-            if (movementsArray.length > 0) {
-                await tx.insert(stockMovements).values(movementsArray);
-            }
-
             if (invoiceNum) {
-                await tx.insert(invoiceImports).values({
-                    userId,
-                    supplierId,
-                    invoiceNumber: invoiceNum,
-                    invoiceDate,
-                    totalItems: productsToProcess.length,
-                    status: 'completed'
-                });
+                await tx.insert(invoiceImports).values({ userId, supplierId, invoiceNumber: invoiceNum, invoiceDate, totalItems: data.items.length, status: 'completed' });
             }
         });
 
-        const duration = Date.now() - startTime;
-        
-        // 4. Log Success with Metrics
-        await logSuccess(userId, 'CREATE', 'products', `BULK-PRO`, { 
-            inserted: insertedCount,
-            updated: updatedCount,
-            invoice: invoiceNum,
-            duration: `${duration}ms`
-        });
-
-        revalidatePath('/dashboard/products');
-        revalidatePath('/dashboard/stock');
-        revalidatePath('/produits');
+        revalidatePath('/dashboard/products', 'page');
         revalidateTag('products');
-
-        return { 
-            success: true, 
-            count: productsToProcess.length, 
-            message: `${insertedCount} nouveaux et ${updatedCount} mis à jour avec succès (${duration}ms).`
-        };
-
+        return { success: true };
     } catch (error: any) {
-        const duration = Date.now() - startTime;
-        console.error(`Bulk Create Error after ${duration}ms:`, error);
-        
-        let userMessage = "Erreur système lors de l'ajout groupé.";
-        let errCode = 'unknown';
+        return { success: false, error: error.message };
+    }
+});
 
-        if (error.code === '23505') {
-            userMessage = "Cette facture ou une référence produit existe déjà.";
-            errCode = 'duplicate';
-        } else if (error.message?.includes('timeout')) {
-            userMessage = "L'opération a pris trop de temps.";
-            errCode = 'timeout';
-        } else if (error.message) {
-            userMessage = error.message;
-        }
-
-        await logFailure(userId, 'CREATE', 'products', userMessage, `BULK-PRO-${errCode}`);
-        return { success: false, error: userMessage, code: errCode };
+/**
+ * Inventory Stats
+ */
+export const getInventoryStats = secureAction(async (userId, user) => {
+    try {
+        const stats = await db.select({
+            totalProducts: sql<number>`count(*)::int`,
+            totalStockValue: sql<number>`COALESCE(sum(CAST(${products.prixAchat} AS decimal) * ${products.quantiteStock}), 0)::float`,
+            lowStockCount: sql<number>`count(*) filter (where 
+                ${products.isStockManaged} = true AND 
+                ${products.quantiteStock} <= COALESCE(${products.seuilAlerte}, 5)
+            )::int`,
+            outOfStockCount: sql<number>`count(*) filter (where 
+                ${products.isStockManaged} = true AND 
+                ${products.quantiteStock} <= 0
+            )::int`,
+        }).from(products).where(and(eq(products.userId, userId), isNull(products.deletedAt)));
+        return { success: true, data: stats[0] };
+    } catch (error: any) {
+        return { success: false, error: error.message };
     }
 });

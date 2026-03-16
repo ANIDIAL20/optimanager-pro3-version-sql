@@ -2,10 +2,12 @@ import { pgTable, serial, text, timestamp, real, index } from 'drizzle-orm/pg-co
 import { sql } from 'drizzle-orm';
 // Schema re-evaluation trigger
 
-export const expensesV2 = pgTable('expenses_v2', {
+// FIX: Check 1 (Table name) & Check 4 (Export consistency)
+// Exported as 'expenses' and points to 'expenses_v2'
+export const expenses = pgTable('expenses_v2', {
     id: serial('id').primaryKey(),
-    storeId: text('store_id').notNull(), // Link to the shop/store
-    userId: text('user_id').notNull(),   // Creator ID
+    // FIX: Check 2 (userId column) - Using 'user_id' in DB, 'userId' in Drizzle. 'store_id' is removed.
+    userId: text('user_id').notNull(),   // Primary Tenant/Creator ID
 
     // Basic Information
     title: text('title').notNull(),
@@ -33,14 +35,12 @@ export const expensesV2 = pgTable('expenses_v2', {
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull().$onUpdate(() => new Date()),
 }, (table) => ({
-    storeIdIdx: index('expenses_v2_store_id_idx').on(table.storeId),
-    userIdIdx: index('expenses_v2_user_id_idx').on(table.userId),
-    statusIdx: index('expenses_v2_status_idx').on(table.status),
-    typeIdx: index('expenses_v2_type_idx').on(table.type),
+    // FIX: Check 3 (Indexes) - Added index explicitly named 'expenses_user_id_idx' and mapped to table.userId
+    userIdIdx: index('expenses_user_id_idx').on(table.userId),
+    statusIdx: index('expenses_status_idx').on(table.status),
+    typeIdx: index('expenses_type_idx').on(table.type),
 }));
 
-export type Expense = typeof expensesV2.$inferSelect;
-export type NewExpense = typeof expensesV2.$inferInsert;
-
-export const expenses = expensesV2; // Alias for backward compatibility
-
+// FIX: Check 5 (Type exports) - Exporting standard Drizzle types mapped directly to 'expenses'
+export type Expense = typeof expenses.$inferSelect;
+export type NewExpense = typeof expenses.$inferInsert;

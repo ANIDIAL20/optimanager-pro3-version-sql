@@ -66,6 +66,7 @@ export function SupplierPaymentForm({ supplierId, onSuccess }: PaymentFormProps)
     queryKey: ['orders-for-payment', supplierId],
     queryFn: () => getOrdersForPaymentSelect(supplierId),
     enabled: !!supplierId,
+    staleTime: 30_000,
   });
 
   const form = useForm<PaymentFormValues>({

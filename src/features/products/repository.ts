@@ -2,7 +2,7 @@
 import { BaseRepository } from '@/lib/repositories/base.repository';
 import { products } from '@/db/schema';
 import { db } from '@/db';
-import { eq, and, like, or, desc, lte } from 'drizzle-orm';
+import { eq, and, like, or, desc, lte, isNull } from 'drizzle-orm';
 import { CACHE_TAGS, redis } from '@/lib/cache/redis';
 
 export type Product = typeof products.$inferSelect;
@@ -33,7 +33,7 @@ export class ProductRepository extends BaseRepository<Product, typeof products> 
     const results = await db
       .select()
       .from(products)
-      .where(and(eq(products.userId, userId), eq(products.isActive, true)))
+      .where(and(eq(products.userId, userId), isNull(products.deletedAt)))
       .orderBy(desc(products.createdAt));
 
     // 3. Set Cache (Short TTL because stock moves fast)
@@ -58,7 +58,7 @@ export class ProductRepository extends BaseRepository<Product, typeof products> 
       .where(
         and(
           eq(products.userId, userId),
-          eq(products.isActive, true),
+          isNull(products.deletedAt),
           or(
             like(products.nom, `%${query}%`),
             like(products.reference, `%${query}%`),
@@ -79,7 +79,7 @@ export class ProductRepository extends BaseRepository<Product, typeof products> 
       .where(
         and(
           eq(products.userId, userId),
-          eq(products.isActive, true),
+          isNull(products.deletedAt),
            // lte(products.quantiteStock, products.seuilAlerte)
         )
       );
@@ -92,7 +92,7 @@ export class ProductRepository extends BaseRepository<Product, typeof products> 
     const results = await db
       .selectDistinct({ category: products.categorie })
       .from(products)
-      .where(and(eq(products.userId, userId), eq(products.isActive, true)));
+      .where(and(eq(products.userId, userId), isNull(products.deletedAt)));
 
     return (results as Array<{ category: string | null }>)
       .map(r => r.category)
@@ -130,7 +130,7 @@ export class ProductRepository extends BaseRepository<Product, typeof products> 
   async deleteProduct(id: number, userId: string): Promise<void> {
     await db
       .update(products)
-      .set({ isActive: false })
+      .set({ deletedAt: new Date() })
       .where(and(eq(products.id, id), eq(products.userId, userId)));
 
     await this.invalidateCache(id);

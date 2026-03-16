@@ -227,7 +227,8 @@ export function ComptaClient({ initialMetrics, externalRange, onRangeChange }: C
                                     </linearGradient>
                                 </defs>
                                 <XAxis dataKey="date" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                                <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={v => `${v}DH`} />
+                                {/* FIX: 3 - Set domain to start from 0 */}
+                                <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={v => `${v}DH`} domain={[0, 'auto']} />
                                 <Tooltip
                                     contentStyle={{
                                         backgroundColor: 'hsl(var(--background))',

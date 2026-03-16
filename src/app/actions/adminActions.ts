@@ -567,25 +567,32 @@ export async function getClientUsageStats(uid: string) {
         return 0;
     };
 
-    const [pCount, cCount, sCount, user] = await Promise.all([
-      fetchCount('products'),
-      fetchCount('clients'),
-      fetchCount('suppliers'),
-      fetchUserLimits()
+    // Simplified Parallel fetching for performance
+    const [pCountResult, cCountResult, sCountResult, userRes] = await Promise.all([
+      db.select({ value: count() }).from(products).where(eq(products.userId, trimmedId)),
+      db.select({ value: count() }).from(clients).where(eq(clients.userId, trimmedId)),
+      db.select({ value: count() }).from(suppliers).where(eq(suppliers.userId, trimmedId)),
+      db.select({
+        maxProducts: users.maxProducts,
+        maxClients: users.maxClients,
+        maxSuppliers: users.maxSuppliers
+      }).from(users).where(eq(users.id, trimmedId)).limit(1)
     ]);
+
+    const user = userRes[0];
 
     return {
       products: { 
-        count: pCount, 
-        limit: Number(user?.maxProducts || 50) 
+        count: Number(pCountResult[0]?.value || 0), 
+        limit: Number(user?.maxProducts || 500) 
       },
       clients: { 
-        count: cCount, 
-        limit: Number(user?.maxClients || 20) 
+        count: Number(cCountResult[0]?.value || 0), 
+        limit: Number(user?.maxClients || 200) 
       },
       suppliers: { 
-        count: sCount, 
-        limit: Number(user?.maxSuppliers || 10) 
+        count: Number(sCountResult[0]?.value || 0), 
+        limit: Number(user?.maxSuppliers || 100) 
       },
     };
   } catch (error: any) {

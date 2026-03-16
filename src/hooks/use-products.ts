@@ -92,6 +92,7 @@ export function useProduct(productId: string) {
       return result.data;
     },
     enabled: !!productId,
+    staleTime: 30_000,
   });
 }
 
@@ -106,6 +107,7 @@ export function useLowStockProducts(threshold?: number) {
       if (!result.success) throw new Error(result.error);
       return result.data;
     },
+    staleTime: 30_000,
   });
 }
 

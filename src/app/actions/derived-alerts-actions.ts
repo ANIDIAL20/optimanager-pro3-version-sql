@@ -2,7 +2,7 @@
 
 import { db } from '@/db';
 import { frameReservations, lensOrders, products } from '@/db/schema';
-import { and, eq, isNull, lte, sql, desc, gte } from 'drizzle-orm';
+import { and, eq, ne, isNull, lte, sql, desc, gte, not } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { redis } from '@/lib/cache/redis';
 
@@ -33,6 +33,7 @@ export type VerrePretItem = {
   id: number;
   lensType: string;
   sellingPrice: string;
+  createdAt: Date;
   updatedAt: Date | null;
   client: {
     id: number;
@@ -50,14 +51,14 @@ export const getVerresPrets = secureAction(async (userId) => {
     const results = await db.query.lensOrders.findMany({
       where: and(
         eq(lensOrders.userId, userId),
-        eq(lensOrders.status, 'received'),
-        isNull(lensOrders.saleId)
+        eq(lensOrders.status, 'received')
       ),
       columns: {
         id: true,
         lensType: true,
         sellingPrice: true,
         updatedAt: true,
+        createdAt: true,
       },
       with: {
         client: {
@@ -71,8 +72,8 @@ export const getVerresPrets = secureAction(async (userId) => {
       orderBy: [desc(lensOrders.updatedAt)],
     });
 
-    await setCached(cacheKey, results as any);
-    return { success: true as const, data: results as any };
+    await setCached(cacheKey, results);
+    return { success: true as const, data: results as unknown as VerrePretItem[] };
   } catch (error: any) {
     return { success: false as const, error: error.message };
   }
@@ -82,6 +83,7 @@ export type CommandeEnAttenteItem = {
   id: number;
   lensType: string;
   sellingPrice: string;
+  createdAt: Date;
   updatedAt: Date | null;
   client: {
     id: number;
@@ -105,6 +107,7 @@ export const getCommandesEnAttente = secureAction(async (userId) => {
         id: true,
         lensType: true,
         sellingPrice: true,
+        createdAt: true,
         updatedAt: true,
       },
       with: {
@@ -119,19 +122,28 @@ export const getCommandesEnAttente = secureAction(async (userId) => {
       orderBy: [desc(lensOrders.updatedAt)],
     });
 
-    await setCached(cacheKey, results as any);
-    return { success: true as const, data: results as any };
+    await setCached(cacheKey, results);
+    return { success: true as const, data: results as unknown as CommandeEnAttenteItem[] };
   } catch (error: any) {
     return { success: false as const, error: error.message };
   }
 });
+
+export interface ReservationItem {
+  productId: number;
+  productName: string;
+  reference: string | null;
+  quantity: number;
+  unitPrice: number;
+}
 
 export type ReservationExpiringItem = {
   id: number;
   clientId: number;
   clientName: string;
   expiryDate: Date;
-  items: any;
+  createdAt: Date;
+  items: ReservationItem[];
   status: string;
 };
 
@@ -150,6 +162,7 @@ export const getReservationsExpiring = secureAction(async (userId) => {
         clientId: frameReservations.clientId,
         clientName: frameReservations.clientName,
         expiryDate: frameReservations.expiryDate,
+        createdAt: frameReservations.createdAt,
         items: frameReservations.items,
         status: frameReservations.status,
       })
@@ -158,14 +171,13 @@ export const getReservationsExpiring = secureAction(async (userId) => {
         and(
           eq(frameReservations.storeId, userId),
           eq(frameReservations.status, 'PENDING'),
-          gte(frameReservations.expiryDate, now),
-          lte(frameReservations.expiryDate, in7Days)
+          lte(frameReservations.expiryDate, in7Days) // Any expired or expiring in 7 days
         )
       )
       .orderBy(sql`${frameReservations.expiryDate} ASC`);
 
-    await setCached(cacheKey, results as any);
-    return { success: true as const, data: results as any };
+    await setCached(cacheKey, results);
+    return { success: true as const, data: results as unknown as ReservationExpiringItem[] };
   } catch (error: any) {
     return { success: false as const, error: error.message };
   }
@@ -196,13 +208,14 @@ export const getStockCritique = secureAction(async (userId) => {
         and(
           eq(products.userId, userId),
           sql`${products.deletedAt} IS NULL`,
+          eq(products.isStockManaged, true),
           lte(products.quantiteStock, 2)
         )
       )
       .orderBy(sql`${products.quantiteStock} ASC`);
 
-    await setCached(cacheKey, results as any);
-    return { success: true as const, data: results as any };
+    await setCached(cacheKey, results);
+    return { success: true as const, data: results as StockCritiqueItem[] };
   } catch (error: any) {
     return { success: false as const, error: error.message };
   }
@@ -236,8 +249,7 @@ export const getNotificationsCount = secureAction(async (userId) => {
         .where(
           and(
             eq(lensOrders.userId, userId),
-            eq(lensOrders.status, 'received'),
-            isNull(lensOrders.saleId)
+            eq(lensOrders.status, 'received')
           )
         ),
       db
@@ -249,7 +261,6 @@ export const getNotificationsCount = secureAction(async (userId) => {
           return and(
             eq(frameReservations.storeId, userId),
             eq(frameReservations.status, 'PENDING'),
-            gte(frameReservations.expiryDate, now),
             lte(frameReservations.expiryDate, in7Days)
           );
         }),
@@ -260,6 +271,7 @@ export const getNotificationsCount = secureAction(async (userId) => {
           and(
             eq(products.userId, userId),
             sql`${products.deletedAt} IS NULL`,
+            eq(products.isStockManaged, true),
             lte(products.quantiteStock, 2)
           )
         ),

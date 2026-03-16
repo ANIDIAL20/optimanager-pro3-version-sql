@@ -69,6 +69,7 @@ export function AccountingDashboard({
                 officialSales={officialSales}
                 horsbilanSales={horsbilanSales}
                 allSales={allSales}
+                dateRange={dateRange}
             />
         </div>
     );

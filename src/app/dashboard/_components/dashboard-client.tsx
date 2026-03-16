@@ -28,8 +28,7 @@ import {
     Wallet
 } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
-import { ExpiringReservationsWidget } from '@/features/reservations/components/expiring-reservations-widget';
-import { ReadyLensesDashboardWidget } from '@/features/lens-orders/components/ready-lenses-widget';
+// Removed unused widgets
 import { useMode } from '@/contexts/mode-context';
 import { BulkReceiveModal } from '@/components/suppliers/BulkReceiveModal';
 
@@ -102,29 +101,31 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
     React.useEffect(() => {
         if (!data) return;
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/30be8363-95ff-4f7c-bb27-635fbf08c469', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Debug-Session-Id': '146942',
-            },
-            body: JSON.stringify({
-                sessionId: '146942',
-                runId: 'pre-fix',
-                hypothesisId: 'H2',
-                location: 'src/app/dashboard/_components/dashboard-client.tsx:~104',
-                message: 'Dashboard stats received by client',
-                data: {
-                    globalRevenue: data.globalRevenue,
-                    totalExpenses: data.totalExpenses,
-                    totalPurchases: data.totalPurchases,
-                    netProfit: data.netProfit,
-                    todaySalesCount: data.todaySalesCount,
-                    totalSalesCount: data.totalSalesCount,
+        if (process.env.NODE_ENV === 'production') {
+            fetch('http://127.0.0.1:7242/ingest/30be8363-95ff-4f7c-bb27-635fbf08c469', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Debug-Session-Id': '146942',
                 },
-                timestamp: Date.now(),
-            }),
-        }).catch(() => {});
+                body: JSON.stringify({
+                    sessionId: '146942',
+                    runId: 'pre-fix',
+                    hypothesisId: 'H2',
+                    location: 'src/app/dashboard/_components/dashboard-client.tsx:~104',
+                    message: 'Dashboard stats received by client',
+                    data: {
+                        globalRevenue: data.globalRevenue,
+                        totalExpenses: data.totalExpenses,
+                        totalPurchases: data.totalPurchases,
+                        netProfit: data.netProfit,
+                        todaySalesCount: data.todaySalesCount,
+                        totalSalesCount: data.totalSalesCount,
+                    },
+                    timestamp: Date.now(),
+                }),
+            }).catch(() => {});
+        }
         // #endregion agent log
     }, [data]);
 
@@ -352,21 +353,7 @@ export default function DashboardClient({ user, usage }: DashboardClientProps) {
                 </Link>
             </div>
 
-            {/* --- ZONE 2: WIDGETS OPÉRATIONNELS (Réservations + Verres) --- */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-                {/* Expiring Reservations Column */}
-                <div className="animate-in fade-in slide-in-from-top-4 duration-500">
-                    <ExpiringReservationsWidget 
-                        reservations={data?.pendingReservations || []} 
-                        totalPending={data?.pendingReservations?.length || 0}
-                    />
-                </div>
-
-                {/* Ready Lenses Column */}
-                <div className="animate-in fade-in slide-in-from-top-4 duration-500 delay-75">
-                    <ReadyLensesDashboardWidget />
-                </div>
-            </div>
+            {/* --- ZONE 2: REMOVED --- */}
 
             {/* Middle Row: Stock + Recent Sales */}
             {!isBasicMode && (

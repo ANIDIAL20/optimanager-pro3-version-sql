@@ -5,15 +5,23 @@ import * as schemaDir from './schema/index';
 
 const schema = { ...schemaFile, ...schemaDir };
 
-// Essential for Transactions support in Node.js environment, but crashes Edge if imported statically
-if (typeof WebSocket !== 'undefined') {
-  neonConfig.webSocketConstructor = WebSocket;
-} else if (typeof process !== 'undefined' && process.release?.name === 'node') {
-  neonConfig.webSocketConstructor = require('ws');
-}
-
 // Client-side guard: do not evaluate database in browser
 const isBrowser = typeof window !== 'undefined';
+
+// Essential for Transactions support in Node.js environment, but crashes Edge if imported statically
+if (!isBrowser) {
+  if (typeof WebSocket !== 'undefined') {
+    neonConfig.webSocketConstructor = WebSocket;
+  } else if (typeof process !== 'undefined' && process.release?.name === 'node') {
+    try {
+      // Use eval('require') to prevent bundlers from capturing 'ws' in client chunks
+      neonConfig.webSocketConstructor = eval('require')('ws');
+    } catch (e) {
+      console.error('❌ [DB] Failed to load "ws" module for Neon WebSocket support:', e);
+    }
+  }
+}
+
 
 function trySetIpv4First() {
   if (isBrowser) return;
@@ -45,58 +53,21 @@ function getDatabaseUrl(): string {
   return url;
 }
 
-function createDbConnection() {
-  console.log('[DB] Creating new database connection pool...');
-  const pool = new Pool({
-    connectionString: getDatabaseUrl(),
-  });
+const globalForDb = globalThis as unknown as { pool: Pool; db: any };
 
-  return drizzle(pool, {
-    schema,
-    logger: process.env.NODE_ENV === 'development',
-  });
+const pool = globalForDb.pool ?? new Pool({
+  connectionString: process.env.DATABASE_URL!,
+});
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForDb.pool = pool;
 }
 
-// In PRODUCTION: use a singleton to avoid creating too many connections.
-// In DEVELOPMENT: use a module-level (not globalThis) singleton so that
-// Turbopack hot-reload always gets a fresh Pool instance, preventing
-// stale prepared-statement errors after schema migrations.
-declare global {
-  var __db_prod: ReturnType<typeof createDbConnection> | undefined;
+export const db = globalForDb.db ?? drizzle(pool, {
+  schema,
+  logger: process.env.NODE_ENV === 'development',
+});
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForDb.db = db;
 }
-
-// Module-level dev instance - cleared on every Turbopack full-reload
-let _devInstance: ReturnType<typeof createDbConnection> | null = null;
-
-export const db = new Proxy(
-  {},
-  {
-    get(_target, prop) {
-      console.log(`[DB Proxy] Accessing property: ${String(prop)}`);
-
-      if (isBrowser) {
-        console.error('[DB Proxy] No database instance available!');
-        return undefined;
-      }
-
-      let instance: ReturnType<typeof createDbConnection>;
-
-      if (process.env.NODE_ENV === 'production') {
-        // Production: stable singleton on globalThis
-        if (!globalThis.__db_prod) {
-          globalThis.__db_prod = createDbConnection();
-        }
-        instance = globalThis.__db_prod;
-      } else {
-        // Development: module-level singleton - fresh after each Turbopack reload
-        if (!_devInstance) {
-          _devInstance = createDbConnection();
-        }
-        instance = _devInstance;
-      }
-
-      const value = (instance as any)[prop as any];
-      return typeof value === 'function' ? value.bind(instance) : value;
-    },
-  }
-) as ReturnType<typeof createDbConnection>;

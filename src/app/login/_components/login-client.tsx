@@ -122,6 +122,7 @@ export function LoginClient() {
                 <Input
                   id="email"
                   type="email"
+                  autoComplete="email" // FIX: BUG 2 - Add autocomplete for browser compatibility & accessibility
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="votre@email.com"
@@ -141,6 +142,7 @@ export function LoginClient() {
                 <Input
                   id="password"
                   type="password"
+                  autoComplete="current-password" // FIX: BUG 2 - Add autocomplete attribute for browser compatibility & accessibility
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"

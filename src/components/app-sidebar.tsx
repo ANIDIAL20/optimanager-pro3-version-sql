@@ -61,9 +61,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         <Image
                             src="/logo-full.png"
                             alt="OptiManager Pro"
-                            width={190}
-                            height={48}
-                            className="object-contain object-left"
+                            width={160}
+                            height={40}
+                            className="w-32 h-auto object-contain object-left"
                             priority
                         />
                     </div>

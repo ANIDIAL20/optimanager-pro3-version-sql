@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import { auth } from '@/auth';
 import { getClientUsageStats } from '@/app/actions/adminActions';
-import { getProducts, getCategories } from '@/app/actions/products-actions';
+import { getProducts, getCategories, getInventoryStats } from '@/app/actions/products-actions';
 import { type ProductWithRelations } from '@/components/dashboard/produits/columns';
 import { redirect } from 'next/navigation';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -21,19 +21,27 @@ const ProductsClientView = dynamic(
  */
 async function ProductsDataWrapper({ userId }: { userId: string }) {
     // Parallel fetching for this specific block
-    const [productsResult, categoriesResult, usageStats] = await Promise.all([
+    const [productsResult, categoriesResult, usageStats, inventoryStatsResult] = await Promise.all([
         getProducts(),
         getCategories(),
-        getClientUsageStats(userId)
+        getClientUsageStats(userId),
+        getInventoryStats()
     ]);
 
     const products = productsResult.success && productsResult.data ? productsResult.data : [];
     const categories = categoriesResult.success && categoriesResult.data ? categoriesResult.data : [];
+    const inventoryStats = inventoryStatsResult.success && inventoryStatsResult.data ? inventoryStatsResult.data : {
+        totalProducts: 0,
+        totalStockValue: 0,
+        lowStockCount: 0,
+        outOfStockCount: 0
+    };
 
     return (
         <ProductsClientView 
             initialProducts={products as ProductWithRelations[]} 
             initialCategories={categories} 
+            inventoryStats={inventoryStats}
             usageStats={{
                 products: usageStats.products.count,
                 maxProducts: usageStats.products.limit

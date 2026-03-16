@@ -9,6 +9,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -70,6 +71,7 @@ interface BulkReceiveModalProps {
 
 export function BulkReceiveModal({ initialSupplierId }: BulkReceiveModalProps = {}) {
     const [open, setOpen] = React.useState(false);
+    const queryClient = useQueryClient();
     const { toast } = useToast();
     const router = useRouter();
     const [suppliers, setSuppliers] = React.useState<any[]>([]);
@@ -186,6 +188,10 @@ export function BulkReceiveModal({ initialSupplierId }: BulkReceiveModalProps = 
             } as any);
             if (res.success) {
                 toast({ title: "Succès", description: "Réception effectuée !" });
+                // 🚀 Smart Refetch: Invalidate notifications queries immediately
+                queryClient.invalidateQueries({ queryKey: ["notifications"] });
+                queryClient.invalidateQueries({ queryKey: ["notification-count"] });
+                
                 setReceivedOrders((res as any).receivedOrders || []);
                 setIsSuccess(true);
             } else {

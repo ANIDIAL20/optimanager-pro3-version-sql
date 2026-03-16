@@ -1,18 +1,10 @@
-// @ts-nocheck
 'use client';
 
 import * as React from 'react';
-import { useForm, useFieldArray, useWatch, Control, UseFormReturn } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch, Control, useFormContext } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -25,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { SubmitButton } from '@/components/ui/submit-button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Trash2, Plus, Copy, ArrowDownToLine, ArrowLeft, Package, Truck, FileText, AlertCircle, Info, Keyboard, Calendar, Receipt, PlusCircle, ChevronUp, ChevronDown } from 'lucide-react';
+import { Trash2, Plus, Copy, ArrowDownToLine, ArrowLeft, Package, Truck, FileText, AlertCircle, Info, Calendar, Receipt, PlusCircle, ChevronUp, ChevronDown } from 'lucide-react';
 import type { Brand, Material, Category, Color, Product, Supplier } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -45,11 +37,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { CreditCard, Wallet, Percent, ShieldCheck } from 'lucide-react';
+import { CreditCard, Wallet } from 'lucide-react';
 import { SpotlightCard } from '@/components/ui/spotlight-card';
-import { BreadcrumbCustom } from "@/components/ui/breadcrumb-custom";
-import { calculateFromHT, calculateFromTTC, calculatePrices, formatPrice, isCategoryVatExempt } from '@/lib/tva-helpers';
-import { useFormContext } from 'react-hook-form';
+import { calculatePrices, isCategoryVatExempt } from '@/lib/tva-helpers';
+import { BulkProductSchema, type BulkProductFormValues } from '@/lib/validations/product';
 
 const GRID_LAYOUT = "grid grid-cols-[50px_1fr_200px_300px_80px] items-center gap-4";
 
@@ -61,37 +52,6 @@ const COLUMNS = [
     { id: 'actions', label: '', align: 'center' },
 ] as const;
 
-// --- Improved Schema ---
-
-const ProductItemSchema = z.object({
-  reference: z.string().optional(),
-  nomProduit: z.string().min(1, 'Nom requis.'),
-  categorieId: z.string().min(1, 'Catégorie requise.'),
-  marqueId: z.string().optional(),
-  matiereId: z.string().optional(),
-  couleurId: z.string().optional(),
-  prixAchat: z.coerce.number().optional().default(0),
-  isAchatTTC: z.boolean().default(false).optional(),
-  prixVente: z.coerce.number().min(0, 'Prix requis.'),
-  quantiteStock: z.coerce.number().min(0, 'Qte requise.'),
-  stockMin: z.coerce.number().optional().default(5),
-  description: z.string().optional(),
-  details: z.string().optional(),
-  imageUrl: z.string().optional(),
-  // ✅ New VAT Fields
-  hasTva: z.boolean().default(true).optional(),
-  priceType: z.enum(['HT', 'TTC']).default('TTC').optional(),
-});
-
-const BulkProductSchema = z.object({
-    fournisseurId: z.string().optional(),
-    numFacture: z.string().optional(),
-    dateAchat: z.string().optional(),
-    items: z.array(ProductItemSchema).min(1, "Il faut au moins un produit.")
-});
-
-type BulkProductFormValues = z.infer<typeof BulkProductSchema>;
-
 interface ProductFormProps {
   product?: Product;
 }
@@ -100,7 +60,7 @@ export function ProductForm({ product }: ProductFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [isEditMode] = React.useState(!!product);
+  const isEditMode = !!product;
   
   const [brands, setBrands] = React.useState<Brand[]>([]);
   const [categories, setCategories] = React.useState<Category[]>([]);
@@ -110,22 +70,19 @@ export function ProductForm({ product }: ProductFormProps) {
   
   const [isCreatingSetting, setIsCreatingSetting] = React.useState(false);
 
-  // TanStack Query Mutations
-  const createMutation = useCreateProduct(); // Note: if bulk we need a bulk mutation or just use the backend action, but let's use the mutation or adapt the backend. Wait, useCreateProduct only handles single products!
-  // I need to add useCreateBulkProducts to the hooks if I want to use it for bulk.
-  const updateMutation = useUpdateProduct();
-
   const form = useForm<BulkProductFormValues>({
     resolver: zodResolver(BulkProductSchema),
-    defaultValues: {
+      defaultValues: {
           fournisseurId: '',
           numFacture: '',
           dateAchat: new Date().toISOString().split('T')[0],
           items: [{ 
               reference: '', nomProduit: '', categorieId: '', marqueId: '', 
-              matiereId: '', couleurId: '',
+              matiereId: '', couleurId: '', modele: '',
               prixAchat: 0, prixVente: 0, quantiteStock: 1, stockMin: 5,
-              imageUrl: '', description: '', details: '', isAchatTTC: false
+              imageUrl: '', description: '', details: '', isAchatTTC: false,
+              hasTva: true, priceType: 'TTC', isActive: true, 
+              isMedical: false, isStockManaged: true
           }]
       },
   });
@@ -141,20 +98,11 @@ export function ProductForm({ product }: ProductFormProps) {
   });
 
   const totals = React.useMemo(() => {
-    return watchedItems.reduce((acc, item) => {
+    return (watchedItems || []).reduce((acc, item) => {
+      if (!item) return acc;
       const gQty = Number(item.quantiteStock) || 0;
       const gPriceAchatInput = Number(item.prixAchat) || 0;
       const gIsTTC = !!item.isAchatTTC;
-      
-      // Calculate costs using robust helper
-      // If item.isAchatTTC is true, input is TTC. If false, input is HT.
-      // We assume purchase always has VAT unless specifically marked otherwise, 
-      // but current schema doesn't seem to have a specific 'purchaseHasTva' field separate from 'hasTva' (which is for sales).
-      // However, typically B2B purchases have VAT unless supplier is exempt.
-      // For now, we apply standard logic: 
-      // - If input is TTC, HT = Input / 1.2
-      // - If input is HT, TTC = Input * 1.2
-      // - Standard VAT rate applies
       
       const breakdown = calculatePrices({
         amount: gPriceAchatInput,
@@ -175,7 +123,6 @@ export function ProductForm({ product }: ProductFormProps) {
     return suppliers.find(s => s.id === sId);
   }, [form.watch('fournisseurId'), suppliers]);
 
-  // SMART HT/TTC Logic: Update items based on supplier default
   React.useEffect(() => {
       if (selectedSupplier?.defaultTaxMode && !isEditMode) {
           const mode = selectedSupplier.defaultTaxMode === 'TTC';
@@ -193,15 +140,14 @@ export function ProductForm({ product }: ProductFormProps) {
               });
           }
       }
-  }, [selectedSupplier?.id, isEditMode, form, toast]);
+  }, [selectedSupplier?.id, isEditMode, form, toast, selectedSupplier?.defaultTaxMode, selectedSupplier?.name]);
 
   const invalidLinesCount = React.useMemo(() => {
-    return watchedItems.filter(it => !it.nomProduit || !it.categorieId).length;
+    return (watchedItems || []).filter(it => !it.nomProduit || !it.categorieId).length;
   }, [watchedItems]);
 
   const hasMixedTaxes = React.useMemo(() => {
-    // Only check items that actually have VAT
-    const relevantItems = watchedItems.filter(it => it.hasTva !== false);
+    const relevantItems = (watchedItems || []).filter(it => it && it.hasTva !== false);
     return relevantItems.some(it => it.isAchatTTC) && relevantItems.some(it => !it.isAchatTTC);
   }, [watchedItems]);
 
@@ -230,18 +176,18 @@ export function ProductForm({ product }: ProductFormProps) {
 
         if (product) {
             const catId = c.find((cat: any) => cat.name === product.categorie || cat.name === (product as any).category)?.id || product.categorieId || '';
-            const brandId = b.find((br: any) => br.name === product.marque)?.id || product.marqueId || '';
+            const brandId = b.find((br: any) => br.name === product.marque || br.name === product.brand)?.id || product.marqueId || '';
             const matId = m.find((mx: any) => mx.id === product.matiereId?.toString())?.id || '';
             const colId = col.find((cx: any) => cx.id === product.couleurId?.toString())?.id || '';
-            const suppId = (product as any).fournisseurId || supp.find((s: any) => s.name === (product as any).fournisseur)?.id || '';
+            const suppId = product.fournisseurId || supp.find((s: any) => s.name === product.fournisseur)?.id || '';
 
             form.reset({
                 fournisseurId: suppId,
-                numFacture: '',
-                dateAchat: new Date().toISOString().split('T')[0],
+                numFacture: product.numFacture || '',
+                dateAchat: product.createdAt ? product.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
                 items: [{
                     reference: product.reference || '',
-                    nomProduit: product.nomProduit || (product as any).name || '',
+                    nomProduit: product.nomProduit || product.nom || '',
                     categorieId: catId,
                     marqueId: brandId,
                     matiereId: matId,
@@ -250,9 +196,16 @@ export function ProductForm({ product }: ProductFormProps) {
                     prixVente: Number(product.prixVente || 0),
                     quantiteStock: Number(product.quantiteStock || 0),
                     stockMin: Number(product.stockMin || 5),
+                    modele: product.modele || '',
                     description: product.description || '',
                     imageUrl: product.imageUrl || '',
-                    isAchatTTC: false
+                    details: product.details || '',
+                    isAchatTTC: product.priceType === 'TTC',
+                    hasTva: product.hasTva ?? true,
+                    priceType: product.priceType || 'TTC',
+                    isActive: product.isActive ?? true,
+                    isMedical: product.isMedical ?? false,
+                    isStockManaged: product.isStockManaged ?? true
                 }]
             });
         }
@@ -291,15 +244,11 @@ export function ProductForm({ product }: ProductFormProps) {
             const item = data.items[0];
             const payload = {
                 ...item,
-                stockMin: item.stockMin,
-                matiereId: item.matiereId || undefined,
-                couleurId: item.couleurId || undefined,
                 categorie: categories.find(c => c.id === item.categorieId)?.name,
                 marque: brands.find(b => b.id === item.marqueId)?.name,
                 fournisseur: suppliers.find(s => s.id === data.fournisseurId)?.name,
-                // ✅ TVA Fields
-                hasTva: item.hasTva,
-                priceType: item.priceType 
+                fournisseurId: data.fournisseurId,
+                numFacture: data.numFacture,
             };
             await updateProductAsync({ id: product.id.toString(), data: payload });
             router.push(`/produits/${product.id}`); 
@@ -308,14 +257,11 @@ export function ProductForm({ product }: ProductFormProps) {
              const items = filteredItems.map(item => ({
                  ...item,
                  reference: item.reference || '',
-                 matiereId: item.matiereId || undefined,
-                 couleurId: item.couleurId || undefined,
                  categorie: categories.find(c => c.id === item.categorieId)?.name,
                  marque: brands.find(b => b.id === item.marqueId)?.name,
                  fournisseur: suppliers.find(s => s.id === data.fournisseurId)?.name,
-                 // ✅ TVA Fields
-                 hasTva: item.hasTva,
-                 priceType: item.priceType
+                 fournisseurId: data.fournisseurId,
+                 numFacture: data.numFacture,
              }));
              await createBulkProductsAsync({ 
                  items, 
@@ -328,7 +274,6 @@ export function ProductForm({ product }: ProductFormProps) {
              router.push('/produits');
         }
     } catch (error: any) {
-        // Erreurs déjà gérées par le tooltip des hooks mais on log au besoin
         console.error(error);
     } finally {
         setIsSubmitting(false);
@@ -346,9 +291,11 @@ export function ProductForm({ product }: ProductFormProps) {
           marqueId: lastItem?.marqueId || '', 
           matiereId: lastItem?.matiereId || '', 
           couleurId: lastItem?.couleurId || '',
+          modele: '',
           prixAchat: 0, prixVente: 0, quantiteStock: 1, stockMin: 5,
           imageUrl: '', description: '', details: '', isAchatTTC: lastItem?.isAchatTTC || false,
-          hasTva: true, priceType: 'TTC'
+          hasTva: true, priceType: 'TTC', isActive: true, 
+          isMedical: false, isStockManaged: true
         });
     }
     
@@ -361,10 +308,9 @@ export function ProductForm({ product }: ProductFormProps) {
       const currentItems = form.getValues().items;
       const itemToCopy = currentItems[index];
       if (!itemToCopy) return;
-      // Copy the name as well to save time, but clear reference as it should be unique
       const newItem = { ...itemToCopy, reference: '', nomProduit: itemToCopy.nomProduit };
       insert(index + 1, newItem);
-      toast({ description: "Ligne dupliquée 👇", duration: 1500 });
+      toast({ description: "Ligne dupliquée 👌", duration: 1500 });
   };
   
   const applyToAll = (fieldName: any) => {
@@ -378,9 +324,9 @@ export function ProductForm({ product }: ProductFormProps) {
       toast({ title: "Appliqué", description: `Valeur copiée sur toutes les lignes.` });
   };
 
-  const isGlobalTTC = watchedItems[0]?.isAchatTTC || false;
+  const isGlobalTTC = watchedItems?.[0]?.isAchatTTC || false;
   const toggleGlobalTaxMode = (isTTC: boolean) => {
-    watchedItems.forEach((_, idx) => {
+    (watchedItems || []).forEach((_, idx) => {
       form.setValue(`items.${idx}.isAchatTTC`, isTTC);
     });
     toast({ 
@@ -388,7 +334,6 @@ export function ProductForm({ product }: ProductFormProps) {
         description: `Toutes les lignes ont été basculées en ${isTTC ? 'TTC' : 'HT'}.` 
     });
   };
-
 
   return (
     <TooltipProvider>
@@ -440,7 +385,6 @@ export function ProductForm({ product }: ProductFormProps) {
                     </div>
                     <div className="lg:col-span-12 xl:col-span-4">
                         <div className="h-full flex flex-col gap-4">
-                            {/* Financial Summary Cards */}
                             <div className="grid grid-cols-2 gap-4">
                                 <SpotlightCard className="p-4" spotlightColor="rgba(59, 130, 246, 0.1)">
                                     <div className="flex items-center justify-between mb-2">
@@ -473,7 +417,6 @@ export function ProductForm({ product }: ProductFormProps) {
                                 </SpotlightCard>
                             </div>
 
-                            {/* Stats & Actions */}
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col justify-between flex-1">
                                 <div className="flex items-center justify-between mb-4">
                                     <div className="flex items-center gap-6">
@@ -498,12 +441,10 @@ export function ProductForm({ product }: ProductFormProps) {
                                     <SubmitButton 
                                         isLoading={isSubmitting} 
                                         disabled={invalidLinesCount > 0}
-                                        className="flex-1 shadow-md hover:shadow-lg transition-all h-10 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700" 
+                                        className="flex-1 shadow-md hover:shadow-lg transition-all h-10 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 font-semibold" 
                                     >
-                                        <span className="flex items-center gap-2 justify-center font-semibold">
-                                            <Truck className="h-4 w-4" />
-                                            {`Valider (${totals.count})`}
-                                        </span>
+                                        <Truck className="h-4 w-4 mr-2" />
+                                        {`Valider (${totals.count})`}
                                     </SubmitButton>
                                     <Button type="button" variant="ghost" className="h-10 px-4 text-slate-500 hover:text-slate-800 font-medium" onClick={() => router.back()}>
                                         Abandonner
@@ -537,7 +478,6 @@ export function ProductForm({ product }: ProductFormProps) {
                        </div>
                     </div>
 
-                    {/* Invoice Info Panel (Collapsed by default in Edit Mode) */}
                     <div className="bg-card rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                         <InvoiceInfoPanel 
                             form={form} 
@@ -612,7 +552,6 @@ export function ProductForm({ product }: ProductFormProps) {
                                 setCategories={setCategories}
                                 setMaterials={setMaterials}
                                 setColors={setColors}
-                                isLast={index === fields.length - 1}
                             />
                         ))}
                     </TableBody>
@@ -624,7 +563,7 @@ export function ProductForm({ product }: ProductFormProps) {
                     type="button" 
                     variant="outline" 
                     onClick={() => onAddRow()}
-                    className="group relative flex items-center gap-2 px-8 py-6 bg-white hover:bg-slate-50 border-dashed border-2 border-slate-200 hover:border-primary/50 transition-all duration-300 rounded-2xl shadow-sm hover:shadow-md group"
+                    className="group relative flex items-center gap-2 px-8 py-6 bg-white hover:bg-slate-50 border-dashed border-2 border-slate-200 hover:border-primary/50 transition-all duration-300 rounded-2xl shadow-sm hover:shadow-md"
                 >
                     <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl opacity-0 group-hover:opacity-5 transition duration-300"></div>
                     <div className="bg-slate-100 group-hover:bg-primary/10 p-2 rounded-xl transition-colors">
@@ -637,7 +576,6 @@ export function ProductForm({ product }: ProductFormProps) {
                 </Button>
             </div>
         </div>
-
       </form>
     </Form>
     </TooltipProvider>
@@ -670,8 +608,6 @@ function InvoiceInfoPanel({
       </div>
       <CollapsibleContent>
           <div className="p-6 bg-slate-50/50 grid grid-cols-1 md:grid-cols-12 gap-6">
-            
-            {/* ROW 1: Supplier, Invoice, Date */}
             <div className="md:col-span-6">
                 <FormField control={form.control} name="fournisseurId" render={({ field }) => (
                     <FormItem className="space-y-2">
@@ -697,13 +633,11 @@ function InvoiceInfoPanel({
                         N° Facture
                     </FormLabel>
                     <FormControl>
-                        <div className="relative">
-                            <Input 
-                                placeholder="FACT-..." 
-                                {...field} 
-                                className="h-10 pl-3 bg-white border-slate-200 font-mono text-xs shadow-sm focus:ring-2 focus:ring-primary/20" 
-                            />
-                        </div>
+                        <Input 
+                            placeholder="FACT-..." 
+                            {...field} 
+                            className="h-10 pl-3 bg-white border-slate-200 font-mono text-xs shadow-sm focus:ring-2 focus:ring-primary/20" 
+                        />
                     </FormControl>
                     </FormItem>
                 )} />
@@ -726,7 +660,6 @@ function InvoiceInfoPanel({
                 )} />
             </div>
 
-            {/* ROW 2: Tax Mode, Spacer, Quantity & Add */}
             <div className="md:col-span-4">
                 <div className="space-y-2">
                     <span className="flex items-center gap-2 text-sm text-slate-600 font-medium">
@@ -738,13 +671,13 @@ function InvoiceInfoPanel({
                             type="button"
                             onClick={() => toggleGlobalTaxMode(false)}
                             className={cn(
-                                "flex-1 py-2 rounded-md text-xs font-bold transition-all duration-200",
+                                "flex-1 py-1.5 rounded-md text-xs font-bold transition-all duration-200",
                                 !isGlobalTTC 
                                     ? "bg-white text-slate-900 shadow-sm ring-1 ring-black/5" 
                                     : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                             )}
                         >
-                            HORS TAXE (HT)
+                            HT
                         </button>
                         <button 
                             type="button"
@@ -816,11 +749,10 @@ interface ProductRowProps {
     setCategories: any;
     setMaterials: any;
     setColors: any;
-    isLast: boolean;
 }
 
 function ProductRow({ 
-    index, control, remove, duplicate, brands, categories, materials, colors, isEditMode, onAddRow, handleQuickCreate, isCreatingSetting, setBrands, setCategories, setMaterials, setColors, isLast
+    index, control, remove, duplicate, brands, categories, materials, colors, isEditMode, onAddRow, handleQuickCreate, isCreatingSetting, setBrands, setCategories, setMaterials, setColors
 }: ProductRowProps) {
     const { setValue } = useFormContext();
     const prixAchat = useWatch({ control, name: `items.${index}.prixAchat` });
@@ -831,36 +763,35 @@ function ProductRow({
     const priceType = useWatch({ control, name: `items.${index}.priceType` });
     const hasTva = useWatch({ control, name: `items.${index}.hasTva` });
 
-    // Auto-detect VAT exemption
     React.useEffect(() => {
         if (!categorieId) return;
         const category = categories.find(c => c.id === categorieId);
         if (category) {
+            const isLens = category.name === 'Verres' || category.name === 'Lenses';
             const isExempt = isCategoryVatExempt(category.name);
-            // Only update if it differs from current to avoid loops, 
-            // but we want to ENFORCE it when category changes.
-            // Check if user manually changed it? 
-            // For now, simple logic: if category implies exemption, apply it.
-            // If category implies standard, apply it ONLY if current is not explicitly set?
-            // Safer: Just apply the rule when category changes.
             const shouldHaveTva = !isExempt;
+            
             if (hasTva !== shouldHaveTva) {
                setValue(`items.${index}.hasTva`, shouldHaveTva);
-               // Also default priceType to HT if exempt (since HT=TTC)
                if (!shouldHaveTva) {
                    setValue(`items.${index}.isAchatTTC`, false);
                    setValue(`items.${index}.priceType`, 'HT');
                }
+            }
+
+            if (isLens) {
+                setValue(`items.${index}.isStockManaged`, false);
+                setValue(`items.${index}.productType`, 'lens');
+            } else {
+                // If it was previous a lens and changed back, restore default if needed
+                // But usually we don't want to flip it back to true if user manually set it to false
+                // However, 'Verres' is a special case here.
             }
         }
     }, [categorieId, categories, setValue, index, hasTva]);
 
     const valPrixAchat = Number(prixAchat) || 0;
     const valPrixVente = Number(prixVente) || 0;
-    
-    // ✅ MARGIN CALCULATION (COMMERCIAL MARGIN)
-    // Formula: ((Vente TTC - Achat TTC) / Vente TTC) * 100
-    // We use TTC values to represent the actual commercial value including tax impact if applicable
     
     const pricesAchat = calculatePrices({
         amount: valPrixAchat,
@@ -874,19 +805,9 @@ function ProductRow({
         hasTva: hasTva !== false
     });
 
-    // Commercial Margin (Marge Commerciale) - Calculated on HT to be tax-neutral
-    const marginValue = pricesVente.ht > 0 ? ((pricesVente.ht - pricesAchat.ht) / pricesVente.ht) * 100 : 0;
-    
-    // Thresholds: Standard retail often aims for > 30-40%. 
-    // Low margin warning if below 20% (configurable)
-    const isLowMargin = marginValue < 20 && pricesVente.ttc > 0;
-    
+    const marginValue = pricesAchat.ht > 0 ? ((pricesVente.ht - pricesAchat.ht) / pricesAchat.ht) * 100 : 0;
+    const isLowMargin = marginValue < 30 && pricesVente.ttc > 0;
     const isIncomplete = !nomProduit || !categorieId;
-
-    const handleKeyDown = (e: React.KeyboardEvent) => { 
-        if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); onAddRow(); }
-        else if (e.key === 'd' && e.ctrlKey) { e.preventDefault(); duplicate(index); }
-    };
 
     return (
         <TableRow className={cn(
@@ -896,53 +817,50 @@ function ProductRow({
             isIncomplete && "bg-red-50/10 hover:bg-red-50/20",
             !isIncomplete && "hover:bg-blue-50/20"
         )}>
-            {/* Index */}
             <TableCell className="text-center text-xs font-medium text-slate-400 py-4 h-full border-r border-slate-50">
                 {String(index + 1).padStart(2, '0')}
             </TableCell>
             
-            {/* Identity & Technical - Merged Column 1 */}
             <TableCell className="py-3 px-4 h-full border-r border-slate-50">
                 <div className="flex flex-col gap-2.5">
-                    {/* Nom & Reference Row */}
                     <div className="flex items-center gap-2">
                         <FormField control={control} name={`items.${index}.nomProduit`} render={({ field }) => (
-                            <FormControl><Input placeholder="Désignation du produit (Modèle, Série...)" {...field} onKeyDown={handleKeyDown} className={cn("h-10 text-sm font-medium border-slate-200 bg-white focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all shadow-sm placeholder:text-slate-400 w-full", !nomProduit && "border-red-200 bg-red-50/30 placeholder:text-red-300")} /></FormControl>
+                            <FormControl><Input placeholder="Désignation du produit" {...field} value={field.value || ''} className={cn("h-10 text-sm font-medium border-slate-200 bg-white focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all shadow-sm placeholder:text-slate-400 w-full", !nomProduit && "border-red-200 bg-red-50/30 placeholder:text-red-300")} /></FormControl>
                         )} />
                         <FormField control={control} name={`items.${index}.reference`} render={({ field }) => (
-                            <FormControl><Input placeholder="RÉF" {...field} onKeyDown={handleKeyDown} className="h-10 w-[120px] text-xs font-mono border-slate-200 bg-white focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all shadow-sm uppercase placeholder:text-slate-400 shrink-0" /></FormControl>
+                            <FormControl><Input placeholder="RÉF" {...field} value={field.value || ''} className="h-10 w-[120px] text-xs font-mono border-slate-200 bg-white focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all shadow-sm uppercase placeholder:text-slate-400 shrink-0" /></FormControl>
                         )} />
                     </div>
 
-                    {/* Marque & Category Row */}
                     <div className="flex items-center gap-2">
                         <FormField control={control} name={`items.${index}.marqueId`} render={({ field }) => (
                             <div className="flex-1">
-                                <SearchableSelect options={brands.map(b => ({ label: b.name, value: b.id }))} value={field.value} onChange={field.onChange} placeholder="Marque..." className="h-10 text-xs font-medium border-slate-200 bg-white shadow-sm w-full" onCreateNew={(name) => handleQuickCreate('brands', name, setBrands, `items.${index}.marqueId`)} isCreating={isCreatingSetting} />
+                                <SearchableSelect options={brands.map(b => ({ label: b.name, value: b.id }))} value={field.value || ''} onChange={field.onChange} placeholder="Marque..." className="h-10 text-xs font-medium border-slate-200 bg-white shadow-sm w-full" onCreateNew={(name) => handleQuickCreate('brands', name, setBrands, `items.${index}.marqueId`)} isCreating={isCreatingSetting} />
                             </div>
+                        )} />
+                        <FormField control={control} name={`items.${index}.modele`} render={({ field }) => (
+                            <FormControl><Input placeholder="Modèle" {...field} value={field.value || ''} className="h-10 flex-1 text-xs border-slate-200 bg-white focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all shadow-sm placeholder:text-slate-400" /></FormControl>
                         )} />
                         <FormField control={control} name={`items.${index}.categorieId`} render={({ field }) => (
                            <div className="flex-1">
-                                <SearchableSelect options={categories.map(c => ({ label: c.name, value: c.id }))} value={field.value} onChange={field.onChange} placeholder="Catégorie..." className={cn("h-10 text-xs font-medium border-slate-200 bg-white shadow-sm w-full", !categorieId && "border-red-200 text-red-500")} onCreateNew={(name) => handleQuickCreate('categories', name, setCategories, `items.${index}.categorieId`)} isCreating={isCreatingSetting} />
+                                <SearchableSelect options={categories.map(c => ({ label: c.name, value: c.id }))} value={field.value || ''} onChange={field.onChange} placeholder="Catégorie..." className={cn("h-10 text-xs font-medium border-slate-200 bg-white shadow-sm w-full", !categorieId && "border-red-200 text-red-500")} onCreateNew={(name) => handleQuickCreate('categories', name, setCategories, `items.${index}.categorieId`)} isCreating={isCreatingSetting} />
                            </div>
                         )} />
                     </div>
                 </div>
             </TableCell>
 
-             {/* Technical - Column 2 */}
             <TableCell className="py-3 px-4 h-full border-r border-slate-50">
                  <div className="flex flex-col gap-2.5 h-full">
                      <FormField control={control} name={`items.${index}.matiereId`} render={({ field }) => (
-                        <SearchableSelect options={materials.map(m => ({ label: m.name, value: m.id }))} value={field.value} onChange={field.onChange} placeholder="Matière (Acétate...)" className="h-10 text-xs border-slate-200 bg-slate-50/50 hover:bg-white shadow-none focus:bg-white transition-all w-full" onCreateNew={(name) => handleQuickCreate('materials', name, setMaterials, `items.${index}.matiereId`)} isCreating={isCreatingSetting} />
+                        <SearchableSelect options={materials.map(m => ({ label: m.name, value: m.id }))} value={field.value || ''} onChange={field.onChange} placeholder="Matière" className="h-10 text-xs border-slate-200 bg-slate-50/50 hover:bg-white shadow-none focus:bg-white transition-all w-full" onCreateNew={(name) => handleQuickCreate('materials', name, setMaterials, `items.${index}.matiereId`)} isCreating={isCreatingSetting} />
                     )} />
                     <FormField control={control} name={`items.${index}.couleurId`} render={({ field }) => (
-                        <SearchableSelect options={colors.map(c => ({ label: c.name, value: c.id }))} value={field.value} onChange={field.onChange} placeholder="Couleur (Noir...)" className="h-10 text-xs border-slate-200 bg-slate-50/50 hover:bg-white shadow-none focus:bg-white transition-all w-full" onCreateNew={(name) => handleQuickCreate('colors', name, setColors, `items.${index}.couleurId`)} isCreating={isCreatingSetting} />
+                        <SearchableSelect options={colors.map(c => ({ label: c.name, value: c.id }))} value={field.value || ''} onChange={field.onChange} placeholder="Couleur" className="h-10 text-xs border-slate-200 bg-slate-50/50 hover:bg-white shadow-none focus:bg-white transition-all w-full" onCreateNew={(name) => handleQuickCreate('colors', name, setColors, `items.${index}.couleurId`)} isCreating={isCreatingSetting} />
                     )} />
                 </div>
             </TableCell>
 
-            {/* Financials - Column 3 */}
             <TableCell className="py-3 px-4 h-full border-r border-slate-50">
                 <div className="flex flex-col gap-3">
                     <div className="grid grid-cols-2 gap-2">
@@ -950,7 +868,7 @@ function ProductRow({
                             <div className="relative flex items-center">
                                 <span className="absolute left-2 top-[3px] text-[10px] font-bold text-slate-400 uppercase tracking-wider z-10 pointer-events-none">Achat</span>
                                 <FormField control={control} name={`items.${index}.prixAchat`} render={({ field }) => (
-                                    <Input type="number" step="0.01" {...field} onKeyDown={handleKeyDown} className="no-spinner h-11 pt-4 text-right pr-9 pl-2 font-mono text-sm font-bold border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-primary/10 w-full" title="Prix d'achat unitaire" />
+                                    <Input type="number" step="0.01" {...field} value={field.value ?? 0} className="no-spinner h-11 pt-4 text-right pr-9 pl-2 font-mono text-sm font-bold border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-primary/10 w-full" />
                                 )} />
                                 
                                 <div className="absolute right-1 top-[6px] w-6 h-8 z-20">
@@ -963,7 +881,7 @@ function ProductRow({
                                                         "h-full w-full rounded flex items-center justify-center transition-all border text-[10px] font-black select-none",
                                                         hasTva === false 
                                                             ? "bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed" 
-                                                            : "cursor-pointer group-hover/price:border-slate-300",
+                                                            : "cursor-pointer",
                                                         hasTva !== false && achatField.value ? "bg-blue-50 border-blue-200 text-blue-600" : (hasTva !== false ? "bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100" : "")
                                                     )}
                                                 >
@@ -971,7 +889,7 @@ function ProductRow({
                                                 </div>
                                             </TooltipTrigger>
                                             <TooltipContent className="text-[10px]">
-                                                {hasTva === false ? "Exonéré de TVA (Fixe)" : (achatField.value ? "Mode TTC : Taxe incluse" : "Mode HT : Taxe à ajouter")}
+                                                {hasTva === false ? "Exonéré de TVA" : (achatField.value ? "Mode TTC" : "Mode HT")}
                                             </TooltipContent>
                                         </Tooltip>
                                     )} />
@@ -985,7 +903,7 @@ function ProductRow({
                                                 : pricesAchat.ttc.toFixed(2)} {isAchatTTC ? 'HT' : 'TTC'}
                                         </span>
                                     ) : (
-                                         <span className="text-[9px] font-medium text-slate-300 italic">Hors Champ TVA</span>
+                                         <span className="text-[9px] font-medium text-slate-300 italic">Exonéré</span>
                                     )}
                                 </div>
                             </div>
@@ -997,7 +915,7 @@ function ProductRow({
                                         type="number" 
                                         step="0.01" 
                                         {...field} 
-                                        onKeyDown={handleKeyDown} 
+                                        value={field.value ?? 0}
                                         className={cn(
                                             "no-spinner h-11 pt-4 text-right pr-9 pl-2 font-mono font-bold text-sm border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-emerald-500/20 w-full", 
                                             isLowMargin ? "text-red-500" : "text-emerald-600"
@@ -1015,7 +933,7 @@ function ProductRow({
                                                         "h-full w-full rounded flex items-center justify-center transition-all border text-[10px] font-black select-none",
                                                         hasTva === false 
                                                             ? "bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed" 
-                                                            : "cursor-pointer group-hover/sale:border-emerald-200",
+                                                            : "cursor-pointer",
                                                         hasTva !== false && typeField.value === 'HT' 
                                                             ? "bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200" 
                                                             : (hasTva !== false ? "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100" : "")
@@ -1025,7 +943,7 @@ function ProductRow({
                                                 </div>
                                             </TooltipTrigger>
                                             <TooltipContent className="text-[10px]">
-                                                {hasTva === false ? "Exonéré de TVA (Fixe)" : (typeField.value === 'HT' ? "Prix affiché Hors Taxes" : "Prix affiché Toutes Taxes Comprises")}
+                                                {hasTva === false ? "Exonéré de TVA" : (typeField.value === 'HT' ? "Prix HT" : "Prix TTC")}
                                             </TooltipContent>
                                         </Tooltip>
                                     )} />
@@ -1040,7 +958,7 @@ function ProductRow({
                                             Eq. {priceType === 'HT' ? pricesVente.ttc.toFixed(2) : pricesVente.ht.toFixed(2)} {priceType === 'HT' ? 'TTC' : 'HT'}
                                         </span>
                                      ) : (
-                                         <span className="text-[9px] font-medium text-emerald-600/30 italic">Hors Champ TVA</span>
+                                         <span className="text-[9px] font-medium text-emerald-600/30 italic">Exonéré</span>
                                      )}
                                 </div>
                             </div>
@@ -1050,13 +968,13 @@ function ProductRow({
                         <div className="flex items-center gap-1.5 pl-1.5">
                             <span className="text-[10px] font-bold uppercase text-slate-400 shrink-0">Stock</span>
                             <FormField control={control} name={`items.${index}.quantiteStock`} render={({ field }) => (
-                                <Input type="number" {...field} onKeyDown={handleKeyDown} className="no-spinner h-8 w-full text-center font-mono text-xs font-bold border-transparent bg-white shadow-sm p-0 rounded focus:ring-0" />
+                                <Input type="number" {...field} value={field.value ?? 0} className="no-spinner h-8 w-full text-center font-mono text-xs font-bold border-transparent bg-white shadow-sm p-0 rounded focus:ring-0" />
                             )} />
                         </div>
                         <div className="flex items-center gap-1.5 border-l border-slate-200 pl-1.5">
                             <span className="text-[10px] font-bold uppercase text-slate-400 shrink-0">Min</span>
                             <FormField control={control} name={`items.${index}.stockMin`} render={({ field }) => (
-                                <Input type="number" {...field} onKeyDown={handleKeyDown} className="no-spinner h-8 w-full text-center font-mono text-xs font-bold border-transparent bg-white shadow-sm p-0 rounded focus:ring-0" />
+                                <Input type="number" {...field} value={field.value ?? 5} className="no-spinner h-8 w-full text-center font-mono text-xs font-bold border-transparent bg-white shadow-sm p-0 rounded focus:ring-0" />
                             )} />
                         </div>
                         <div className="flex justify-center border-l border-slate-200">
@@ -1068,18 +986,12 @@ function ProductRow({
                 </div>
             </TableCell>
 
-            {/* Actions */}
             <TableCell className="text-center py-4 h-full">
                 <div className="flex flex-row items-center justify-center gap-1.5 h-full">
                     {!isEditMode ? (
                         <>
-                         <Tooltip><TooltipTrigger asChild>
-                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all rounded-full" onClick={() => duplicate(index)}><Copy className="h-3.5 w-3.5" /></Button>
-                         </TooltipTrigger><TooltipContent className="text-[10px]">Copier</TooltipContent></Tooltip>
-                         
-                         <Tooltip><TooltipTrigger asChild>
-                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all rounded-full" onClick={() => remove(index)}><Trash2 className="h-3.5 w-3.5" /></Button>
-                         </TooltipTrigger><TooltipContent className="text-[10px]">Supprimer</TooltipContent></Tooltip>
+                          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all rounded-full" onClick={() => duplicate(index)}><Copy className="h-3.5 w-3.5" /></Button>
+                          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all rounded-full" onClick={() => remove(index)}><Trash2 className="h-3.5 w-3.5" /></Button>
                         </>
                     ) : ( <div className="text-[8px] font-black text-slate-300 uppercase -rotate-90">Edit</div> )}
                 </div>

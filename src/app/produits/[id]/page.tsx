@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import * as React from 'react';
@@ -99,12 +98,12 @@ export default function ProductDetailsPage() {
     const prixVente = Number(product.prixVente || product.salePrice || 0);
     const prixAchat = Number(product.prixAchat || product.purchasePrice || 0);
     const quantiteStock = product.quantiteStock ?? product.stock ?? 0;
-    const stockMin = product.stockMin || product.minStock || product.seuilAlerte || 0;
-    const brandName = product.marque || product.brand || product.marqueId || '-';
+    const stockMin = product.stockMin || product.seuilAlerte || 0;
+    const brandName = product.marqueNom || product.marque || product.brand || '-';
     const categoryName = product.categorie || product.category || product.categorieId || '-';
-    const supplierName = product.fournisseur || '-';
+    const supplierName = product.fournisseurNom || product.fournisseur || '-';
     const modelName = product.modele || '-';
-    const colorName = product.couleur || '-';
+    const colorName = product.couleurNom || product.couleur || '-';
 
     const stockStatus = quantiteStock < 3 ? 'critical' : quantiteStock < 10 ? 'low' : 'good';
 
@@ -244,6 +243,12 @@ export default function ProductDetailsPage() {
                                 <p className="text-sm font-medium text-slate-600">Modèle</p>
                                 <p className="text-lg font-semibold text-slate-900">{modelName}</p>
                             </div>
+                            {product.numFacture && (
+                                <div>
+                                    <p className="text-sm font-medium text-slate-600">N° Facture</p>
+                                    <p className="text-lg font-semibold text-slate-900">{product.numFacture}</p>
+                                </div>
+                            )}
                             <div>
                                 <p className="text-sm font-medium text-slate-600">Couleur</p>
                                 <p className="text-lg font-semibold text-slate-900">{colorName}</p>

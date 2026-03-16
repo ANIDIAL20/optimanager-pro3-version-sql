@@ -2,7 +2,7 @@
 
 import { db } from '@/db';
 import { sales, clients, products } from '@/db/schema';
-import { eq, and, desc, gte, lte, sql } from 'drizzle-orm';
+import { eq, and, desc, gte, lte, sql, gt } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { getDateRange } from '@/lib/date-utils';
 import type { SaleRow, DateRange, AccountingMetrics } from '@/types/accounting';
@@ -110,7 +110,11 @@ function mapRow(s: RawRow): SaleRow {
 }
 
 function buildWhere(userId: string, range?: DateRange) {
-    const conditions = [eq(sales.userId, userId)];
+    // FIX: BUG 1 - Filter out zero-value sales
+    const conditions = [
+        eq(sales.userId, userId),
+        gt(sql`CAST(${sales.totalTTC} AS NUMERIC)`, 0)
+    ];
     if (range) {
         conditions.push(gte(sales.createdAt, range.from));
         conditions.push(lte(sales.createdAt, range.to));
@@ -188,7 +192,10 @@ export const exportSalesData = secureAction(async (userId: string) => {
         const allSales = await db
             .select()
             .from(sales)
-            .where(eq(sales.userId, userId))
+            .where(and(
+                eq(sales.userId, userId),
+                gt(sql`CAST(${sales.totalTTC} AS NUMERIC)`, 0)
+            ))
             .orderBy(desc(sales.createdAt));
 
         const headers = ['ID', 'Date', 'Client', 'Total TTC', 'Statut', 'Paiement'];

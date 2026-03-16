@@ -64,6 +64,7 @@ export function ApplyCreditDialog({ credit, open, onOpenChange }: ApplyCreditDia
             return results.filter(o => o.remainingAmount > 0);
         },
         enabled: open,
+        staleTime: 30_000,
     });
 
     const form = useForm<z.infer<typeof formSchema>>({

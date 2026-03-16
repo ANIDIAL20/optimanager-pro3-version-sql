@@ -29,7 +29,10 @@ export function ExpenseFilters() {
 
     // Effect for debounced search
     useEffect(() => {
-        const params = new URLSearchParams(searchParams);
+        const currentSearch = searchParams.get('search') || '';
+        if (currentSearch === debouncedSearch) return;
+
+        const params = new URLSearchParams(searchParams.toString());
         if (debouncedSearch) {
             params.set('search', debouncedSearch);
         } else {

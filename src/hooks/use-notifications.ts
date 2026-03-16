@@ -1,51 +1,83 @@
-import { useState, useEffect } from 'react';
+"use client";
 
-interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  read: boolean;
-  createdAt: string;
-}
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  getRecentNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+} from "@/app/actions/persisted-notifications-actions";
 
 export function useNotifications() {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    // Simulate loading notifications
-    const loadNotifications = async () => {
-      setIsLoading(true);
-      try {
-        // For now, return empty array
-        // TODO: Integrate with actual notifications API
-        setNotifications([]);
-      } catch (error) {
-        console.error('Failed to load notifications:', error);
-      } finally {
-        setIsLoading(false);
+  const { data: response, isLoading } = useQuery({
+    queryKey: ["notifications", "recent"],
+    queryFn: () => getRecentNotifications(),
+    staleTime: 60_000, // 1 minute
+  });
+
+  const notifications = (response?.success ? response.data : []) as any[];
+
+  const { mutate: markAsRead } = useMutation({
+    mutationFn: (id: string) => markNotificationAsRead(parseInt(id)),
+    // Optimistic Update
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["notifications", "recent"] });
+      const previousResponse = queryClient.getQueryData(["notifications", "recent"]) as any;
+
+      if (previousResponse?.success) {
+        queryClient.setQueryData(["notifications", "recent"], {
+          ...previousResponse,
+          data: previousResponse.data.map((n: any) => 
+            n.id === parseInt(id) ? { ...n, isRead: true } : n
+          )
+        });
       }
-    };
 
-    loadNotifications();
-  }, []);
+      return { previousResponse };
+    },
+    onError: (err, id, context) => {
+      queryClient.setQueryData(["notifications", "recent"], context?.previousResponse);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["notification-count"] });
+    },
+  });
 
-  const markAsRead = async (id: string) => {
-    setNotifications(prev => 
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
-    );
-  };
+  const { mutate: markAllAsRead, isPending: isMarkingAll } = useMutation({
+    mutationFn: () => markAllNotificationsAsRead(),
+    // Optimistic Update
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["notifications", "recent"] });
+      const previousResponse = queryClient.getQueryData(["notifications", "recent"]) as any;
 
-  const markAllAsRead = async () => {
-    setNotifications(prev => 
-      prev.map(n => ({ ...n, read: true }))
-    );
-  };
+      if (previousResponse?.success) {
+        queryClient.setQueryData(["notifications", "recent"], {
+          ...previousResponse,
+          data: previousResponse.data.map((n: any) => ({ ...n, isRead: true }))
+        });
+      }
 
-  return {
-    notifications,
-    isLoading,
-    markAsRead,
+      return { previousResponse };
+    },
+    onError: (err, _, context) => {
+      queryClient.setQueryData(["notifications", "recent"], context?.previousResponse);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["notification-count"] });
+    },
+  });
+
+  const unreadCount = notifications.filter((n: any) => !n.isRead).length;
+
+  return { 
+    notifications, 
+    isLoading, 
+    unreadCount, 
+    markAsRead, 
     markAllAsRead,
+    isMarkingAll
   };
 }

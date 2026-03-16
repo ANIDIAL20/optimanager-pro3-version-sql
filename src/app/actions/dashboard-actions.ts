@@ -1,11 +1,13 @@
 'use server';
 
 import { db } from '@/db';
-import { sales, products, devis, frameReservations, expensesV2, supplierOrders } from '@/db/schema';
+import { sales, saleItems, products, devis, frameReservations, expenses as expensesV2, supplierOrders } from '@/db/schema';
 import { eq, gte, desc, and, lte, asc, sql, inArray, notInArray } from 'drizzle-orm';
 import { startOfMonth, endOfMonth } from 'date-fns';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure } from '@/lib/audit-log';
+
+import { getValidSaleFilter } from '@/lib/sales-filters';
 
 export interface DashboardStats {
     globalRevenue: number;       // Total invoiced this month (CA)
@@ -30,9 +32,10 @@ export interface DashboardStats {
     }>;
     pendingPaymentsCount: number;
     pendingReservations: any[]; // List of PENDING frame reservations
-    totalExpenses: number;
-    totalPurchases: number;
-    netProfit: number;
+    totalExpenses: number;       // Operational charges (rent, etc.)
+    totalPurchases: number;      // Supplier payments (investments)
+    costOfGoodsSold: number;     // COGS: sum(prix_achat * qty)
+    netProfit: number;           // Accounting Profit: Revenue - COGS - Expenses
 }
 
 /**
@@ -52,15 +55,26 @@ export const getDashboardStats = secureAction(async (userId, user) => {
         const monthEnd = endOfMonth(now);
 
         // 2. Fetch Data (Drizzle ORM) - Optimized Aggregations
-        const [revenueResults, collectedResults, todaySalesResults, qLowStock, qDevis, qReservations, qRecentSales, expensesResults, purchasesResults] = await Promise.all([
-            // Global Revenue (CA) — total invoiced this month, excl. cancelled/draft
+        const [
+            revenueResults, 
+            collectedResults, 
+            todaySalesResults, 
+            qLowStock, 
+            qDevis, 
+            qReservations, 
+            qRecentSales, 
+            expensesResults, 
+            purchasesResults,
+            cogsResults
+        ] = await Promise.all([
+            // Global Revenue (CA)
             db.select({
                 total: sql<string>`COALESCE(sum(COALESCE(total_net, total_ttc)), 0)`
             })
             .from(sales)
             .where(and(
                 eq(sales.userId, userId),
-                notInArray(sales.status, ['annule', 'brouillon']),
+                getValidSaleFilter(),
                 gte(sales.date, monthStart),
                 lte(sales.date, monthEnd)
             )),
@@ -72,16 +86,17 @@ export const getDashboardStats = secureAction(async (userId, user) => {
             .from(sales)
             .where(and(
                 eq(sales.userId, userId),
-                notInArray(sales.status, ['annule', 'brouillon']),
+                getValidSaleFilter(),
                 gte(sales.date, monthStart),
                 lte(sales.date, monthEnd)
             )),
             
-            // Today's Sales Count
+            // Today's Sales Count (EXCLUDING cancelled/drafts)
             db.select({ 
                 count: sql<number>`count(*)` 
             }).from(sales).where(and(
                 eq(sales.userId, userId),
+                getValidSaleFilter(),
                 sql`date >= ${startOfDay} AND date <= ${endOfDay}`
             )),
 
@@ -98,7 +113,6 @@ export const getDashboardStats = secureAction(async (userId, user) => {
             // Recent Devis
             db.select().from(devis).where(eq(devis.userId, userId)).orderBy(desc(devis.createdAt)).limit(5),
 
-            // Pending Reservations
             // Pending Reservations - with Error Fallback
             db.select().from(frameReservations).where(and(
                 eq(frameReservations.storeId, userId),
@@ -114,19 +128,19 @@ export const getDashboardStats = secureAction(async (userId, user) => {
                 .orderBy(desc(sales.createdAt))
                 .limit(5),
 
-            // Total Expenses (paid expenses only, current month, use paymentDate or fallback to createdAt)
+            // Total Expenses (paid expenses only, current month)
             db.select({
                 total: sql<string>`COALESCE(sum(amount), 0)`
             })
             .from(expensesV2)
             .where(and(
-                eq(expensesV2.storeId, userId),
+                eq(expensesV2.userId, userId),
                 eq(expensesV2.status, 'paid'),
                 gte(sql`COALESCE(${expensesV2.paymentDate}, ${expensesV2.createdAt})`, monthStart),
                 lte(sql`COALESCE(${expensesV2.paymentDate}, ${expensesV2.createdAt})`, monthEnd)
             )),
 
-            // Total Purchases (supplier orders, paid or partial, current month by orderDate)
+            // Total Purchases (supplier orders)
             db.select({
                 total: sql<string>`COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN montant_total WHEN payment_status = 'partial' THEN amount_paid ELSE 0 END), 0)`
             })
@@ -138,6 +152,20 @@ export const getDashboardStats = secureAction(async (userId, user) => {
                 lte(supplierOrders.orderDate, monthEnd),
                 sql`${supplierOrders.deletedAt} IS NULL`
             )),
+
+            // COGS (Cost of Goods Sold)
+            db.select({
+                total: sql<string>`COALESCE(SUM(CAST(${products.prixAchat} AS NUMERIC) * ${saleItems.qty}), 0)`
+            })
+            .from(saleItems)
+            .innerJoin(sales, eq(saleItems.saleId, sales.id))
+            .innerJoin(products, eq(saleItems.productId, products.id))
+            .where(and(
+                eq(sales.userId, userId),
+                getValidSaleFilter(),
+                gte(sales.date, monthStart),
+                lte(sales.date, monthEnd)
+            )),
         ]);
 
         const globalRevenue = parseFloat(revenueResults[0]?.total || '0');
@@ -145,25 +173,30 @@ export const getDashboardStats = secureAction(async (userId, user) => {
         const todaySalesCount = Number(todaySalesResults[0]?.count || 0);
         const totalExpenses = parseFloat(expensesResults[0]?.total || '0');
         const totalPurchases = parseFloat(purchasesResults[0]?.total || '0');
-        const netProfit = totalCollected - totalExpenses - totalPurchases;
+        const costOfGoodsSold = parseFloat(cogsResults[0]?.total || '0');
+        
+        // Accounting Profit: Revenue - COGS - Expenses
+        const netProfit = globalRevenue - costOfGoodsSold - totalExpenses;
         
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/30be8363-95ff-4f7c-bb27-635fbf08c469', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Debug-Session-Id': '146942',
-            },
-            body: JSON.stringify({
-                sessionId: '146942',
-                runId: 'pre-fix',
-                hypothesisId: 'H1',
-                location: 'src/app/actions/dashboard-actions.ts:106',
-                message: 'Monthly net profit components',
-                data: { globalRevenue, totalExpenses, totalPurchases, netProfit, monthStart, monthEnd },
-                timestamp: Date.now(),
-            }),
-        }).catch(() => {});
+        if (process.env.NODE_ENV === 'production') {
+            fetch('http://127.0.0.1:7242/ingest/30be8363-95ff-4f7c-bb27-635fbf08c469', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Debug-Session-Id': '146942',
+                },
+                body: JSON.stringify({
+                    sessionId: '146942',
+                    runId: 'pre-fix',
+                    hypothesisId: 'H1',
+                    location: 'src/app/actions/dashboard-actions.ts:106',
+                    message: 'Monthly net profit components',
+                    data: { globalRevenue, totalExpenses, totalPurchases, netProfit, monthStart, monthEnd },
+                    timestamp: Date.now(),
+                }),
+            }).catch(() => {});
+        }
         // #endregion agent log
         
         // Total count (Quickly count without fetching)
@@ -195,7 +228,7 @@ export const getDashboardStats = secureAction(async (userId, user) => {
                 type: 'sale' as const,
                 description: s.clientName || 'Client Inconnu',
                 amount: parseFloat(s.totalTTC || '0'),
-                date: s.createdAt ? (typeof s.createdAt === 'string' ? s.createdAt : s.createdAt.toISOString()) : new Date().toISOString(),
+                date: s.createdAt ? new Date(s.createdAt).toISOString() : new Date().toISOString(),
                 status: reste > 0 ? 'Impayé' : 'Payé',
                 resteAPayer: reste
             };
@@ -206,7 +239,7 @@ export const getDashboardStats = secureAction(async (userId, user) => {
             type: 'devis' as const,
             description: `Devis: ${d.clientName}`,
             amount: parseFloat(d.totalTTC || '0'),
-            date: d.createdAt ? (typeof d.createdAt === 'string' ? d.createdAt : d.createdAt.toISOString()) : new Date().toISOString(),
+            date: d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString(),
             status: d.status || 'EN_ATTENTE',
         }));
 
@@ -226,6 +259,7 @@ export const getDashboardStats = secureAction(async (userId, user) => {
             pendingReservations: qReservations as any || [],
             totalExpenses,
             totalPurchases,
+            costOfGoodsSold,
             netProfit
         };
 

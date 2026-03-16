@@ -1,6 +1,7 @@
 import { pgTable, serial, text, timestamp, boolean, decimal, integer, json, jsonb, primaryKey, uuid, index, real, uniqueIndex } from 'drizzle-orm/pg-core';
 import type { AdapterAccount } from "next-auth/adapters";
 import { relations, sql } from 'drizzle-orm';
+import { suppliers } from './suppliers.schema';
 // ========================================
 // 2. PRODUCTS TABLE
 // ========================================
@@ -21,6 +22,9 @@ export const products = pgTable('products', {
   matiereId: integer('matiere_id').references(() => materials.id),
   couleurId: integer('couleur_id').references(() => colors.id),
   fournisseur: text('fournisseur'),
+  marqueId: integer('marque_id').references(() => brands.id),
+  fournisseurId: uuid('fournisseur_id').references(() => suppliers.id, { onDelete: 'set null' }),
+  numFacture: text('num_facture'),
 
   // Pricing
   prixAchat: decimal('prix_achat', { precision: 10, scale: 2 }),
@@ -60,11 +64,13 @@ export const products = pgTable('products', {
   tvaRate: decimal('tva_rate', { precision: 5, scale: 2 }).default('20.00'),
   isMedical: boolean('is_medical').default(false),
   isStockManaged: boolean('is_stock_managed').default(true),
+  imageUrl: text('image_url'),
 }, (table) => ({
   userIdIdx: index('products_user_id_idx').on(table.userId),
   referenceIdx: index('products_reference_idx').on(table.reference),
   nomIdx: index('products_nom_idx').on(table.nom),
   idx_products_user_marque: index('idx_products_user_marque').on(table.userId, table.marque), // Legacy ID index
+  fournisseurIdIdx: index('products_fournisseur_id_idx').on(table.fournisseurId),
   searchIdx: index('products_search_idx').on(table.marque, table.fournisseur),
 
   // 🆕 Optimizations

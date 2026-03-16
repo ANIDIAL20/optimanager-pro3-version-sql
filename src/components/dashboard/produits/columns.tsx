@@ -76,11 +76,9 @@ export const columns: ColumnDef<ProductWithRelations>[] = [
         header: "Marque",
         cell: ({ row }) => {
             const product = row.original;
-            // Show populated marque if available, otherwise show marqueId or "-"
-            const displayValue = product.marque || product.marqueId || "-";
             return (
                 <div className="font-medium text-slate-700">
-                    {displayValue}
+                    {product.marqueNom || "-"}
                 </div>
             );
         },
@@ -159,10 +157,10 @@ export const columns: ColumnDef<ProductWithRelations>[] = [
             );
         },
         cell: ({ row }) => {
-            const price = row.getValue("prixVente") as number;
+            const price = Number(row.getValue("prixVente") || 0);
             return (
                 <div className="font-semibold text-slate-900">
-                    {price ? `${price.toFixed(2)} MAD` : "-"}
+                    {`${price.toFixed(2)} MAD`}
                 </div>
             );
         },

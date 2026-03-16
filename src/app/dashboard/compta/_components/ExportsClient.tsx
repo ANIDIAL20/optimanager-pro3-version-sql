@@ -15,6 +15,8 @@ interface ExportsClientProps {
     officialSales: SaleRow[];
     horsbilanSales: SaleRow[];
     allSales: SaleRow[];
+    // FIX: 2 - Added dateRange to props to dynamically generate CSV filenames
+    dateRange?: string;
 }
 
 const safeNum = (v: number | undefined | null) => Number(v) || 0;
@@ -55,24 +57,40 @@ function StatusBadge({ status, isPaid }: { status: string; isPaid: boolean }) {
 
 // ─── Tab: Comptabilité (Official) ────────────────────────────────────────────
 
-function TabComptabilite({ sales }: { sales: SaleRow[] }) {
+// FIX: 2 - Pass range string to determine dynamic filename
+function TabComptabilite({ sales, range = 'ce-mois' }: { sales: SaleRow[]; range?: string }) {
     const handleExport = () => {
         const headers = ['N°Facture', 'Date', 'Client', 'MontantHT', 'TVA20', 'MontantTTC', 'ModeReglement'];
         const rows = sales.map(s => {
             const ttc = safeNum(s.totalTTC);
             const ht = ttc / 1.20;
             const tva = ttc - ht;
+            
+            // FIX: BUG 2 - Sanitize sale number
+            const saleNumCsv = s.saleNumber?.startsWith('SALE-') 
+                ? String(s.id).slice(0, 8) 
+                : (s.saleNumber || String(s.id));
+                
             return [
-                s.saleNumber || String(s.id),
+                saleNumCsv,
                 s.date,
                 `"${s.clientName.replace(/"/g, '""')}"`,
                 ht.toFixed(2),
                 tva.toFixed(2),
                 ttc.toFixed(2),
-                s.paymentMethod || 'Non spécifié',
+                // FIX: BUG 3 - Neutral dash
+                s.paymentMethod || '—',
             ].join(';');
         });
-        downloadCsv([headers.join(';'), ...rows].join('\n'), `comptabilite-${getMonthYear()}.csv`);
+        
+        // FIX: 2 - Use dynamic range for filename
+        const filenameRange = range === 'today' ? format(new Date(), 'dd-MM-yyyy') : 
+                              range === 'yesterday' ? format(new Date(Date.now() - 86400000), 'dd-MM-yyyy') : 
+                              range === 'thisYear' ? format(new Date(), 'yyyy') : 
+                              range === 'lastMonth' ? format(new Date(new Date().setMonth(new Date().getMonth() - 1)), 'MM-yyyy') : 
+                              range.includes('_') ? range : getMonthYear();
+        
+        downloadCsv([headers.join(';'), ...rows].join('\n'), `comptabilite-${filenameRange}.csv`);
     };
 
     const totalTTC = sales.reduce((sum, s) => sum + safeNum(s.totalTTC), 0);
@@ -131,15 +149,24 @@ function TabComptabilite({ sales }: { sales: SaleRow[] }) {
                             const ht = ttc / 1.20;
                             const tva = ttc - ht;
                             const isPaid = safeNum(s.resteAPayer) <= 0.01;
+                            
+                            // FIX: BUG 2 - UI format
+                            const displayNumber = /^\d{4}-\d{4,}$/.test(s.saleNumber ?? '')
+                                ? s.saleNumber
+                                : `#${String(s.id).slice(0, 8)}`;
+                                
                             return (
                                 <tr key={s.id} className="border-b hover:bg-slate-50/50 transition-colors">
-                                    <td className="px-4 py-3 font-mono text-slate-800">{s.saleNumber || String(s.id).slice(0, 8)}</td>
+                                    <td className="px-4 py-3 font-mono text-slate-800">{displayNumber}</td>
                                     <td className="px-4 py-3 text-slate-600">{s.date}</td>
                                     <td className="px-4 py-3 font-medium text-slate-900 max-w-[150px] truncate">{s.clientName}</td>
                                     <td className="px-4 py-3 text-right text-slate-700">{fmt(ht)}</td>
                                     <td className="px-4 py-3 text-right text-blue-600 font-medium">{fmt(tva)}</td>
                                     <td className="px-4 py-3 text-right font-bold text-slate-900">{fmt(ttc)}</td>
-                                    <td className="px-4 py-3 text-center text-xs text-slate-500">{s.paymentMethod || '—'}</td>
+                                    <td className="px-4 py-3 text-center text-xs text-slate-500">
+                                        {/* FIX: BUG 3 - UI dash */}
+                                        {s.paymentMethod || <span className="text-slate-300">—</span>}
+                                    </td>
                                     <td className="px-4 py-3 text-center">
                                         <StatusBadge status={s.status} isPaid={isPaid} />
                                     </td>
@@ -155,19 +182,35 @@ function TabComptabilite({ sales }: { sales: SaleRow[] }) {
 
 // ─── Tab: Hors-Bilan ─────────────────────────────────────────────────────────
 
-function TabHorsBilan({ sales }: { sales: SaleRow[] }) {
+// FIX: 2 - Pass range string to determine dynamic filename
+function TabHorsBilan({ sales, range = 'ce-mois' }: { sales: SaleRow[]; range?: string }) {
     const handleExport = () => {
         const headers = ['N°', 'Date', 'Client', 'Total', 'Payé', 'Reste', 'Statut'];
-        const rows = sales.map(s => [
-            s.saleNumber || s.id,
-            s.date,
-            `"${s.clientName.replace(/"/g, '""')}"`,
-            safeNum(s.totalTTC).toFixed(2),
-            safeNum(s.totalPaye).toFixed(2),
-            safeNum(s.resteAPayer).toFixed(2),
-            s.status || '—',
-        ].join(';'));
-        downloadCsv([headers.join(';'), ...rows].join('\n'), `hors-bilan-${getMonthYear()}.csv`);
+        const rows = sales.map(s => {
+            // FIX: BUG 2 - Sanitize sale number
+            const saleNumCsv = s.saleNumber?.startsWith('SALE-') 
+                ? String(s.id).slice(0, 8) 
+                : (s.saleNumber || String(s.id));
+                
+            return [
+                saleNumCsv,
+                s.date,
+                `"${s.clientName.replace(/"/g, '""')}"`,
+                safeNum(s.totalTTC).toFixed(2),
+                safeNum(s.totalPaye).toFixed(2),
+                safeNum(s.resteAPayer).toFixed(2),
+                s.status || '—',
+            ].join(';');
+        });
+        
+        // FIX: 2 - Use dynamic range for filename
+        const filenameRange = range === 'today' ? format(new Date(), 'dd-MM-yyyy') : 
+                              range === 'yesterday' ? format(new Date(Date.now() - 86400000), 'dd-MM-yyyy') : 
+                              range === 'thisYear' ? format(new Date(), 'yyyy') : 
+                              range === 'lastMonth' ? format(new Date(new Date().setMonth(new Date().getMonth() - 1)), 'MM-yyyy') : 
+                              range.includes('_') ? range : getMonthYear();
+                              
+        downloadCsv([headers.join(';'), ...rows].join('\n'), `hors-bilan-${filenameRange}.csv`);
     };
 
     const totalTTC = sales.reduce((sum, s) => sum + safeNum(s.totalTTC), 0);
@@ -210,9 +253,15 @@ function TabHorsBilan({ sales }: { sales: SaleRow[] }) {
                             </tr>
                         ) : sales.map(s => {
                             const isPaid = safeNum(s.resteAPayer) <= 0.01;
+                            
+                            // FIX: BUG 2 - UI format
+                            const displayNumber = /^\d{4}-\d{4,}$/.test(s.saleNumber ?? '')
+                                ? s.saleNumber
+                                : `#${String(s.id).slice(0, 8)}`;
+                                
                             return (
                                 <tr key={s.id} className="border-b hover:bg-orange-50/30 transition-colors">
-                                    <td className="px-4 py-3 font-mono text-slate-700">{s.saleNumber || String(s.id).slice(0, 8)}</td>
+                                    <td className="px-4 py-3 font-mono text-slate-700">{displayNumber}</td>
                                     <td className="px-4 py-3 text-slate-600">{s.date}</td>
                                     <td className="px-4 py-3 font-medium text-slate-900 max-w-[150px] truncate">{s.clientName}</td>
                                     <td className="px-4 py-3 text-right font-bold text-slate-900">{fmt(safeNum(s.totalTTC))}</td>
@@ -233,18 +282,34 @@ function TabHorsBilan({ sales }: { sales: SaleRow[] }) {
 
 // ─── Tab: Toutes ─────────────────────────────────────────────────────────────
 
-function TabToutes({ sales }: { sales: SaleRow[] }) {
+// FIX: 2 - Pass range string to determine dynamic filename
+function TabToutes({ sales, range = 'ce-mois' }: { sales: SaleRow[]; range?: string }) {
     const handleExport = () => {
         const headers = ['N°', 'Date', 'Client', 'Total', 'Type', 'Statut'];
-        const rows = sales.map(s => [
-            s.saleNumber || s.id,
-            s.date,
-            `"${s.clientName.replace(/"/g, '""')}"`,
-            safeNum(s.totalTTC).toFixed(2),
-            s.isOfficialInvoice ? 'Officielle' : 'Hors-Bilan',
-            s.status || '—',
-        ].join(';'));
-        downloadCsv([headers.join(';'), ...rows].join('\n'), `toutes-ventes-${getMonthYear()}.csv`);
+        const rows = sales.map(s => {
+            // FIX: BUG 2 - Sanitize sale number
+            const saleNumCsv = s.saleNumber?.startsWith('SALE-') 
+                ? String(s.id).slice(0, 8) 
+                : (s.saleNumber || String(s.id));
+                
+            return [
+                saleNumCsv,
+                s.date,
+                `"${s.clientName.replace(/"/g, '""')}"`,
+                safeNum(s.totalTTC).toFixed(2),
+                s.isOfficialInvoice ? 'Officielle' : 'Hors-Bilan',
+                s.status || '—',
+            ].join(';');
+        });
+        
+        // FIX: 2 - Use dynamic range for filename
+        const filenameRange = range === 'today' ? format(new Date(), 'dd-MM-yyyy') : 
+                              range === 'yesterday' ? format(new Date(Date.now() - 86400000), 'dd-MM-yyyy') : 
+                              range === 'thisYear' ? format(new Date(), 'yyyy') : 
+                              range === 'lastMonth' ? format(new Date(new Date().setMonth(new Date().getMonth() - 1)), 'MM-yyyy') : 
+                              range.includes('_') ? range : getMonthYear();
+                              
+        downloadCsv([headers.join(';'), ...rows].join('\n'), `toutes-ventes-${filenameRange}.csv`);
     };
 
     return (
@@ -278,9 +343,15 @@ function TabToutes({ sales }: { sales: SaleRow[] }) {
                             </tr>
                         ) : sales.map(s => {
                             const isPaid = safeNum(s.resteAPayer) <= 0.01;
+                            
+                            // FIX: BUG 2 - UI format
+                            const displayNumber = /^\d{4}-\d{4,}$/.test(s.saleNumber ?? '')
+                                ? s.saleNumber
+                                : `#${String(s.id).slice(0, 8)}`;
+                                
                             return (
                                 <tr key={s.id} className="border-b hover:bg-slate-50/50 transition-colors">
-                                    <td className="px-4 py-3 font-mono text-slate-700">{s.saleNumber || String(s.id).slice(0, 8)}</td>
+                                    <td className="px-4 py-3 font-mono text-slate-700">{displayNumber}</td>
                                     <td className="px-4 py-3 text-slate-600">{s.date}</td>
                                     <td className="px-4 py-3 font-medium text-slate-900 max-w-[150px] truncate">{s.clientName}</td>
                                     <td className="px-4 py-3 text-right font-bold text-slate-900">{fmt(safeNum(s.totalTTC))}</td>
@@ -313,7 +384,7 @@ function TabToutes({ sales }: { sales: SaleRow[] }) {
 
 // ─── Main Export ──────────────────────────────────────────────────────────────
 
-export function ExportsClient({ officialSales, horsbilanSales, allSales }: ExportsClientProps) {
+export function ExportsClient({ officialSales, horsbilanSales, allSales, dateRange }: ExportsClientProps) {
     return (
         <Card className="rounded-2xl shadow-sm border-slate-200">
             <CardHeader className="border-b pb-4">
@@ -344,13 +415,14 @@ export function ExportsClient({ officialSales, horsbilanSales, allSales }: Expor
                     </TabsList>
 
                     <TabsContent value="comptabilite">
-                        <TabComptabilite sales={officialSales} />
+                        {/* FIX: 2 - Passing dateRange down */}
+                        <TabComptabilite sales={officialSales} range={dateRange} />
                     </TabsContent>
                     <TabsContent value="hors-bilan">
-                        <TabHorsBilan sales={horsbilanSales} />
+                        <TabHorsBilan sales={horsbilanSales} range={dateRange} />
                     </TabsContent>
                     <TabsContent value="toutes">
-                        <TabToutes sales={allSales} />
+                        <TabToutes sales={allSales} range={dateRange} />
                     </TabsContent>
                 </Tabs>
             </CardContent>

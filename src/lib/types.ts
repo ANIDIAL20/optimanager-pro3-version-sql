@@ -20,12 +20,34 @@ export interface Product {
   imageHint?: string;
   description?: string;
   categorie?: string; // Added for categorization
-  nom?: string; // Legacy alias
+  nom?: string; // Nom (Legacy alias)
   category?: string; // Legacy alias
   marque?: string;
   modele?: string;
   couleur?: string;
   fournisseur?: string;
+  fournisseurId?: string;
+  numFacture?: string;
+  details?: string;
+  hasTva?: boolean;
+  priceType?: 'HT' | 'TTC';
+  tvaRate?: number;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  seuilAlerte?: number;
+  brand?: string;
+  marqueNom?: string;
+  fournisseurNom?: string;
+  isMedical?: boolean;
+  isStockManaged?: boolean;
+  couleurNom?: string;
+  // Legacy aliases
+  name?: string;
+  salePrice?: number;
+  purchasePrice?: number;
+  stock?: number;
+  minStock?: number;
 }
 
 

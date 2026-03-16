@@ -28,9 +28,20 @@ interface ProductsClientViewProps {
     initialProducts: ProductWithRelations[];
     initialCategories: { id: string, name: string }[];
     usageStats: { products: number, maxProducts: number };
+    inventoryStats: {
+        totalProducts: number;
+        totalStockValue: number;
+        lowStockCount: number;
+        outOfStockCount: number;
+    };
 }
 
-export function ProductsClientView({ initialProducts, initialCategories, usageStats }: ProductsClientViewProps) {
+export function ProductsClientView({ 
+  initialProducts, 
+  initialCategories, 
+  usageStats,
+  inventoryStats 
+}: ProductsClientViewProps) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
   const [categoryFilter, setCategoryFilter] = React.useState<string>('all');
@@ -77,16 +88,15 @@ export function ProductsClientView({ initialProducts, initialCategories, usageSt
 
   const filteredProducts = optimisticProducts;
 
-  // Stats - NOTE: we are displaying stats for the CURRENT page + global total, since we don't fetch all.
-  // Ideally stats should be passed from server independently if we want global lowStock counts,
-  // but for now we'll do our best with meta.
+  // Stats - Using server-side global statistics
   const stats = React.useMemo(() => {
     return {
-      total: meta?.total || filteredProducts.length,
-      lowStock: filteredProducts.filter((p: any) => p.quantiteStock < (p.stockMin || 5)).length,
-      totalValue: filteredProducts.reduce((acc: number, p: any) => acc + (p.prixVente * p.quantiteStock), 0),
+      total: inventoryStats.totalProducts,
+      lowStock: inventoryStats.lowStockCount,
+      totalValue: inventoryStats.totalStockValue,
+      outOfStock: inventoryStats.outOfStockCount
     };
-  }, [filteredProducts, meta?.total]);
+  }, [inventoryStats]);
 
   return (
     <div className="space-y-6 p-6">
