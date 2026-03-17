@@ -2,7 +2,7 @@
 
 
 
-import { db } from '@/db';
+import { dbWithTransactions,  db  } from '@/db';
 import { 
     lensOrders, 
     clients, 
@@ -267,7 +267,7 @@ export const createLensOrder = secureAction(async (userId, user, rawInput: LensO
     if (isNaN(input.sellingPrice)) input.sellingPrice = 0;
     if (isNaN(input.estimatedBuyingPrice)) input.estimatedBuyingPrice = 0;
 
-    const result = await db.transaction(async (tx: any) => {
+    const result = await dbWithTransactions.transaction(async (tx: any) => {
         const clientExists = await tx.query.clients.findFirst({
             where: and(eq(clients.id, input.clientId), eq(clients.userId, userId)),
             columns: { id: true, fullName: true }
@@ -581,7 +581,7 @@ export const receiveLensOrder = secureAction(async (userId, user, orderId: strin
     const orderIdNum = parseInt(orderId);
 
     // 1. Transaction Wrapper for Atomicity
-    const result = await db.transaction(async (tx: any) => {
+    const result = await dbWithTransactions.transaction(async (tx: any) => {
         // 1.1 Fetch current order within transaction to ensure data integrity
         const existingOrder = await tx.query.lensOrders.findFirst({
             where: and(eq(lensOrders.id, orderIdNum), eq(lensOrders.userId, userId)),
@@ -1017,7 +1017,7 @@ export const bulkReceiveLensOrders_OLD = secureAction(async (userId, user, param
 
         const now = new Date();
 
-        const result = await db.transaction(async (tx) => {
+        const result = await dbWithTransactions.transaction(async (tx) => {
             // 1. Fetch and validate all orders within transaction
             const ordersToReceive = await tx.query.lensOrders.findMany({
                 where: and(
@@ -1245,7 +1245,7 @@ export const bulkReceiveLensOrders = secureAction(async (userId, user, data: { s
 
     let receivedOrdersToReturn: any[] = [];
 
-    await db.transaction(async (tx: any) => {
+    await dbWithTransactions.transaction(async (tx: any) => {
         // A. Fetch original orders to get pricing and client info
         const ordersToReceive = await tx.query.lensOrders.findMany({
             where: and(

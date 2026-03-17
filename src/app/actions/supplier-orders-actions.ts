@@ -8,7 +8,7 @@
 
 
 
-import { db } from '@/db';
+import { dbWithTransactions,  db  } from '@/db';
 import { supplierOrders, suppliers, supplierPayments, supplierOrderPayments, products, stockMovements, supplierOrderItems, reminders, supplierCreditAllocations, supplierCredits } from '@/db/schema';
 import { eq, and, or, desc, sql, sum, count, isNull, inArray } from 'drizzle-orm';
 import { getSuppliersList as getSuppliers } from '@/app/actions/supplier-actions';
@@ -152,7 +152,7 @@ export const createSupplierOrder = secureAction(async (userId, user, data: Creat
         if (!supplier && !data.supplierName) {
              return { success: false, error: 'Fournisseur manquant' };
         }
-        return await db.transaction(async (tx: any) => {
+        return await dbWithTransactions.transaction(async (tx: any) => {
             // 2. Generate Order Number
             const countResult = await tx.select({ value: count() })
                 .from(supplierOrders)
@@ -257,7 +257,7 @@ async function updateOrderReceptionCore(userId: string, user: any, orderId: stri
     try {
         const id = orderId;
         
-        await db.transaction(async (tx: any) => {
+        await dbWithTransactions.transaction(async (tx: any) => {
              // 1. Get Order
              const orderResult = await tx.select()
                  .from(supplierOrders)
@@ -388,7 +388,7 @@ export const confirmOrderReception = secureAction(async (userId, user, orderId: 
  */
 export const deleteSupplierOrder = secureAction(async (userId, user, orderId: string) => {
     try {
-        await db.transaction(async (tx: any) => {
+        await dbWithTransactions.transaction(async (tx: any) => {
             // Fetch order to know how much balance to reverse
             const [order] = await tx.select()
                 .from(supplierOrders)

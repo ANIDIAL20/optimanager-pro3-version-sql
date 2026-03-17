@@ -7,7 +7,7 @@
 
 
 
-import { db } from '@/db';
+import { dbWithTransactions,  db  } from '@/db';
 import { sales, saleItems, clients, products, lensOrders, clientTransactions, devis, stockMovements, saleLensDetails, prescriptionsLegacy, comptabiliteJournal } from '@/db/schema';
 import { eq, and, desc, sql, inArray, or } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
@@ -290,7 +290,7 @@ export const createSale = secureAction(async (userId, user, data: CreateSaleInpu
             return { success: false, error: 'Veuillez ajouter au moins un article' };
         }
         const saleId = await withTiming('CREATE_SALE_COMPLETE', async () => {
-            return await db.transaction(async (tx: any) => {
+            return await dbWithTransactions.transaction(async (tx: any) => {
                 const activeItemsInput = data.items.filter(i => i.quantity > 0);
                 if (activeItemsInput.length === 0) {
                     throw new Error('Veuillez ajouter au moins un article avec une quantité positive');
@@ -813,7 +813,7 @@ export const deleteSale = secureAction(async (userId, user, saleId: string) => {
     try {
         const id = parseInt(saleId);
 
-        await db.transaction(async (tx: any) => {
+        await dbWithTransactions.transaction(async (tx: any) => {
             // 1. Fetch sale to get items for stock reversion
             const saleDoc = await tx.query.sales.findFirst({
                 where: and(eq(sales.id, id), eq(sales.userId, userId)),
@@ -902,7 +902,7 @@ export const processReturn = secureAction(async (userId, user, saleId: string, r
     try {
         const id = parseInt(saleId);
 
-        await db.transaction(async (tx: any) => {
+        await dbWithTransactions.transaction(async (tx: any) => {
             const sale = await tx.query.sales.findFirst({
                 where: and(eq(sales.id, id), eq(sales.userId, userId)),
                 with: {
@@ -1062,7 +1062,7 @@ export const addPayment = secureAction(async (userId, user, saleId: string, paym
     try {
         const id = parseInt(saleId);
 
-        await db.transaction(async (tx: any) => {
+        await dbWithTransactions.transaction(async (tx: any) => {
             const saleDoc = await tx.query.sales.findFirst({
                 where: and(eq(sales.id, id), eq(sales.userId, userId)),
                 with: {

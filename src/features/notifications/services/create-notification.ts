@@ -9,7 +9,7 @@ export type NewNotification = typeof notifications.$inferInsert;
 /**
  * Fonction utilitaire "Production-Ready" pour créer des notifications.
  *
- * @param tx - L'objet de transaction (issu de db.transaction). L'imposer garantit que la
+ * @param tx - L'objet de transaction (issu de dbWithTransactions.transaction). L'imposer garantit que la
  *            notification sera incluse dans la même transaction que l'entité parente
  *            et annulée si l'opération globale échoue (Atomicité).
  * @param data - Les données strongly-typed de la notification.

@@ -2,7 +2,7 @@
 
 
 
-import { db } from '@/db';
+import { dbWithTransactions,  db  } from '@/db';
 import { products, stockMovements, invoiceImports, suppliers, brands, colors } from '@/db/schema';
 import { eq, and, or, ilike, desc, lte, asc, sql, gt, not, isNull } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
@@ -559,7 +559,7 @@ export const updateStock = secureAction(async (userId, user, { productId, quanti
     if (isNaN(id)) return { success: false, error: 'ID produit invalide' };
 
     try {
-        return await db.transaction(async (tx: any) => {
+        return await dbWithTransactions.transaction(async (tx: any) => {
             const product = await tx.query.products.findFirst({
                 where: and(eq(products.id, id), eq(products.userId, userId))
             });
@@ -656,7 +656,7 @@ export const createBulkProducts = secureAction(async (userId, user, data: { item
         const invoiceNum = invoiceData?.numFacture?.trim();
         const invoiceDate = invoiceData?.dateAchat || new Date();
 
-        await db.transaction(async (tx: any) => {
+        await dbWithTransactions.transaction(async (tx: any) => {
             for (const item of data.items) {
                 const reference = item.reference || `REF-${Date.now()}-${Math.random()}`;
                 const financials = calculatePrices(Number(item.prixVente), item.priceType || 'TTC', item.hasTva ?? true);

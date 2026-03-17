@@ -1,6 +1,6 @@
 'use server';
 
-import { db } from '@/db';
+import { dbWithTransactions,  db  } from '@/db';
 import { products, frameReservations } from '@/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import type { CompleteFrameReservationInput, FrameReservation } from '../types/reservation.types';
@@ -13,7 +13,7 @@ export async function completeFrameReservation(
   input: CompleteFrameReservationInput
 ): Promise<FrameReservation> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return await db.transaction(async (tx: any) => {
+  return await dbWithTransactions.transaction(async (tx: any) => {
 
     // 1) جلب الحجز
     const reservation = await tx.query.frameReservations.findFirst({

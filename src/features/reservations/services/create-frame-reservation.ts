@@ -1,6 +1,6 @@
 'use server';
 
-import { db } from '@/db';
+import { dbWithTransactions,  db  } from '@/db';
 import { products, frameReservations } from '@/db/schema';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { addDays } from 'date-fns';
@@ -14,7 +14,7 @@ export async function createFrameReservation(
   input: CreateFrameReservationInput
 ): Promise<FrameReservation> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return await db.transaction(async (tx: any) => {
+  return await dbWithTransactions.transaction(async (tx: any) => {
 
     // 1) جلب المنتجات
     const productIds = input.items.map(i => i.productId);

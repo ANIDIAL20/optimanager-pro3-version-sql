@@ -1,4 +1,4 @@
-import { db } from '@/db';
+import { dbWithTransactions,  db  } from '@/db';
 import { devis, sales, shopProfiles } from '@/db/schema';
 import { and, eq } from 'drizzle-orm';
 import {
@@ -127,7 +127,7 @@ export async function updateDocumentSettings(
 
   // ✅ UPDATED
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await db.transaction(async (tx: any) => {
+  await dbWithTransactions.transaction(async (tx: any) => {
     // 1) Update shop profile settings
     await tx
       .update(shopProfiles)
