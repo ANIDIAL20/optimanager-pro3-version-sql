@@ -2,7 +2,7 @@
 
 
 
-import { dbWithTransactions,  db  } from '@/db';
+import { db } from '@/db';
 import { 
     lensOrders, 
     clients, 
@@ -24,6 +24,7 @@ import { redis } from '@/lib/cache/redis';
 import { subMonths } from 'date-fns';
 import { auditLogs } from '@/db/schema';
 import { createNotification } from '@/features/notifications/services/create-notification';
+
 
 // ========================================
 // TYPE DEFINITIONS
@@ -180,7 +181,7 @@ export const getLensOrders = secureAction(async (userId, user) => {
     
     const mapped = results.map(({ lensOrder, client, prescriptionLegacy }) => ({
       ...lensOrder,
-      client: client || null,
+      client: client?.id ? client : null,
       prescriptionLegacy: prescriptionLegacy || null,
       totalPrice: lensOrder.totalPrice?.toString() || '0',
       unitPrice: lensOrder.unitPrice?.toString() || '0',
@@ -267,7 +268,7 @@ export const createLensOrder = secureAction(async (userId, user, rawInput: LensO
     if (isNaN(input.sellingPrice)) input.sellingPrice = 0;
     if (isNaN(input.estimatedBuyingPrice)) input.estimatedBuyingPrice = 0;
 
-    const result = await dbWithTransactions.transaction(async (tx: any) => {
+    const result = await db.transaction(async (tx: any) => {
         const clientExists = await tx.query.clients.findFirst({
             where: and(eq(clients.id, input.clientId), eq(clients.userId, userId)),
             columns: { id: true, fullName: true }
@@ -581,7 +582,7 @@ export const receiveLensOrder = secureAction(async (userId, user, orderId: strin
     const orderIdNum = parseInt(orderId);
 
     // 1. Transaction Wrapper for Atomicity
-    const result = await dbWithTransactions.transaction(async (tx: any) => {
+    const result = await db.transaction(async (tx: any) => {
         // 1.1 Fetch current order within transaction to ensure data integrity
         const existingOrder = await tx.query.lensOrders.findFirst({
             where: and(eq(lensOrders.id, orderIdNum), eq(lensOrders.userId, userId)),
@@ -1017,7 +1018,7 @@ export const bulkReceiveLensOrders_OLD = secureAction(async (userId, user, param
 
         const now = new Date();
 
-        const result = await dbWithTransactions.transaction(async (tx) => {
+        const result = await db.transaction(async (tx) => {
             // 1. Fetch and validate all orders within transaction
             const ordersToReceive = await tx.query.lensOrders.findMany({
                 where: and(
@@ -1245,7 +1246,7 @@ export const bulkReceiveLensOrders = secureAction(async (userId, user, data: { s
 
     let receivedOrdersToReturn: any[] = [];
 
-    await dbWithTransactions.transaction(async (tx: any) => {
+    await db.transaction(async (tx: any) => {
         // A. Fetch original orders to get pricing and client info
         const ordersToReceive = await tx.query.lensOrders.findMany({
             where: and(

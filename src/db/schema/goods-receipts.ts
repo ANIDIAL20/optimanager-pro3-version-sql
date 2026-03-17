@@ -28,25 +28,4 @@ export const goodsReceiptItems = pgTable('goods_receipt_items', {
   unitPrice: numeric('unit_price', { precision: 15, scale: 2 }),
 });
 
-export const goodsReceiptsRelations = relations(goodsReceipts, ({ one, many }) => ({
-  supplier: one(suppliers, {
-    fields: [goodsReceipts.supplierId],
-    references: [suppliers.id],
-  }),
-  items: many(goodsReceiptItems),
-}));
-
-export const goodsReceiptItemsRelations = relations(goodsReceiptItems, ({ one }) => ({
-  receipt: one(goodsReceipts, {
-    fields: [goodsReceiptItems.receiptId],
-    references: [goodsReceipts.id],
-  }),
-  orderItem: one(supplierOrderItems, {
-    fields: [goodsReceiptItems.orderItemId],
-    references: [supplierOrderItems.id],
-  }),
-  product: one(products, {
-    fields: [goodsReceiptItems.productId],
-    references: [products.id],
-  }),
-}));
+// Relations moved to relations.ts

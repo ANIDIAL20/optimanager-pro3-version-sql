@@ -2,7 +2,7 @@
 
 import { BaseRepository } from '@/lib/repositories/base.repository';
 import { sales, stockMovements, products, lensOrders } from '@/db/schema';
-import { dbWithTransactions,  db  } from '@/db';
+import { db } from '@/db';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { CACHE_TAGS, redis } from '@/lib/cache/redis';
 
@@ -53,7 +53,7 @@ export class SaleRepository extends BaseRepository<Sale, typeof sales> {
    * CRITICAL: Crée une vente, met à jour le stock, et gère les commandes de verres
    */
   async createSale(data: NewSale, items: any[], lensOrderIds?: number[]): Promise<Sale> {
-    return await dbWithTransactions.transaction(async (tx) => {
+    return await db.transaction(async (tx) => {
       // 1. Create Sale
       const saleResult = await tx.insert(sales).values(data).returning();
       const newSale = saleResult[0];

@@ -3,7 +3,7 @@
 
 
 
-import { dbWithTransactions,  db  } from '@/db';
+import { db } from '@/db';
 import {
   goodsReceipts,
   goodsReceiptItems,
@@ -214,7 +214,7 @@ export const validateGoodsReceiptAction = secureAction(async (
   { receiptId, lines }: { receiptId: string; lines: GoodsReceiptValidationLine[] }
 ) => {
   try {
-    const result = await dbWithTransactions.transaction((tx) => validateGoodsReceiptWithTx(tx, userId, { receiptId, lines }));
+    const result = await db.transaction((tx) => validateGoodsReceiptWithTx(tx, userId, { receiptId, lines }));
 
     try {
       // @ts-ignore
@@ -287,7 +287,7 @@ export const submitBulkReception = secureAction(async (
   data: { supplierId: string; deliveryNoteRef: string; notes?: string; items: GoodsReceiptValidationLine[] }
 ) => {
   try {
-    const result = await dbWithTransactions.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       const receipt = await createGoodsReceiptRecord(tx, userId, data);
       const validation = await validateGoodsReceiptWithTx(tx, userId, {
         receiptId: receipt.id,

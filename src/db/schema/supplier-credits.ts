@@ -33,25 +33,4 @@ export const supplierCreditAllocations = pgTable('supplier_credit_allocations', 
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-export const supplierCreditsRelations = relations(supplierCredits, ({ one, many }) => ({
-  supplier: one(suppliers, {
-    fields: [supplierCredits.supplierId],
-    references: [suppliers.id],
-  }),
-  order: one(supplierOrders, {
-    fields: [supplierCredits.relatedOrderId],
-    references: [supplierOrders.id],
-  }),
-  allocations: many(supplierCreditAllocations),
-}));
-
-export const supplierCreditAllocationsRelations = relations(supplierCreditAllocations, ({ one }) => ({
-  credit: one(supplierCredits, {
-    fields: [supplierCreditAllocations.creditId],
-    references: [supplierCredits.id],
-  }),
-  order: one(supplierOrders, {
-    fields: [supplierCreditAllocations.orderId],
-    references: [supplierOrders.id],
-  }),
-}));
+// Relations moved to relations.ts

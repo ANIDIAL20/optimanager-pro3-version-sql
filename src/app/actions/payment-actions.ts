@@ -3,7 +3,7 @@
 
 
 
-import { dbWithTransactions,  db  } from '@/db';
+import { db } from '@/db';
 import { clients, clientTransactions, lensOrders, reservations } from '@/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
@@ -35,7 +35,7 @@ export const recordAdvancePayment = secureAction(async (userId, user, { clientId
           return { success: true }; // Rien à enregistrer si le montant est 0
         }
 
-        return await dbWithTransactions.transaction(async (tx: DrizzleTx) => {
+        return await db.transaction(async (tx: DrizzleTx) => {
             // 1. Récupérer le client pour obtenir le solde actuel
             const client = await tx.query.clients.findFirst({
                 where: eq(clients.id, clientId),

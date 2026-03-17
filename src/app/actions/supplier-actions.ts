@@ -19,12 +19,16 @@ export const getSuppliersList = secureActionWithResponse(async (userId, user) =>
     try {
       // âœ… Ã‰tape 2 â€” JOIN avec la view pour obtenir le solde rÃ©el calculÃ©
       const results = await db
-        .select()
+        .select({
+          supplier: suppliers,
+          totalAchats: sql<string>`COALESCE((SELECT SUM(${supplierOrders.montantTotal}) FROM ${supplierOrders} WHERE ${supplierOrders.supplierId} = ${suppliers.id}), '0')`,
+          totalPaiements: sql<string>`COALESCE((SELECT SUM(${supplierPayments.amount}) FROM ${supplierPayments} WHERE ${supplierPayments.supplierId} = ${suppliers.id}), '0')`,
+        })
         .from(suppliers)
         .where(eq(suppliers.userId, userId))
         .orderBy(desc(suppliers.createdAt));
       
-      const mappedItems = results.map((row) => ({
+      const mappedItems = results.map(({ supplier: row, totalAchats, totalPaiements }) => ({
         id: row.id,
         userId: row.userId,
         name: row.name || '',
@@ -62,8 +66,8 @@ export const getSuppliersList = secureActionWithResponse(async (userId, user) =>
         defaultTaxMode: row.defaultTaxMode || 'HT',
         // ✅ currentBalance is now a direct column — updated in every transaction
         currentBalance: Number(row.currentBalance ?? 0),
-        totalAchats:   0,
-        totalPaiements: 0,
+        totalAchats:   Number(totalAchats || 0),
+        totalPaiements: Number(totalPaiements || 0),
       }));
 
       return mappedItems;
@@ -103,7 +107,11 @@ export const getSupplier = secureAction(async (userId, user, id: string) => {
     
     // âœ… Ã‰tape 2 â€” JOIN avec la view pour le solde rÃ©el
     const results = await db
-      .select()
+      .select({
+        supplier: suppliers,
+        totalAchats: sql<string>`COALESCE((SELECT SUM(${supplierOrders.montantTotal}) FROM ${supplierOrders} WHERE ${supplierOrders.supplierId} = ${suppliers.id}), '0')`,
+        totalPaiements: sql<string>`COALESCE((SELECT SUM(${supplierPayments.amount}) FROM ${supplierPayments} WHERE ${supplierPayments.supplierId} = ${suppliers.id}), '0')`,
+      })
       .from(suppliers)
       .where(and(eq(suppliers.id, id), eq(suppliers.userId, userId)))
       .limit(1);
@@ -113,7 +121,7 @@ export const getSupplier = secureAction(async (userId, user, id: string) => {
       return null;
     }
 
-    const row = results[0];
+    const { supplier: row, totalAchats, totalPaiements } = results[0];
 
     return {
         id: row.id,
@@ -149,8 +157,8 @@ export const getSupplier = secureAction(async (userId, user, id: string) => {
         defaultTaxMode: row.defaultTaxMode || 'HT',
         // ✅ currentBalance is now a direct column
         currentBalance: Number(row.currentBalance ?? 0),
-        totalAchats:    0,
-        totalPaiements: 0,
+        totalAchats:    Number(totalAchats || 0),
+        totalPaiements: Number(totalPaiements || 0),
     };
 
   } catch (error: any) {

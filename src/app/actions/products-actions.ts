@@ -2,7 +2,7 @@
 
 
 
-import { dbWithTransactions,  db  } from '@/db';
+import { db } from '@/db';
 import { products, stockMovements, invoiceImports, suppliers, brands, colors } from '@/db/schema';
 import { eq, and, or, ilike, desc, lte, asc, sql, gt, not, isNull } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
@@ -330,14 +330,12 @@ export const getProduct = secureAction(async (userId, user, productId: string) =
             brand: row.marqueNom || product.brand || product.marque || '',
             marque: row.marqueNom || product.brand || product.marque || '',
             marqueNom: row.marqueNom || '',
-            couleurNom: row.couleurNom || '',
             couleur: row.couleurNom || product.couleur || '',
             productType: product.productType || product.type || 'accessory',
             fournisseur: product.fournisseur || '',
             fournisseurId: product.fournisseurId || undefined,
             fournisseurNom: row.supplierName || product.fournisseur || '',
             modele: product.modele || '',
-            couleur: product.couleur || '',
             prixAchat: Number(product.prixAchat || 0),
             prixVente: Number(product.prixVente || 0),
             quantiteStock: product.quantiteStock || 0,
@@ -425,11 +423,11 @@ export const createProduct = secureAction(async (userId, user, data: ProductInpu
 
         if (existing) return { success: false, error: 'Référence déjà utilisée.' };
 
-        const financials = calculatePrices(Number(data.prixVente), data.priceType || 'TTC', data.hasTva ?? true);
-        const categoryVal = data.category || data.categorie || data.categorieId || 'OPTIQUE';
+        const financials = calculatePrices(Number(data.prixVente), data.priceType || 'TTC', (data.hasTva ?? true) as boolean);
+        const categoryVal = data.category || data.categorieId || 'OPTIQUE';
         const brandVal = data.brand || data.marque || data.marqueId || null;
 
-        const [newProduct] = await db.insert(products).values({
+        const [newProduct] = await db.insert(products).values([{
             userId,
             nom: data.nomProduit,
             reference: reference,
@@ -439,7 +437,7 @@ export const createProduct = secureAction(async (userId, user, data: ProductInpu
             marque: brandVal,
             productType: (data.productType as any) || 'accessory',
             fournisseur: data.fournisseur || null,
-            fournisseurId: data.fournisseurId || null,
+            fournisseurId: (data.fournisseurId && data.fournisseurId !== 'unknown') ? data.fournisseurId : null,
             marqueId: data.marqueId ? parseInt(data.marqueId) : null,
             numFacture: data.numFacture || null,
             modele: data.modele || null,
@@ -463,12 +461,13 @@ export const createProduct = secureAction(async (userId, user, data: ProductInpu
             isMedical: data.isMedical || false,
             isStockManaged: data.productType === 'verre' || data.productType === 'lens' ? false : (data.isStockManaged !== false),
             version: 0,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        }).returning();
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        }]).returning();
 
         await logSuccess(userId, 'CREATE', 'products', newProduct.id.toString());
         revalidatePath('/dashboard/products', 'page');
+        // @ts-ignore
         revalidateTag('products');
         return { success: true, data: newProduct };
 
@@ -495,7 +494,7 @@ export const updateProduct = secureAction(async (userId, user, productId: string
         const currentPriceVente = data.prixVente !== undefined ? Number(data.prixVente) : Number(oldProduct.prixVente);
         const currentHasTva = data.hasTva !== undefined ? data.hasTva : oldProduct.hasTva;
         const currentPriceType = (data.priceType || (oldProduct as any).priceType || 'TTC') as 'HT' | 'TTC';
-        const financials = calculatePrices(currentPriceVente, currentPriceType, currentHasTva);
+        const financials = calculatePrices(currentPriceVente, currentPriceType, currentHasTva as boolean);
         
         const categoryVal = data.category || data.categorie || data.categorieId;
         const brandVal = data.brand || data.marque || data.marqueId;
@@ -535,13 +534,13 @@ export const updateProduct = secureAction(async (userId, user, productId: string
                 isMedical: data.isMedical,
                 isStockManaged: data.productType === 'verre' || data.productType === 'lens' ? false : data.isStockManaged,
                 version: sql`${products.version} + 1`,
-                updatedAt: new Date()
+                updatedAt: new Date().toISOString()
             })
             .where(and(eq(products.id, id), eq(products.userId, userId)));
 
-        await logAudit({ userId, entityType: 'product', entityId: productId, action: 'UPDATE', oldValue: oldProduct, newValue: data, success: true });
         revalidatePath('/dashboard/products', 'page');
         revalidatePath(`/dashboard/products/${productId}`, 'page');
+        // @ts-ignore
         revalidateTag('products');
         return { success: true, message: 'Produit mis à jour' };
 
@@ -559,7 +558,7 @@ export const updateStock = secureAction(async (userId, user, { productId, quanti
     if (isNaN(id)) return { success: false, error: 'ID produit invalide' };
 
     try {
-        return await dbWithTransactions.transaction(async (tx: any) => {
+        return await db.transaction(async (tx: any) => {
             const product = await tx.query.products.findFirst({
                 where: and(eq(products.id, id), eq(products.userId, userId))
             });
@@ -569,10 +568,11 @@ export const updateStock = secureAction(async (userId, user, { productId, quanti
             const newStock = type === 'IN' ? currentStock + quantity : currentStock - quantity;
             if (type === 'OUT' && newStock < 0) throw new Error('Stock insuffisant');
 
-            await tx.update(products).set({ quantiteStock: newStock, updatedAt: new Date() }).where(eq(products.id, id));
+            await tx.update(products).set({ quantiteStock: newStock, updatedAt: new Date().toISOString() }).where(eq(products.id, id));
             await tx.insert(stockMovements).values({ userId, productId: id, type, quantite: quantity, notes: reason, createdAt: new Date() });
             
             revalidatePath('/dashboard/products', 'page');
+            // @ts-ignore
             revalidateTag('products');
             return { success: true, newStock };
         });
@@ -592,6 +592,7 @@ export const deleteProduct = secureAction(async (userId, user, productId: string
         await db.update(products).set({ deletedAt: new Date(), version: sql`${products.version} + 1` }).where(and(eq(products.id, id), eq(products.userId, userId)));
         
         revalidatePath('/dashboard/products', 'page');
+        // @ts-ignore
         revalidateTag('products');
         return { success: true };
     } catch (error: any) {
@@ -656,7 +657,7 @@ export const createBulkProducts = secureAction(async (userId, user, data: { item
         const invoiceNum = invoiceData?.numFacture?.trim();
         const invoiceDate = invoiceData?.dateAchat || new Date();
 
-        await dbWithTransactions.transaction(async (tx: any) => {
+        await db.transaction(async (tx: any) => {
             for (const item of data.items) {
                 const reference = item.reference || `REF-${Date.now()}-${Math.random()}`;
                 const financials = calculatePrices(Number(item.prixVente), item.priceType || 'TTC', item.hasTva ?? true);
@@ -665,8 +666,8 @@ export const createBulkProducts = secureAction(async (userId, user, data: { item
                     userId,
                     nom: item.nomProduit,
                     reference,
-                    categorie: item.categorie || item.categorieId,
-                    category: item.categorie || item.categorieId,
+                    categorie: item.category || item.categorieId,
+                    category: item.category || item.categorieId,
                     marque: item.marque,
                     brand: item.marque,
                     modele: item.modele,
@@ -702,6 +703,7 @@ export const createBulkProducts = secureAction(async (userId, user, data: { item
         });
 
         revalidatePath('/dashboard/products', 'page');
+        // @ts-ignore
         revalidateTag('products');
         return { success: true };
     } catch (error: any) {

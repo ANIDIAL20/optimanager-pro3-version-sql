@@ -3,7 +3,7 @@
 
 
 
-import { dbWithTransactions,  db  } from '@/db';
+import { db } from '@/db';
 import { supplierCredits, supplierOrders, supplierCreditAllocations } from '@/db/schema';
 import { eq, and, desc, sql, ne } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
@@ -67,7 +67,7 @@ export const getSupplierAvailableCredit = secureAction(async (userId, user, supp
  */
 export const applyCreditToOrder = secureAction(async (userId, user, { creditId, orderId, amount }: { creditId: string, orderId: string, amount: number }) => {
   try {
-    return await dbWithTransactions.transaction(async (tx) => {
+    return await db.transaction(async (tx) => {
       const [credit] = await tx.select()
         .from(supplierCredits)
         .where(and(eq(supplierCredits.id, creditId), eq(supplierCredits.userId, userId)));

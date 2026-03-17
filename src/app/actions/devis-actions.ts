@@ -8,7 +8,7 @@
 
 
 
-import { dbWithTransactions,  db  } from '@/db';
+import { db } from '@/db';
 import { devis, sales, products, stockMovements, shopProfiles } from '@/db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
@@ -312,7 +312,7 @@ export const convertDevisToSale = secureAction(async (userId, user, devisId: str
     try {
         const id = parseInt(devisId);
 
-        const result = await dbWithTransactions.transaction(async (tx: any) => {
+        const result = await db.transaction(async (tx: any) => {
             // ... (transaction logic remains same)
             // 1. Get Devis
             const devisData = await tx.query.devis.findFirst({

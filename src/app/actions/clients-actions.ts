@@ -6,7 +6,7 @@
 'use server';
 
 import { db } from '@/db';
-import { clients, prescriptionsLegacy as prescriptions, prescriptions as newPrescriptionsTable, sales, lensOrders, clientInteractions } from '@/db/schema';
+import { clients, prescriptionsLegacy, prescriptions as newPrescriptionsTable, sales, lensOrders, clientInteractions } from '@/db/schema';
 import { eq, and, or, like, desc } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
 import { logSuccess, logFailure, logAudit } from '@/lib/audit-log';
@@ -73,28 +73,49 @@ export const getClients = secureAction(async (userId, user, searchQuery?: string
     try {
         // Use relational query to automatically fetch prescriptions
         // 🔒 RobustFetch: Only select necessary columns to avoid failures if DB schema has missing columns (like updatedAt)
-        const userClientsWithPrescriptions = await db.query.clients.findMany({
-            where: eq(clients.userId, userId), // ⚠️ CRITICAL: Filter by userId
-            with: {
-                prescriptionsLegacy: {
-                    columns: {
-                        id: true,
-                        prescriptionData: true,
-                    }
-                },
-                prescriptions: {
-                    columns: {
-                        id: true,
-                        createdAt: true,
-                        // Avoid selecting odSph, etc. which might be missing
-                    }
-                },
-            },
-            orderBy: desc(clients.createdAt),
-        });
+        const userClientsWithPrescriptions = await db
+            .select({
+                client: clients,
+                prescriptionLegacy: prescriptionsLegacy,
+                prescription: newPrescriptionsTable,
+            })
+            .from(clients)
+            .leftJoin(prescriptionsLegacy, eq(prescriptionsLegacy.clientId, clients.id))
+            .leftJoin(newPrescriptionsTable, eq(newPrescriptionsTable.clientId, clients.id))
+            .where(eq(clients.userId, userId))
+            .orderBy(desc(clients.createdAt));
+
+        // Group results by client
+        const clientsMap = new Map<number, any>();
+        for (const row of userClientsWithPrescriptions) {
+            const client = row.client;
+            if (!clientsMap.has(client.id)) {
+                clientsMap.set(client.id, {
+                    ...client,
+                    prescriptionsLegacy: [],
+                    prescriptions: []
+                });
+            }
+            const clientEntry = clientsMap.get(client.id);
+            
+            if (row.prescriptionLegacy) {
+                // Deduplicate legacy prescriptions
+                if (!clientEntry.prescriptionsLegacy.some((p: any) => p.id === row.prescriptionLegacy!.id)) {
+                    clientEntry.prescriptionsLegacy.push(row.prescriptionLegacy);
+                }
+            }
+            if (row.prescription) {
+                // Deduplicate new prescriptions
+                if (!clientEntry.prescriptions.some((p: any) => p.id === row.prescription!.id)) {
+                    clientEntry.prescriptions.push(row.prescription);
+                }
+            }
+        }
+
+        const consolidatedClients = Array.from(clientsMap.values());
 
         // Transform to match Client interface
-        let transformedClients: Client[] = userClientsWithPrescriptions.map((client: any) => ({
+        let transformedClients: Client[] = consolidatedClients.map((client: any) => ({
             id: client.id.toString(),
             name: client.fullName,
             prenom: client.prenom,
@@ -200,12 +221,12 @@ export const getClient = secureAction(async (userId, user, clientId: string) => 
         // 🛡️ RobustFetch Step 2: Fetch Legacy Prescriptions (Isolated)
         try {
             const legacyResults = await db.select()
-                .from(prescriptions) // Variable 'prescriptions' refers to 'prescriptionsLegacy' table in this file
+                .from(prescriptionsLegacy)
                 .where(and(
-                    eq(prescriptions.clientId, clientIdNum),
-                    eq(prescriptions.userId, userId)
+                    eq(prescriptionsLegacy.clientId, clientIdNum),
+                    eq(prescriptionsLegacy.userId, userId)
                 ))
-                .orderBy(desc(prescriptions.createdAt));
+                .orderBy(desc(prescriptionsLegacy.createdAt));
             
             allPrescriptions.push(...legacyResults.map((p: any) => ({
                 ...(p.prescriptionData as any),
@@ -520,7 +541,7 @@ export const addPrescription = secureAction(async (
             updatedAt: new Date(),
         };
 
-        await db.insert(prescriptions).values(prescription);
+        await db.insert(prescriptionsLegacy).values(prescription);
 
         console.log(`✅ Prescription added`);
         await logSuccess(userId, 'CREATE', 'prescriptions', clientId, { clientId });
@@ -570,10 +591,10 @@ export const deleteClient = secureAction(async (userId, user, clientId: string) 
 
         // Delete associated prescriptions first (cascade) with strict userId check
         await db
-            .delete(prescriptions)
+            .delete(prescriptionsLegacy)
             .where(and(
-                eq(prescriptions.clientId, clientIdNum),
-                eq(prescriptions.userId, userId) // 🔒 Strict ownership check
+                eq(prescriptionsLegacy.clientId, clientIdNum),
+                eq(prescriptionsLegacy.userId, userId) // 🔒 Strict ownership check
             ));
 
         // Delete the client
@@ -614,70 +635,72 @@ export const getClientSnapshot = secureAction(async (userId, user, clientId: str
         const clientIdNum = parseInt(clientId);
 
         // Get client
-        const client = await db.query.clients.findFirst({
-            where: and(
-                eq(clients.id, clientIdNum),
-                eq(clients.userId, userId)
-            ),
-            columns: {
-                id: true,
-                fullName: true,
-                phone: true,
-                // phone2: true,
-                email: true,
-                gender: true,
-                cin: true,
-                dateOfBirth: true,
-                mutuelle: true,
-                address: true,
-                city: true,
-                balance: true,
-                // creditLimit: true,
-                totalSpent: true,
-                isActive: true,
-                createdAt: true,
-                updatedAt: true,
-            }
-        });
+        // Get client
+        const clientResults = await db.select({
+            id: clients.id,
+            fullName: clients.fullName,
+            phone: clients.phone,
+            email: clients.email,
+            gender: clients.gender,
+            cin: clients.cin,
+            dateOfBirth: clients.dateOfBirth,
+            mutuelle: clients.mutuelle,
+            address: clients.address,
+            city: clients.city,
+            balance: clients.balance,
+            totalSpent: clients.totalSpent,
+            isActive: clients.isActive,
+            createdAt: clients.createdAt,
+            updatedAt: clients.updatedAt,
+        })
+        .from(clients)
+        .where(and(
+            eq(clients.id, clientIdNum),
+            eq(clients.userId, userId)
+        ))
+        .limit(1);
+
+        const client = clientResults.length > 0 ? clientResults[0] : null;
 
         if (!client) {
             return { success: false, error: 'Client not found' };
         }
 
         // Get recent sales (last 10 for debt calculation)
-        const recentSales = await db.query.sales.findMany({
-            where: and(
+        // Get recent sales (last 10 for debt calculation)
+        const recentSales = await db.select()
+            .from(sales)
+            .where(and(
                 eq(sales.userId, userId),
                 eq(sales.clientId, clientIdNum)
-            ),
-            orderBy: [desc(sales.createdAt)],
-            limit: 10
-        });
+            ))
+            .orderBy(desc(sales.createdAt))
+            .limit(10);
 
         // Get recent prescriptions (last 3)
         // 🔒 RobustFetch: Using prescriptionsLegacy + limited columns to avoid schema mismatch
-        const recentPrescriptions = await db.query.prescriptionsLegacy.findMany({
-            where: and(
-                eq(prescriptions.userId, userId),
-                eq(prescriptions.clientId, clientIdNum)
-            ),
-            columns: {
-                id: true,
-                prescriptionData: true,
-                createdAt: true,
-            },
-            orderBy: [desc(prescriptions.createdAt)],
-            limit: 3
-        });
+        // Get recent prescriptions (last 3)
+        const recentPrescriptions = await db.select({
+            id: prescriptionsLegacy.id,
+            prescriptionData: prescriptionsLegacy.prescriptionData,
+            createdAt: prescriptionsLegacy.createdAt,
+        })
+        .from(prescriptionsLegacy)
+        .where(and(
+            eq(prescriptionsLegacy.userId, userId),
+            eq(prescriptionsLegacy.clientId, clientIdNum)
+        ))
+        .orderBy(desc(prescriptionsLegacy.createdAt))
+        .limit(3);
 
         // Get pending lens orders
-        const pendingOrders = await db.query.lensOrders.findMany({
-            where: and(
+        const pendingOrders = await db.select()
+            .from(lensOrders)
+            .where(and(
                 eq(lensOrders.userId, userId),
                 eq(lensOrders.clientId, clientIdNum),
                 eq(lensOrders.status, 'pending')
-            )
-        });
+            ));
 
         // Calculate total debt from sales
         const totalDebt = recentSales.reduce((sum: number, s: any) => {
@@ -692,14 +715,15 @@ export const getClientSnapshot = secureAction(async (userId, user, clientId: str
         const lastPrescription = recentPrescriptions.length > 0 ? recentPrescriptions[0] : null;
 
         // Get recent interactions
-        const recentInteractions = await db.query.clientInteractions.findMany({
-            where: and(
+        // Get recent interactions
+        const recentInteractions = await db.select()
+            .from(clientInteractions)
+            .where(and(
                 eq(clientInteractions.userId, userId),
                 eq(clientInteractions.clientId, clientIdNum)
-            ),
-            orderBy: [desc(clientInteractions.createdAt)],
-            limit: 10
-        });
+            ))
+            .orderBy(desc(clientInteractions.createdAt))
+            .limit(10);
 
         console.log(`✅ Snapshot fetched with ${recentSales.length} sales, ${recentPrescriptions.length} prescriptions`);
         await logSuccess(userId, 'READ', 'clients', clientId || 'unknown', { snapshot: true });

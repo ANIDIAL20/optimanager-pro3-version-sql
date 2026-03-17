@@ -142,47 +142,4 @@ export const supplierOrderPayments = pgTable('supplier_order_payments', {
 // RELATIONS
 // ========================================
 
-// Relations moved to main schema.ts to avoid circularity with lensOrders
-
-export const supplierOrderItemsRelations = relations(supplierOrderItems, ({ one }) => ({
-  order: one(supplierOrders, {
-    fields: [supplierOrderItems.orderId],
-    references: [supplierOrders.id],
-  }),
-  product: one(products, {
-    fields: [supplierOrderItems.productId],
-    references: [products.id],
-  }),
-}));
-
-export const supplierOrdersRelations = relations(supplierOrders, ({ one, many }) => ({
-  supplier: one(suppliers, {
-    fields: [supplierOrders.supplierId],
-    references: [suppliers.id],
-  }),
-  allocations: many(supplierOrderPayments),
-  items: many(supplierOrderItems),
-}));
-
-export const supplierPaymentsRelations = relations(supplierPayments, ({ one, many }) => ({
-  supplier: one(suppliers, {
-    fields: [supplierPayments.supplierId],
-    references: [suppliers.id],
-  }),
-  order: one(supplierOrders, {
-    fields: [supplierPayments.orderId],
-    references: [supplierOrders.id],
-  }),
-  allocations: many(supplierOrderPayments),
-}));
-
-export const supplierOrderPaymentsRelations = relations(supplierOrderPayments, ({ one }) => ({
-  payment: one(supplierPayments, {
-    fields: [supplierOrderPayments.paymentId],
-    references: [supplierPayments.id],
-  }),
-  order: one(supplierOrders, {
-    fields: [supplierOrderPayments.orderId],
-    references: [supplierOrders.id],
-  }),
-}));
+// Relations moved to main schema.ts / relations.ts to avoid circularity with lensOrders

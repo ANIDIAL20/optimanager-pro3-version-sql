@@ -3,7 +3,7 @@
 
 
 
-import { dbWithTransactions,  db  } from '@/db';
+import { db } from '@/db';
 import * as s from '@/db/schema';
 import { auth } from '@/auth';
 import { eq, sql } from 'drizzle-orm';
@@ -311,7 +311,7 @@ export async function restoreUserData(base64Data: FormData | string) {
     const isLegacy = parseFloat(backup.metadata?.version || '1.0') < 2.0;
     const { migrateId, migrateIntId, fk, fkInt } = createIdHelpers();
 
-    await dbWithTransactions.transaction(async (tx) => {
+    await db.transaction(async (tx) => {
 
       // ── DELETE: single call, correct FK order, correct table names ─────────
       await purgeAllUserData(tx, uId);
@@ -388,7 +388,7 @@ export async function resetUserAccount() {
     if (!session?.user?.id) throw new Error('Non autorisé.');
     const uId = session.user.id;
 
-    await dbWithTransactions.transaction(async (tx) => {
+    await db.transaction(async (tx) => {
       await purgeAllUserData(tx, uId);
     });
 

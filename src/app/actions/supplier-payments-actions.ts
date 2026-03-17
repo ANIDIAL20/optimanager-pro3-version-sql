@@ -8,7 +8,7 @@
 
 
 
-import { dbWithTransactions,  db  } from '@/db';
+import { db } from '@/db';
 import { supplierPayments, supplierOrders, supplierOrderPayments, suppliers, supplierCredits } from '@/db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { secureAction } from '@/lib/secure-action';
@@ -106,7 +106,7 @@ export const getSupplierPayments = secureAction(async (userId, user, supplierId?
 
 export const createSupplierPayment = secureAction(async (userId, user, data: CreatePaymentInput) => {
   try {
-    return await dbWithTransactions.transaction(async (tx: any) => {
+    return await db.transaction(async (tx: any) => {
       const supplier = await tx.query.suppliers.findFirst({
         where: and(eq(suppliers.id, data.supplierId), eq(suppliers.userId, userId)),
       });
@@ -250,7 +250,7 @@ export const createSupplierPayment = secureAction(async (userId, user, data: Cre
 
 export const deleteSupplierPayment = secureAction(async (userId, user, paymentId: string) => {
   try {
-    await dbWithTransactions.transaction(async (tx: any) => {
+    await db.transaction(async (tx: any) => {
       const allocations = await tx.query.supplierOrderPayments.findMany({
         where: and(eq(supplierOrderPayments.paymentId, paymentId), eq(supplierOrderPayments.userId, userId)),
       });
